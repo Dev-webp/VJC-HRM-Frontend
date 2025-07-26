@@ -15,12 +15,13 @@ function Login() {
     formData.append('password', password);
 
     try {
-      // ✅ Step 1: Login to live backend
+      // ✅ Step 1: Login
       await axios.post('https://pgadmin-backend.onrender.com/', formData, {
-  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-  withCredentials: true
-});
-
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        withCredentials: true,
+      });
 
       // ✅ Step 2: Get role and redirect
       const res = await axios.get('https://pgadmin-backend.onrender.com/dashboard', {
