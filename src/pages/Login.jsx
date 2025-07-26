@@ -15,8 +15,8 @@ function Login() {
     formData.append('password', password);
 
     try {
-      // ✅ Step 1: Login
-      await axios.post('http://localhost:5000/', formData, {
+      // ✅ Step 1: Login to live backend
+      await axios.post('https://pgadmin-backend.onrender.com/', formData, {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
@@ -24,7 +24,7 @@ function Login() {
       });
 
       // ✅ Step 2: Get role and redirect
-      const res = await axios.get('http://localhost:5000/dashboard', {
+      const res = await axios.get('https://pgadmin-backend.onrender.com/dashboard', {
         withCredentials: true,
       });
 

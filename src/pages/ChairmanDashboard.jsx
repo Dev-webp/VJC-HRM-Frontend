@@ -15,7 +15,7 @@ function ChairmanDashboard() {
   const [logs, setLogs] = useState([]);
 
   useEffect(() => {
-    axios.get('http://localhost:5000/dashboard-data', { withCredentials: true })
+    axios.get('https://pgadmin-backend.onrender.com/dashboard-data', { withCredentials: true })
       .then((res) => setLogs(res.data))
       .catch(() => alert('⚠️ Failed to fetch logs'));
   }, []);

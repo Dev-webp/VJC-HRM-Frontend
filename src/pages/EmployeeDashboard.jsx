@@ -8,7 +8,7 @@ function EmployeeDashboard() {
   const [imageInput, setImageInput] = useState('');
 
   useEffect(() => {
-    axios.get('http://localhost:5000/me', { withCredentials: true })
+    axios.get('https://pgadmin-backend.onrender.com/me', { withCredentials: true })
       .then((res) => {
         console.log("✅ Profile loaded", res.data);
         setProfile(res.data);
@@ -19,7 +19,7 @@ function EmployeeDashboard() {
         setMessage('❌ Failed to fetch profile');
       });
 
-    axios.get('http://localhost:5000/my-attendance', { withCredentials: true })
+    axios.get('https://pgadmin-backend.onrender.com/my-attendance', { withCredentials: true })
       .then((res) => setLogs(res.data))
       .catch(() => setMessage('❌ Failed to fetch attendance logs'));
   }, []);
@@ -27,7 +27,7 @@ function EmployeeDashboard() {
   const sendAction = async (action) => {
     try {
       const res = await axios.post(
-        'http://localhost:5000/attendance',
+        'https://pgadmin-backend.onrender.com/attendance',
         new URLSearchParams({ action }),
         { withCredentials: true }
       );
@@ -39,7 +39,11 @@ function EmployeeDashboard() {
 
   const saveProfileImage = async () => {
     try {
-      await axios.post('http://localhost:5000/update-profile-image', new URLSearchParams({ image: imageInput }), { withCredentials: true });
+      await axios.post(
+        'https://pgadmin-backend.onrender.com/update-profile-image',
+        new URLSearchParams({ image: imageInput }),
+        { withCredentials: true }
+      );
       setProfile({ ...profile, image: imageInput });
       setMessage('✅ Image URL updated successfully');
     } catch (err) {
