@@ -7,24 +7,26 @@ function Login() {
   const [password, setPassword] = useState('');
   const navigate = useNavigate();
 
+  // Dynamically pick base URL based on environment
+  const backendBaseUrl =
+    window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      ? 'http://localhost:5000'
+      : 'http://backend.vjcoverseas.com';
+
   const handleLogin = async (e) => {
     e.preventDefault();
-
     const formData = new URLSearchParams();
     formData.append('email', email);
     formData.append('password', password);
-
     try {
-      // ✅ Step 1: Login
-      await axios.post('http://localhost:5000/', formData, {
+      // Step 1: Login
+      await axios.post(`${backendBaseUrl}/`, formData, {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         withCredentials: true,
       });
-
-      // ✅ Step 2: Get role and redirect
-      const res = await axios.get('http://localhost:5000/dashboard', { withCredentials: true });
+      // Step 2: Get role and redirect
+      const res = await axios.get(`${backendBaseUrl}/dashboard`, { withCredentials: true });
       const route = res.data.redirect;
-
       if (route === 'chairman') {
         navigate('/chairman');
       } else if (route === 'employee') {
@@ -32,7 +34,6 @@ function Login() {
       } else {
         alert('Unknown role');
       }
-
     } catch (err) {
       console.error(err);
       alert('❌ ' + (err.response?.data?.message || err.message || 'Login failed'));
@@ -73,7 +74,7 @@ const styles = {
     background: '#f0f2f5',
     display: 'flex',
     justifyContent: 'center',
-    alignItems: 'center'
+    alignItems: 'center',
   },
   card: {
     background: '#fff',
@@ -86,7 +87,7 @@ const styles = {
   title: {
     textAlign: 'center',
     marginBottom: 30,
-    color: '#333'
+    color: '#333',
   },
   input: {
     width: '100%',
@@ -94,7 +95,7 @@ const styles = {
     marginBottom: 20,
     fontSize: 16,
     borderRadius: 6,
-    border: '1px solid #ccc'
+    border: '1px solid #ccc',
   },
   button: {
     width: '100%',
@@ -104,8 +105,8 @@ const styles = {
     fontSize: 16,
     border: 'none',
     borderRadius: 6,
-    cursor: 'pointer'
-  }
+    cursor: 'pointer',
+  },
 };
 
 export default Login;

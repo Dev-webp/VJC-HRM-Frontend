@@ -32,10 +32,10 @@ export default function LeaveApplication({ onMessage }) {
   useEffect(() => {
     async function fetchData() {
       try {
-        const { data: auth } = await axios.get('http://localhost:5000/check-auth', { withCredentials: true });
+        const { data: auth } = await axios.get('http://backend.vjcoverseas.com/check-auth', { withCredentials: true });
         setUserRole(auth.role || '');
         const url = auth.role === 'chairman' ? '/all-leave-requests' : '/my-leave-requests';
-        const res = await axios.get(`http://localhost:5000${url}`, { withCredentials: true });
+        const res = await axios.get(`http://backend.vjcoverseas.com${url}`, { withCredentials: true });
         setLeaveRequests(res.data.map(r => ({ ...r, remarksInput: '' })));
       } catch {
         onMessage('❌ Failed to load leave requests or role');
@@ -48,7 +48,7 @@ export default function LeaveApplication({ onMessage }) {
     if (!leaveStart || !leaveEnd || !leaveReason.trim()) return onMessage('❌ Please fill all fields');
     if (new Date(leaveEnd) < new Date(leaveStart)) return onMessage('❌ End date cannot be before start date');
     try {
-      await axios.post('http://localhost:5000/apply-leave', {
+      await axios.post('http://backend.vjcoverseas.com/apply-leave', {
         leave_type: leaveType,
         start_date: leaveStart,
         end_date: leaveEnd,
@@ -67,7 +67,7 @@ export default function LeaveApplication({ onMessage }) {
   const refreshRequests = async () => {
     try {
       const url = userRole === 'chairman' ? '/all-leave-requests' : '/my-leave-requests';
-      const res = await axios.get(`http://localhost:5000${url}`, { withCredentials: true });
+      const res = await axios.get(`http://backend.vjcoverseas.com${url}`, { withCredentials: true });
       setLeaveRequests(res.data.map(r => ({ ...r, remarksInput: '' })));
     } catch {
       onMessage('❌ Failed to refresh requests');
@@ -86,7 +86,7 @@ export default function LeaveApplication({ onMessage }) {
     const req = leaveRequests[idx];
     if (!req.remarksInput.trim()) return onMessage('❌ Add remarks to proceed');
     try {
-      await axios.post('http://localhost:5000/leave-action', {
+      await axios.post('http://backend.vjcoverseas.com/leave-action', {
         id: req.id,
         action,
         remarks: req.remarksInput,
@@ -101,7 +101,7 @@ export default function LeaveApplication({ onMessage }) {
   const deleteRequest = async (id) => {
     if (!window.confirm('Delete this leave request?')) return;
     try {
-      await axios.delete(`http://localhost:5000/delete-leave/${id}`, { withCredentials: true });
+      await axios.delete(`http://backend.vjcoverseas.com/delete-leave/${id}`, { withCredentials: true });
       setLeaveRequests(prev => prev.filter(r => r.id !== id));
       onMessage('✅ Deleted successfully');
     } catch {

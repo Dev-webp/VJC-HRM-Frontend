@@ -12,7 +12,7 @@ function UserMenu({ name = "User" }) {
 
   const handleLogout = async () => {
     try {
-      await axios.get("http://localhost:5000/logout", {
+      await axios.get("http://backend.vjcoverseas.com/logout", {
         withCredentials: true,
       });
       window.location.href = "/";
@@ -97,7 +97,7 @@ function EmployeeDashboard() {
 
   useEffect(() => {
     axios
-      .get("http://localhost:5000/me", { withCredentials: true })
+      .get("http://backend.vjcoverseas.com/me", { withCredentials: true })
       .then((res) => setProfile(res.data))
       .catch((err) => {
         console.log("❌ Failed to load profile", err.response?.data || err.message);
@@ -108,7 +108,7 @@ function EmployeeDashboard() {
   useEffect(() => {
     if (profile) {
       axios
-        .get("http://localhost:5000/my-salary-slips", { withCredentials: true })
+        .get("http://backend.vjcoverseas.com/my-salary-slips", { withCredentials: true })
         .then((res) => setSalarySlips(res.data))
         .catch((err) => console.error("❌ Failed to fetch slips", err));
     }
@@ -145,7 +145,7 @@ function EmployeeDashboard() {
       if (imageFile) {
         const formData = new FormData();
         formData.append("image", imageFile);
-        const res = await axios.post("http://localhost:5000/upload-profile-image", formData, {
+        const res = await axios.post("http://backend.vjcoverseas.com/upload-profile-image", formData, {
           withCredentials: true,
           headers: { "Content-Type": "multipart/form-data" },
         });
@@ -155,7 +155,7 @@ function EmployeeDashboard() {
       // Update name
       if (editName && editName !== profile.name) {
         await axios.post(
-          "http://localhost:5000/update-profile-name",
+          "http://backend.vjcoverseas.com/update-profile-name",
           new URLSearchParams({ name: editName }),
           { withCredentials: true }
         );
@@ -165,7 +165,7 @@ function EmployeeDashboard() {
       // Update password
       if (editPassword) {
         await axios.post(
-          "http://localhost:5000/update-password",
+          "http://backend.vjcoverseas.com/update-password",
           new URLSearchParams({ password: editPassword }),
           { withCredentials: true }
         );
@@ -233,7 +233,7 @@ function EmployeeDashboard() {
                       <div style={premiumStyles.profileInfoItem}>
                         <strong>Offer Letter:</strong>{" "}
                         <a
-                          href={`http://localhost:5000${profile.offer_letter_url}`}
+                          href={`http://backend.vjcoverseas.com${profile.offer_letter_url}`}
                           target="_blank"
                           rel="noopener noreferrer"
                         >

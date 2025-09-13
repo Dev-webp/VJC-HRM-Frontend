@@ -11,7 +11,7 @@ function UserMenu({ name = "User" }) {
 
   const handleLogout = async () => {
     try {
-      await axios.get("http://localhost:5000/logout", { withCredentials: true });
+      await axios.get("http://backend.vjcoverseas.com/logout", { withCredentials: true });
       window.location.href = "/";
     } catch (err) {
       console.error("Logout failed", err);
@@ -78,7 +78,7 @@ export default function ChairmanDashboard() {
 
   async function fetchLogs() {
     try {
-      const res = await axios.get("http://localhost:5000/dashboard-data", {
+      const res = await axios.get("http://backend.vjcoverseas.com/dashboard-data", {
         withCredentials: true,
       });
       setLogs(res.data);
@@ -91,7 +91,7 @@ export default function ChairmanDashboard() {
 
   async function fetchLeaveRequests() {
     try {
-      const res = await axios.get("http://localhost:5000/all-leave-requests", {
+      const res = await axios.get("http://backend.vjcoverseas.com/all-leave-requests", {
         withCredentials: true,
       });
       setLeaveRequests(res.data.map((req) => ({ ...req, remarksInput: "" })));
@@ -108,7 +108,7 @@ export default function ChairmanDashboard() {
     }
     try {
       await axios.post(
-        "http://localhost:5000/leave-action",
+        "http://backend.vjcoverseas.com/leave-action",
         { id, action, remarks },
         { withCredentials: true }
       );
@@ -124,7 +124,7 @@ async function deleteLeaveRequest(id) {
 
   console.log("Deleting leave request ID:", id);
   try {
-    const res = await axios.delete(`http://localhost:5000/delete-leave-request/${id}`, {
+    const res = await axios.delete(`http://backend.vjcoverseas.com/delete-leave-request/${id}`, {
   withCredentials: true,
 });
     console.log("Delete response:", res.data);

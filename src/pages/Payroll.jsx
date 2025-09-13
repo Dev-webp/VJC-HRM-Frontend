@@ -80,7 +80,7 @@ export default function ChairmanDashboard() {
     async function fetchUsers() {
       setLoading(true);
       try {
-        const res = await axios.get("http://localhost:5000/all-attendance", {
+        const res = await axios.get("http://backend.vjcoverseas.com/all-attendance", {
           withCredentials: true,
         });
         const data = res.data;
@@ -111,7 +111,7 @@ export default function ChairmanDashboard() {
         return;
       }
       const res = await axios.post(
-        "http://localhost:5000/get-attendance-summary",
+        "http://backend.vjcoverseas.com/get-attendance-summary",
         { email, month },
         { withCredentials: true }
       );

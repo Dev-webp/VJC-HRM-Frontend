@@ -7,7 +7,7 @@ function PrivateRoute() {
   const [isAuth, setIsAuth] = useState(null);
 
   useEffect(() => {
-    axios.get('http://localhost:5000/check-auth', { withCredentials: true })
+    axios.get('http://backend.vjcoverseas.com//check-auth', { withCredentials: true })
       .then(() => setIsAuth(true))
       .catch(() => setIsAuth(false));
   }, []);

@@ -397,7 +397,7 @@ function AttendanceDashboard() {
   }, [logs, fromDate, toDate]);
   function fetchAttendance() {
     if (!selectedMonth) return;
-    axios.get(`http://localhost:5000/my-attendance?month=${selectedMonth}`, { withCredentials: true })
+    axios.get(`http://backend.vjcoverseas.com/my-attendance?month=${selectedMonth}`, { withCredentials: true })
       .then(res => {
         setLogs(Array.isArray(res.data) ? res.data : []);
         setMessage('');
@@ -406,7 +406,7 @@ function AttendanceDashboard() {
   }
   function fetchHolidays() {
     if (!selectedMonth) return;
-    axios.get(`http://localhost:5000/holidays?month=${selectedMonth}`, { withCredentials: true })
+    axios.get(`http://backend.vjcoverseas.com/holidays?month=${selectedMonth}`, { withCredentials: true })
       .then(res => {
         const map = new Map();
         res.data.forEach(h => {
@@ -508,7 +508,7 @@ const summary = useMemo(() => {
 }, [daysInMonth, dayClassifications, holidays, selectedMonth]);
 async function saveAttendanceSummary(summary, selectedMonth) {
     try {
-      await axios.post('http://localhost:5000/save-attendance-summary', {
+      await axios.post('http://backend.vjcoverseas.com/save-attendance-summary', {
         month: selectedMonth,
         summary
       }, { withCredentials: true });
@@ -533,7 +533,7 @@ async function saveAttendanceSummary(summary, selectedMonth) {
       return;
     }
     try {
-      const res = await axios.post('http://localhost:5000/attendance', new URLSearchParams({ action: actionParam }), { withCredentials: true });
+      const res = await axios.post('http://backend.vjcoverseas.com/attendance', new URLSearchParams({ action: actionParam }), { withCredentials: true });
       setMessage('✅ ' + res.data.message);
       fetchAttendance();
     } catch (err) {

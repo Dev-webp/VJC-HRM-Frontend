@@ -19,7 +19,7 @@ function MarkHolidayPanel({ selectedMonth: propSelectedMonth, onHolidayMarked })
 
   function fetchHolidays() {
     if (!selectedMonth) return;
-    axios.get(`http://localhost:5000/holidays?month=${selectedMonth}`, { withCredentials: true })
+    axios.get(`http://backend.vjcoverseas.com/holidays?month=${selectedMonth}`, { withCredentials: true })
       .then(res => {
         setHolidays(res.data);
         setMsg('');
@@ -32,7 +32,7 @@ function MarkHolidayPanel({ selectedMonth: propSelectedMonth, onHolidayMarked })
       setMsg('Please enter both date and holiday name.');
       return;
     }
-    axios.post("http://localhost:5000/mark-holiday", { date, name }, { withCredentials: true })
+    axios.post("http://backend.vjcoverseas.com/mark-holiday", { date, name }, { withCredentials: true })
       .then(res => {
         setMsg(res.data.message || "Holiday marked successfully!");
         setDate('');
@@ -45,7 +45,7 @@ function MarkHolidayPanel({ selectedMonth: propSelectedMonth, onHolidayMarked })
 
   function deleteHoliday(dateToDelete) {
     if (!window.confirm(`Are you sure you want to delete holiday on ${dateToDelete}?`)) return;
-    axios.delete(`http://localhost:5000/delete-holiday/${dateToDelete}`, { withCredentials: true })
+    axios.delete(`http://backend.vjcoverseas.com/delete-holiday/${dateToDelete}`, { withCredentials: true })
       .then(res => {
         setMsg(res.data.message || "Holiday deleted.");
         fetchHolidays();

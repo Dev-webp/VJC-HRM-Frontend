@@ -95,7 +95,7 @@ export default function UserManagement() {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const url = "http://localhost:5000/all-attendance";
+      const url = "http://backend.vjcoverseas.com/all-attendance";
       const res = await axios.get(url, { withCredentials: true });
       const data = res.data;
 
@@ -140,7 +140,7 @@ export default function UserManagement() {
     }
     try {
       await axios.post(
-        "http://localhost:5000/create-user",
+        "http://backend.vjcoverseas.com/create-user",
         {
           name: newUser.name,
           email: newUser.email,
@@ -197,7 +197,7 @@ export default function UserManagement() {
     formData.append("offerLetter", offerLetterFile);
 
     try {
-      await axios.post("http://localhost:5000/upload-offer-letter", formData, {
+      await axios.post("http://backend.vjcoverseas.com/upload-offer-letter", formData, {
         withCredentials: true,
         headers: { "Content-Type": "multipart/form-data" },
       });
@@ -259,7 +259,7 @@ export default function UserManagement() {
       }
 
       await axios.put(
-        `http://localhost:5000/update-user/${encodeURIComponent(editingEmail)}`,
+        `http://backend.vjcoverseas.com/update-user/${encodeURIComponent(editingEmail)}`,
         payload,
         { withCredentials: true }
       );
