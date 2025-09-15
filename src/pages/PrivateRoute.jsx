@@ -1,4 +1,3 @@
-// src/components/PrivateRoute.jsx
 import { Navigate, Outlet } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import axios from 'axios';
@@ -6,11 +5,16 @@ import axios from 'axios';
 function PrivateRoute() {
   const [isAuth, setIsAuth] = useState(null);
 
+  const backendBaseUrl =
+    window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      ? 'http://localhost:5000'
+      : 'http://backend.vjcoverseas.com';
+
   useEffect(() => {
-    axios.get('http://backend.vjcoverseas.com//check-auth', { withCredentials: true })
+    axios.get(`${backendBaseUrl}/check-auth`, { withCredentials: true })
       .then(() => setIsAuth(true))
       .catch(() => setIsAuth(false));
-  }, []);
+  }, [backendBaseUrl]);
 
   if (isAuth === null) return <div>Loading...</div>; // or spinner
 
