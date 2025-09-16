@@ -38,7 +38,7 @@ export default function SalarySlipUpload() {
     setStatus(null);
 
     try {
-      const res = await axios.post("http://backend.vjcoverseas.com/upload-salary-slip", payload, {
+      const res = await axios.post("https://backend.vjcoverseas.com/upload-salary-slip", payload, {
         withCredentials: true,
         headers: { "Content-Type": "multipart/form-data" },
       });

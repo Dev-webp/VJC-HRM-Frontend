@@ -7,7 +7,7 @@ export default function UserMenu({ name = "User" }) {
 
   const handleLogout = async () => {
     try {
-      await axios.get('http://backend.vjcoverseas.com/logout', { withCredentials: true });
+      await axios.get('https://backend.vjcoverseas.com/logout', { withCredentials: true });
       navigate('/');
     } catch (err) {
       console.error('Logout failed', err);

@@ -53,7 +53,7 @@ function Login() {
   const backendBaseUrl =
     window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
       ? 'http://localhost:5000'
-      : 'http://backend.vjcoverseas.com';
+      : 'https://backend.vjcoverseas.com';
 
   const handleLogin = async (e) => {
     e.preventDefault();

@@ -13,7 +13,7 @@ function PayrollSlip() {
 
   useEffect(() => {
     axios
-      .get("http://backend.vjcoverseas.com//me", { withCredentials: true })
+      .get("https://backend.vjcoverseas.com//me", { withCredentials: true })
       .then((res) => setProfile(res.data))
       .catch(() => {});
   }, []);
@@ -25,7 +25,7 @@ function PayrollSlip() {
     setSlip(null);
     axios
       .post(
-        "http://backend.vjcoverseas.com//payroll/auto-generate-slip",
+        "https://backend.vjcoverseas.com//payroll/auto-generate-slip",
         { month },
         { withCredentials: true }
       )

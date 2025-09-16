@@ -62,7 +62,7 @@ function SalarySlips({ salarySlips }) {
 
               <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
                 <a
-                  href={`http://backend.vjcoverseas.com/${slip.path}`}
+                  href={`https://backend.vjcoverseas.com/${slip.path}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{
@@ -82,7 +82,7 @@ function SalarySlips({ salarySlips }) {
                   View
                 </a>
                 <a
-                  href={`http://backend.vjcoverseas.com/${slip.path}`}
+                  href={`https://backend.vjcoverseas.com/${slip.path}`}
                   download
                   style={{
                     flex: "1",
