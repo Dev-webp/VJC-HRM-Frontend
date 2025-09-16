@@ -7,11 +7,19 @@ function MarkHolidayPanel({ selectedMonth: propSelectedMonth, onHolidayMarked })
   const [msg, setMsg] = useState('');
   const [holidays, setHolidays] = useState([]);
 
+  // Hardcoded backend base URL - change this to your production or local URL
+  // For production:
+  // const backendBaseUrl = "https://backend.vjcoverseas.com";
+  // For local development, uncomment the next line and comment above:
+  // const backendBaseUrl = "http://localhost:5000";
+
+  // Example to auto switch based on window.location.hostname:
   let backendBaseUrl = "https://backend.vjcoverseas.com";
   if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
     backendBaseUrl = "http://localhost:5000";
   }
 
+  // Default to current month if prop not provided
   const selectedMonth = propSelectedMonth || (() => {
     const now = new Date();
     return now.toISOString().slice(0, 7);
@@ -23,21 +31,18 @@ function MarkHolidayPanel({ selectedMonth: propSelectedMonth, onHolidayMarked })
   }, [selectedMonth]);
 
   function fetchHolidays() {
-    if (!selectedMonth) return;
+  if (!selectedMonth) return;
+  axios.get(`${backendBaseUrl}/holidays?month=${selectedMonth}`, { withCredentials: true })
+    .then(res => {
+      setHolidays(res.data);
+      setMsg('');
+    })
+    .catch(error => {
+      console.error('Failed to fetch holidays:', error.response || error);
+      setMsg('Failed to fetch holidays. See console for details.');
+    });
+}
 
-    console.log("Fetching holidays for month:", selectedMonth, "from backend URL:", backendBaseUrl);
-
-    axios.get(`${backendBaseUrl}/holidays?month=${selectedMonth}`, { withCredentials: true })
-      .then(res => {
-        console.log("Fetched holidays:", res.data);
-        setHolidays(res.data);
-        setMsg('');
-      })
-      .catch(error => {
-        console.error('Failed to fetch holidays:', error.response || error);
-        setMsg('Failed to fetch holidays. See console for details.');
-      });
-  }
 
   function markHoliday() {
     if (!date || !name.trim()) {
