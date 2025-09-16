@@ -2,6 +2,11 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 
+// Dynamically set baseUrl for local dev or production backend
+const baseUrl = window.location.hostname === "localhost"
+  ? "http://localhost:5000" // change if your local backend uses a different port
+  : "https://backend.vjcoverseas.com";
+
 const styles = {
   section: {
     marginBottom: 40,
@@ -80,7 +85,7 @@ export default function ChairmanDashboard() {
     async function fetchUsers() {
       setLoading(true);
       try {
-        const res = await axios.get("https://backend.vjcoverseas.com/all-attendance", {
+        const res = await axios.get(`${baseUrl}/all-attendance`, {
           withCredentials: true,
         });
         const data = res.data;
@@ -111,7 +116,7 @@ export default function ChairmanDashboard() {
         return;
       }
       const res = await axios.post(
-        "https://backend.vjcoverseas.com/get-attendance-summary",
+        `${baseUrl}/get-attendance-summary`,
         { email, month },
         { withCredentials: true }
       );

@@ -2,7 +2,13 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 
+// Dynamic backend URL switching
+const baseUrl = window.location.hostname === "localhost"
+  ? "http://localhost:5000"
+  : "https://backend.vjcoverseas.com";
+
 const styles = {
+  // ... your styles as-is ...
   section: {
     marginBottom: 40,
     backgroundColor: "#fff",
@@ -24,6 +30,10 @@ const styles = {
     outlineColor: "#007bff",
     width: "100%",
     boxSizing: "border-box",
+    transition: "border-color 0.3s ease",
+  },
+  inputError: {
+    borderColor: "red",
   },
   btn: {
     cursor: "pointer",
@@ -63,6 +73,19 @@ const styles = {
     border: "none",
     marginBottom: 16,
   },
+  labelWithWarning: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    fontWeight: "600",
+    color: "#555",
+  },
+  warningSymbol: {
+    color: "red",
+    fontWeight: "bold",
+    fontSize: 18,
+    lineHeight: 1,
+  },
 };
 
 export default function UserManagement() {
@@ -91,14 +114,16 @@ export default function UserManagement() {
   const [editedUser, setEditedUser] = useState({});
   const [showAllUsers, setShowAllUsers] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  
+  // Track missing fields for validation highlights
+  const [missingFields, setMissingFields] = useState([]);
 
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const url = "https://backend.vjcoverseas.com/all-attendance";
+      const url = `${baseUrl}/all-attendance`;
       const res = await axios.get(url, { withCredentials: true });
       const data = res.data;
-
       const formatted = Object.entries(data).map(([email, info]) => ({
         email,
         name: info.name || "",
@@ -113,7 +138,6 @@ export default function UserManagement() {
         ifsc_code: info.ifscCode || info.ifsc_code || "",
         department: info.department || "",
       }));
-
       setUsers(formatted);
     } catch (err) {
       console.error("❌ Failed to fetch users:", err);
@@ -125,22 +149,22 @@ export default function UserManagement() {
     if (showAllUsers) fetchUsers();
   }, [showAllUsers]);
 
+  const validateNewUser = () => {
+    const requiredFields = ["email", "password", "name", "location", "employeeId", "salary"];
+    const missing = requiredFields.filter(f => !newUser[f]?.trim());
+    setMissingFields(missing);
+    return missing.length === 0;
+  };
+
   const handleCreateUser = async () => {
     setUserCreationMsg("");
-    if (
-      !newUser.email.trim() ||
-      !newUser.password.trim() ||
-      !newUser.name.trim() ||
-      !newUser.location.trim() ||
-      !newUser.employeeId.trim() ||
-      !newUser.salary.trim()
-    ) {
-      setUserCreationMsg("❌ All fields except Profile Image are required");
+    if (!validateNewUser()) {
+      setUserCreationMsg("❌ Please fill all mandatory fields marked in red");
       return;
     }
     try {
       await axios.post(
-        "https://backend.vjcoverseas.com/create-user",
+        `${baseUrl}/create-user`,
         {
           name: newUser.name,
           email: newUser.email,
@@ -174,6 +198,7 @@ export default function UserManagement() {
         ifscCode: "",
         department: "",
       });
+      setMissingFields([]);
       if (showAllUsers) fetchUsers();
     } catch (err) {
       console.error("❌ Failed to create user:", err);
@@ -191,13 +216,11 @@ export default function UserManagement() {
       setOfferLetterMsg("❌ Please provide both an email and an offer letter file.");
       return;
     }
-
     const formData = new FormData();
     formData.append("email", offerLetterEmail);
     formData.append("offerLetter", offerLetterFile);
-
     try {
-      await axios.post("https://backend.vjcoverseas.com/upload-offer-letter", formData, {
+      await axios.post(`${baseUrl}/upload-offer-letter`, formData, {
         withCredentials: true,
         headers: { "Content-Type": "multipart/form-data" },
       });
@@ -257,13 +280,11 @@ export default function UserManagement() {
       if (editedUser.password && editedUser.password.trim() !== "") {
         payload.password = editedUser.password;
       }
-
       await axios.put(
-        `https://backend.vjcoverseas.com/update-user/${encodeURIComponent(editingEmail)}`,
+        `${baseUrl}/update-user/${encodeURIComponent(editingEmail)}`,
         payload,
         { withCredentials: true }
       );
-
       setEditingEmail(null);
       setEditedUser({});
       if (showAllUsers) fetchUsers();
@@ -280,37 +301,39 @@ export default function UserManagement() {
     return email.toLowerCase().includes(term) || (name && name.toLowerCase().includes(term));
   });
 
+  // Helper to check if field is missing for new user validation
+  const isMissing = (field) => missingFields.includes(field);
+
   return (
     <section style={styles.section}>
       <h2 style={{ marginBottom: 10 }}>👤 Chairman Dashboard</h2>
       <p>Manage users and view overall team performance.</p>
-
       {/* User Creation Section */}
       <div style={{ marginTop: 20, marginBottom: 20 }}>
         <h3>➕ Create New User</h3>
         <div style={styles.formRow}>
           <input
             type="email"
-            placeholder="Email"
+            placeholder="Email *"
             value={newUser.email}
             onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-            style={styles.input}
+            style={{ ...styles.input, ...(isMissing("email") ? { borderColor: "red" } : {}) }}
           />
           <input
             type="password"
-            placeholder="Password"
+            placeholder="Password *"
             value={newUser.password}
             onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-            style={styles.input}
+            style={{ ...styles.input, ...(isMissing("password") ? { borderColor: "red" } : {}) }}
           />
         </div>
         <div style={styles.formRow}>
           <input
             type="text"
-            placeholder="Name"
+            placeholder="Name *"
             value={newUser.name}
             onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
-            style={styles.input}
+            style={{ ...styles.input, ...(isMissing("name") ? { borderColor: "red" } : {}) }}
           />
           <input
             type="text"
@@ -323,24 +346,24 @@ export default function UserManagement() {
         <div style={styles.formRow}>
           <input
             type="text"
-            placeholder="Location (e.g., Hyderabad, Bangalore)"
+            placeholder="Location (e.g., Hyderabad, Bangalore) *"
             value={newUser.location}
             onChange={(e) => setNewUser({ ...newUser, location: e.target.value })}
-            style={styles.input}
+            style={{ ...styles.input, ...(isMissing("location") ? { borderColor: "red" } : {}) }}
           />
           <input
             type="text"
-            placeholder="Employee ID"
+            placeholder="Employee ID *"
             value={newUser.employeeId}
             onChange={(e) => setNewUser({ ...newUser, employeeId: e.target.value })}
-            style={styles.input}
+            style={{ ...styles.input, ...(isMissing("employeeId") ? { borderColor: "red" } : {}) }}
           />
           <input
             type="number"
-            placeholder="Salary"
+            placeholder="Salary *"
             value={newUser.salary}
             onChange={(e) => setNewUser({ ...newUser, salary: e.target.value })}
-            style={styles.input}
+            style={{ ...styles.input, ...(isMissing("salary") ? { borderColor: "red" } : {}) }}
           />
         </div>
         <div style={styles.formRow}>
@@ -351,20 +374,28 @@ export default function UserManagement() {
             onChange={(e) => setNewUser({ ...newUser, bankAccount: e.target.value })}
             style={styles.input}
           />
-          <input
-            type="date"
-            placeholder="DOB"
-            value={newUser.dob}
-            onChange={(e) => setNewUser({ ...newUser, dob: e.target.value })}
-            style={styles.input}
-          />
-          <input
-            type="date"
-            placeholder="DOJ"
-            value={newUser.doj}
-            onChange={(e) => setNewUser({ ...newUser, doj: e.target.value })}
-            style={styles.input}
-          />
+          <div style={{...styles.formRow, flexDirection: "column", flex: "1 1 120px"}}>
+            <label style={{fontWeight: "600"}}>
+              DOB
+            </label>
+            <input
+              type="date"
+              value={newUser.dob}
+              onChange={(e) => setNewUser({ ...newUser, dob: e.target.value })}
+              style={styles.input}
+            />
+          </div>
+          <div style={{...styles.formRow, flexDirection: "column", flex: "1 1 120px"}}>
+            <label style={{fontWeight: "600"}}>
+              DOJ
+            </label>
+            <input
+              type="date"
+              value={newUser.doj}
+              onChange={(e) => setNewUser({ ...newUser, doj: e.target.value })}
+              style={styles.input}
+            />
+          </div>
         </div>
         <div style={styles.formRow}>
           <input
@@ -389,9 +420,12 @@ export default function UserManagement() {
             style={styles.input}
           />
         </div>
-
         <button
-          style={{ ...styles.btn, backgroundColor: "#007bff", marginTop: 15 }}
+          style={{
+            ...styles.btn,
+            backgroundColor: "#007bff",
+            marginTop: 15,
+          }}
           onClick={handleCreateUser}
         >
           ➕ Create User
@@ -404,7 +438,7 @@ export default function UserManagement() {
         {showAllUsers ? "Hide Users" : "Show All Users"}
       </button>
 
-      {/* Search bar and users list */}
+      {/* Users List and Search */}
       {showAllUsers && (
         <>
           <input
@@ -625,7 +659,6 @@ export default function UserManagement() {
           </div>
         </>
       )}
-
       {/* Offer Letter Upload Section */}
       <div style={{ marginTop: 20, marginBottom: 20 }}>
         <h3>📄 Upload Offer Letter</h3>

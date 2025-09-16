@@ -4,6 +4,12 @@ import SalaryUpload from "./SalarySlipUpload";
 import UserManagement from "./UserManagement";
 import Markabsent from "./Markabsent";
 import Payroll from "./Payroll";
+
+// Add dynamic baseUrl for API requests depending on environment
+const baseUrl = window.location.hostname === "localhost"
+  ? "http://localhost:5000" // local development backend URL (adjust port if needed)
+  : "https://backend.vjcoverseas.com"; // remote backend production URL
+
 function UserMenu({ name = "User" }) {
   const [open, setOpen] = useState(false);
 
@@ -11,7 +17,7 @@ function UserMenu({ name = "User" }) {
 
   const handleLogout = async () => {
     try {
-      await axios.get("http://backend.vjcoverseas.com/logout", { withCredentials: true });
+      await axios.get(`${baseUrl}/logout`, { withCredentials: true });
       window.location.href = "/";
     } catch (err) {
       console.error("Logout failed", err);
@@ -78,7 +84,7 @@ export default function ChairmanDashboard() {
 
   async function fetchLogs() {
     try {
-      const res = await axios.get("http://backend.vjcoverseas.com/dashboard-data", {
+      const res = await axios.get(`${baseUrl}/dashboard-data`, {
         withCredentials: true,
       });
       setLogs(res.data);
@@ -91,7 +97,7 @@ export default function ChairmanDashboard() {
 
   async function fetchLeaveRequests() {
     try {
-      const res = await axios.get("http://backend.vjcoverseas.com/all-leave-requests", {
+      const res = await axios.get(`${baseUrl}/all-leave-requests`, {
         withCredentials: true,
       });
       setLeaveRequests(res.data.map((req) => ({ ...req, remarksInput: "" })));
@@ -108,7 +114,7 @@ export default function ChairmanDashboard() {
     }
     try {
       await axios.post(
-        "http://backend.vjcoverseas.com/leave-action",
+        `${baseUrl}/leave-action`,
         { id, action, remarks },
         { withCredentials: true }
       );
@@ -119,23 +125,23 @@ export default function ChairmanDashboard() {
       setMessage("❌ Failed to update leave request");
     }
   }
-async function deleteLeaveRequest(id) {
-  if (!window.confirm("Are you sure you want to delete this leave request?")) return;
 
-  console.log("Deleting leave request ID:", id);
-  try {
-    const res = await axios.delete(`http://backend.vjcoverseas.com/delete-leave-request/${id}`, {
-  withCredentials: true,
-});
-    console.log("Delete response:", res.data);
-    setMessage("✅ Leave request deleted");
-    setLeaveRequests((prev) => prev.filter((r) => r.id !== id));
-  } catch (error) {
-    console.error("Failed to delete leave request", error);
-    setMessage("❌ Failed to delete leave request");
+  async function deleteLeaveRequest(id) {
+    if (!window.confirm("Are you sure you want to delete this leave request?")) return;
+
+    console.log("Deleting leave request ID:", id);
+    try {
+      const res = await axios.delete(`${baseUrl}/delete-leave-request/${id}`, {
+        withCredentials: true,
+      });
+      console.log("Delete response:", res.data);
+      setMessage("✅ Leave request deleted");
+      setLeaveRequests((prev) => prev.filter((r) => r.id !== id));
+    } catch (error) {
+      console.error("Failed to delete leave request", error);
+      setMessage("❌ Failed to delete leave request");
+    }
   }
-}
-
 
   function updateRemarks(index, value) {
     setLeaveRequests((prev) => {
@@ -305,7 +311,7 @@ const premiumStyles = {
     borderCollapse: "separate",
     borderSpacing: "0 10px",
   },
- 
+
   tableRow: {
     backgroundColor: "#fff",
     boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
@@ -406,4 +412,3 @@ const premiumStyles = {
     },
   },
 };
-

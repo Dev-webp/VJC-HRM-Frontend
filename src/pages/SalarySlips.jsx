@@ -1,5 +1,10 @@
 import React from "react";
 
+// Dynamic baseUrl to support local dev and production backend seamlessly
+const baseUrl = window.location.hostname === "localhost"
+  ? "http://localhost:5000" // Change if your local backend is different
+  : "https://backend.vjcoverseas.com";
+
 function SalarySlips({ salarySlips }) {
   return (
     <div
@@ -56,13 +61,13 @@ function SalarySlips({ salarySlips }) {
                   {slip.filename}
                 </h4>
                 <p style={{ color: "#718096", fontSize: "0.875rem", marginBottom: "20px" }}>
-                  Uploaded on: **{new Date(slip.uploadedAt).toLocaleDateString()}**
+                  Uploaded on: <strong>{new Date(slip.uploadedAt).toLocaleDateString()}</strong>
                 </p>
               </div>
 
               <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
                 <a
-                  href={`https://backend.vjcoverseas.com/${slip.path}`}
+                  href={`${baseUrl}/${slip.path}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{
@@ -82,7 +87,7 @@ function SalarySlips({ salarySlips }) {
                   View
                 </a>
                 <a
-                  href={`https://backend.vjcoverseas.com/${slip.path}`}
+                  href={`${baseUrl}/${slip.path}`}
                   download
                   style={{
                     flex: "1",

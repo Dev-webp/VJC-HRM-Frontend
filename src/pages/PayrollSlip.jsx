@@ -1,7 +1,13 @@
+/* eslint-disable */
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
+
+// Dynamic baseUrl for local development or production backend
+const baseUrl = window.location.hostname === "localhost"
+  ? "http://localhost:5000"  // Change if your local backend runs on a different port
+  : "https://backend.vjcoverseas.com";
 
 function PayrollSlip() {
   const [month, setMonth] = useState(() => new Date().toISOString().substr(0, 7));
@@ -13,7 +19,7 @@ function PayrollSlip() {
 
   useEffect(() => {
     axios
-      .get("https://backend.vjcoverseas.com//me", { withCredentials: true })
+      .get(`${baseUrl}/me`, { withCredentials: true })
       .then((res) => setProfile(res.data))
       .catch(() => {});
   }, []);
@@ -25,7 +31,7 @@ function PayrollSlip() {
     setSlip(null);
     axios
       .post(
-        "https://backend.vjcoverseas.com//payroll/auto-generate-slip",
+        `${baseUrl}/payroll/auto-generate-slip`,
         { month },
         { withCredentials: true }
       )
@@ -247,26 +253,26 @@ function PayrollSlip() {
 
   return (
     <div style={{ maxWidth: 820, margin: "2rem auto", fontFamily: "Segoe UI, Arial, sans-serif" }}>
-        <h2 style={{ textAlign: "center", marginBottom: 8 }}>👤 Employee auto Payroll Slip</h2>
+      <h2 style={{ textAlign: "center", marginBottom: 8 }}>👤 Employee auto Payroll Slip</h2>
       <div style={{ margin: "20px 0" }}>
         {/* Month selector below header */}
-          <div
-            style={{
-              textAlign: "center",
-              padding: "16px 0 24px",
-              borderBottom: "1px solid #eee",
-            }}
-          >
-            <label style={{ fontWeight: "bold", fontSize: 16, userSelect: "none" }}>
-              Select Month:{" "}
-              <input
-                type="month"
-                value={month}
-                onChange={(e) => setMonth(e.target.value)}
-                style={{ marginLeft: 12, padding: 6, fontSize: 16 }}
-              />
-            </label>
-          </div>
+        <div
+          style={{
+            textAlign: "center",
+            padding: "16px 0 24px",
+            borderBottom: "1px solid #eee",
+          }}
+        >
+          <label style={{ fontWeight: "bold", fontSize: 16, userSelect: "none" }}>
+            Select Month:{" "}
+            <input
+              type="month"
+              value={month}
+              onChange={(e) => setMonth(e.target.value)}
+              style={{ marginLeft: 12, padding: 6, fontSize: 16 }}
+            />
+          </label>
+        </div>
         <button onClick={downloadPDF} disabled={!slip} style={btnStyle}>
           ⏳ Download PDF
         </button>
@@ -286,7 +292,7 @@ function PayrollSlip() {
           {/* Company Name Heading */}
           <div
             style={{
-               backgroundColor: "#FFB847",
+              backgroundColor: "#FFB847",
               color: "black",
               fontWeight: "800",
               fontSize: 18,
@@ -294,16 +300,14 @@ function PayrollSlip() {
               textAlign: "center",
               letterSpacing: "2px",
               userSelect: "none",
-             
             }}
           >
-           VJC IMMIGRATION AND VISA CONSULTANT (P) Ltd. | VJC OVERSEAS
+            VJC IMMIGRATION AND VISA CONSULTANT (P) Ltd. | VJC OVERSEAS
           </div>
 
           {/* Payroll Month Header */}
           <div
             style={{
-             
               color: "#131212",
               fontWeight: "bold",
               fontSize: 20,
@@ -315,8 +319,6 @@ function PayrollSlip() {
           >
             Payroll Slip for {payrollMonth}
           </div>
-
-          
 
           {/* Employee Info Tables */}
           <div
@@ -422,9 +424,9 @@ function PayrollSlip() {
           >
             {`Dear Associate,
 We thank you for being part of VJC OVERSEAS family!
-Now you can help others looking for job • Ask your friends & family members to visit our VJC OVERSEAS office to submit their resume OR send email to career@vjcoverseas.com
+Now you can help others looking for job • Ask your friends & family members to visit our VJC OVERSEAS office to submit their resume OR send email to [career@vjcoverseas.com](mailto:career@vjcoverseas.com)
 So Hurry!
-Mail your queries to Info@vjcoverseas.com with Name & Employee ID OR Call our Employee Contact Center +91-4066367000, prefix the nearest VJC OVERSEAS office location.
+Mail your queries to [Info@vjcoverseas.com](mailto:Info@vjcoverseas.com) with Name & Employee ID OR Call our Employee Contact Center +91-4066367000, prefix the nearest VJC OVERSEAS office location.
 Contact Center Time 9 Am to 8 Pm Monday to Saturday (excluding general holidays)
 Important: Please call/mail us with your latest Mobile number and Email id to avoid missing out on important communications.
 Note: This is a computer-generated pay slip, no signature is required.`}

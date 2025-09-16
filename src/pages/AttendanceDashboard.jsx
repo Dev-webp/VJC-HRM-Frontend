@@ -1,6 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 
+// Base API URL logic
+const baseUrl = window.location.hostname === 'localhost'
+  ? 'http://localhost:5000' // Your local backend URL
+  : 'https://backend.vjcoverseas.com'; // Production backend URL
+
+
 // --- Utility functions (unchanged) ---
 function parseTime(timeStr) {
   if (!timeStr) return null;
@@ -75,7 +81,6 @@ const HALF_SLOT_B_END = '19:00:00';
 const MISUSE_GRACE_MIN = 10;
 const LUNCH_IN_LIMIT = '14:00:00';
 const LOGOUT_CUTOFF = '19:00:00';  // New logout time cutoff for half/absent logic
-
 
 // --- Main classification policy ---
 function calculateNetWorkMillis(log) {
@@ -225,7 +230,6 @@ function classifyDayPolicy({ isoDate, weekday, log, holidaysMap, monthlyLateStat
   const logoutCutoff = parseTime(LOGOUT_CUTOFF);
   const logoutBeforeCutoff = logoutTime && logoutTime < logoutCutoff;
 
-
   // Logic when late logins exceed limit or login beyond 10:15
   if ((lateInfo.isLate && lateInfo.isWithinGrace && isExceededLate) || (lateInfo.isLate && lateInfo.isBeyondGrace)) {
     // If worked hours >= 8, classify half day, else full day (reversed)
@@ -268,7 +272,6 @@ function classifyDayPolicy({ isoDate, weekday, log, holidaysMap, monthlyLateStat
     }
   }
 
-
   // If logout before 19:00 but not late user exceeding limits
   if (logoutBeforeCutoff) {
     if (netHours >= 8) {
@@ -290,8 +293,7 @@ function classifyDayPolicy({ isoDate, weekday, log, holidaysMap, monthlyLateStat
     }
   }
 
-
-   // New logic for login after 10:15 AM:
+  // New logic for login after 10:15 AM:
   if (lateInfo.isLate && lateInfo.isBeyondGrace) {
     if (netHours >= 8) {
       return {
@@ -312,12 +314,9 @@ function classifyDayPolicy({ isoDate, weekday, log, holidaysMap, monthlyLateStat
     }
   }
 
-
-
   if (netHours < 4) {
     return { bucket: 'absent', reason: 'Worked less than 4 hours', netHHMM, netHours, flags: ['lt4h'] };
   }
-
 
   if (netHours < 8) {
     if (qualifiesHalfDayPresentBySlot(log)) {
@@ -325,7 +324,6 @@ function classifyDayPolicy({ isoDate, weekday, log, holidaysMap, monthlyLateStat
     }
     return { bucket: 'halfday', reason: 'Worked 4–8 hours', netHHMM, netHours, flags: ['ge4_lt8_no_slot'] };
   }
-
 
   return {
     bucket: 'fullday',
@@ -390,14 +388,13 @@ function AttendanceDashboard() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMonth]);
 
-
   useEffect(() => {
     applyDateFilter();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [logs, fromDate, toDate]);
   function fetchAttendance() {
     if (!selectedMonth) return;
-    axios.get(`https://backend.vjcoverseas.com/my-attendance?month=${selectedMonth}`, { withCredentials: true })
+    axios.get(`${baseUrl}/my-attendance?month=${selectedMonth}`, { withCredentials: true })
       .then(res => {
         setLogs(Array.isArray(res.data) ? res.data : []);
         setMessage('');
@@ -406,7 +403,7 @@ function AttendanceDashboard() {
   }
   function fetchHolidays() {
     if (!selectedMonth) return;
-    axios.get(`https://backend.vjcoverseas.com/holidays?month=${selectedMonth}`, { withCredentials: true })
+    axios.get(`${baseUrl}/holidays?month=${selectedMonth}`, { withCredentials: true })
       .then(res => {
         const map = new Map();
         res.data.forEach(h => {
@@ -508,7 +505,7 @@ const summary = useMemo(() => {
 }, [daysInMonth, dayClassifications, holidays, selectedMonth]);
 async function saveAttendanceSummary(summary, selectedMonth) {
     try {
-      await axios.post('https://backend.vjcoverseas.com/save-attendance-summary', {
+      await axios.post(`${baseUrl}/save-attendance-summary`, {
         month: selectedMonth,
         summary
       }, { withCredentials: true });
@@ -533,7 +530,7 @@ async function saveAttendanceSummary(summary, selectedMonth) {
       return;
     }
     try {
-      const res = await axios.post('https://backend.vjcoverseas.com/attendance', new URLSearchParams({ action: actionParam }), { withCredentials: true });
+      const res = await axios.post(`${baseUrl}/attendance`, new URLSearchParams({ action: actionParam }), { withCredentials: true });
       setMessage('✅ ' + res.data.message);
       fetchAttendance();
     } catch (err) {
@@ -770,7 +767,6 @@ const filteredRows = useMemo(() => {
                     style={{
                       background: index % 2 ? '#f7fbff' : '#fff',
 
-
                       transition: 'background 0.18s',
                       verticalAlign: 'middle'
                     }}
@@ -846,17 +842,15 @@ const filteredRows = useMemo(() => {
   );
 }
 
-
 // --- COLOR STYLES for buckets ---
 const dayStyles = {
-  holiday:     { backgroundColor: '#90caf9', color: 'black' },    // Sundays and holidays - Blue
-  fullday:     { backgroundColor: '#b9f6ca', color: 'black' },    // Full day present - Light Green
-  halfday:     { backgroundColor: '#ffe082', color: 'black' },    // Half day - Light Orange
-  paidleave:   { backgroundColor: '#ce93d8', color: 'black' },    // Paid Leave - Purple
+  holiday:     { backgroundColor: '#90caf9', color: 'black' },     // Sundays and holidays - Blue
+  fullday:     { backgroundColor: '#b9f6ca', color: 'black' },     // Full day present - Light Green
+  halfday:     { backgroundColor: '#ffe082', color: 'black' },     // Half day - Light Orange
+  paidleave:   { backgroundColor: '#ce93d8', color: 'black' },     // Paid Leave - Purple
   grace_absent: { backgroundColor: '#fa3a00ff', color: '#000' }, // Grace absent
-  absent:      { backgroundColor: '#ffcdd2', color: 'black' },    // Absent / <4h / No Log - Light Red
+  absent:      { backgroundColor: '#ffcdd2', color: 'black' },     // Absent / <4h / No Log - Light Red
 };
-
 
 const styles = {
   page: {
@@ -1004,6 +998,5 @@ const styles = {
     minWidth: 35
   },
 };
-
 
 export default AttendanceDashboard;

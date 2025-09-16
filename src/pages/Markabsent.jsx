@@ -7,6 +7,19 @@ function MarkHolidayPanel({ selectedMonth: propSelectedMonth, onHolidayMarked })
   const [msg, setMsg] = useState('');
   const [holidays, setHolidays] = useState([]);
 
+  // Hardcoded backend base URL - change this to your production or local URL
+  // For production:
+  // const backendBaseUrl = "https://backend.vjcoverseas.com";
+  // For local development, uncomment the next line and comment above:
+  // const backendBaseUrl = "http://localhost:5000";
+
+  // Example to auto switch based on window.location.hostname:
+  let backendBaseUrl = "https://backend.vjcoverseas.com";
+  if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+    backendBaseUrl = "http://localhost:5000";
+  }
+
+  // Default to current month if prop not provided
   const selectedMonth = propSelectedMonth || (() => {
     const now = new Date();
     return now.toISOString().slice(0, 7);
@@ -19,7 +32,7 @@ function MarkHolidayPanel({ selectedMonth: propSelectedMonth, onHolidayMarked })
 
   function fetchHolidays() {
     if (!selectedMonth) return;
-    axios.get(`https://backend.vjcoverseas.com/holidays?month=${selectedMonth}`, { withCredentials: true })
+    axios.get(`${backendBaseUrl}/holidays?month=${selectedMonth}`, { withCredentials: true })
       .then(res => {
         setHolidays(res.data);
         setMsg('');
@@ -32,7 +45,7 @@ function MarkHolidayPanel({ selectedMonth: propSelectedMonth, onHolidayMarked })
       setMsg('Please enter both date and holiday name.');
       return;
     }
-    axios.post("https://backend.vjcoverseas.com/mark-holiday", { date, name }, { withCredentials: true })
+    axios.post(`${backendBaseUrl}/mark-holiday`, { date, name }, { withCredentials: true })
       .then(res => {
         setMsg(res.data.message || "Holiday marked successfully!");
         setDate('');
@@ -45,7 +58,7 @@ function MarkHolidayPanel({ selectedMonth: propSelectedMonth, onHolidayMarked })
 
   function deleteHoliday(dateToDelete) {
     if (!window.confirm(`Are you sure you want to delete holiday on ${dateToDelete}?`)) return;
-    axios.delete(`https://backend.vjcoverseas.com/delete-holiday/${dateToDelete}`, { withCredentials: true })
+    axios.delete(`${backendBaseUrl}/delete-holiday/${dateToDelete}`, { withCredentials: true })
       .then(res => {
         setMsg(res.data.message || "Holiday deleted.");
         fetchHolidays();

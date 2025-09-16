@@ -5,6 +5,11 @@ import AttendanceDashboard from "./AttendanceDashboard";
 import SalarySlips from "./SalarySlips";
 import PayrollSlip from "./PayrollSlip";
 
+// Dynamic baseUrl to switch between local and prod backends
+const baseUrl = window.location.hostname === "localhost"
+  ? "http://localhost:5000" // Adjust this to your local backend port if different
+  : "https://backend.vjcoverseas.com";
+
 function UserMenu({ name = "User" }) {
   const [open, setOpen] = useState(false);
 
@@ -12,7 +17,7 @@ function UserMenu({ name = "User" }) {
 
   const handleLogout = async () => {
     try {
-      await axios.get("https://backend.vjcoverseas.com/logout", {
+      await axios.get(`${baseUrl}/logout`, {
         withCredentials: true,
       });
       window.location.href = "/";
@@ -97,7 +102,7 @@ function EmployeeDashboard() {
 
   useEffect(() => {
     axios
-      .get("https://backend.vjcoverseas.com/me", { withCredentials: true })
+      .get(`${baseUrl}/me`, { withCredentials: true })
       .then((res) => setProfile(res.data))
       .catch((err) => {
         console.log("❌ Failed to load profile", err.response?.data || err.message);
@@ -108,7 +113,7 @@ function EmployeeDashboard() {
   useEffect(() => {
     if (profile) {
       axios
-        .get("https://backend.vjcoverseas.com/my-salary-slips", { withCredentials: true })
+        .get(`${baseUrl}/my-salary-slips`, { withCredentials: true })
         .then((res) => setSalarySlips(res.data))
         .catch((err) => console.error("❌ Failed to fetch slips", err));
     }
@@ -145,7 +150,7 @@ function EmployeeDashboard() {
       if (imageFile) {
         const formData = new FormData();
         formData.append("image", imageFile);
-        const res = await axios.post("https://backend.vjcoverseas.com/upload-profile-image", formData, {
+        const res = await axios.post(`${baseUrl}/upload-profile-image`, formData, {
           withCredentials: true,
           headers: { "Content-Type": "multipart/form-data" },
         });
@@ -155,7 +160,7 @@ function EmployeeDashboard() {
       // Update name
       if (editName && editName !== profile.name) {
         await axios.post(
-          "https://backend.vjcoverseas.com/update-profile-name",
+          `${baseUrl}/update-profile-name`,
           new URLSearchParams({ name: editName }),
           { withCredentials: true }
         );
@@ -165,7 +170,7 @@ function EmployeeDashboard() {
       // Update password
       if (editPassword) {
         await axios.post(
-          "https://backend.vjcoverseas.com/update-password",
+          `${baseUrl}/update-password`,
           new URLSearchParams({ password: editPassword }),
           { withCredentials: true }
         );
@@ -226,14 +231,12 @@ function EmployeeDashboard() {
                     <div style={premiumStyles.profileInfoItem}>
                       <strong>Location:</strong> {profile?.location || "N/A"}
                     </div>
-                    <div style={premiumStyles.profileInfoItem}>
-                      <strong>Salary:</strong> {profile?.salary ? `₹${profile.salary}` : "N/A"}
-                    </div>
+                    
                     {profile?.offer_letter_url && (
                       <div style={premiumStyles.profileInfoItem}>
                         <strong>Offer Letter:</strong>{" "}
                         <a
-                          href={`https://backend.vjcoverseas.com${profile.offer_letter_url}`}
+                          href={`${baseUrl}${profile.offer_letter_url}`}
                           target="_blank"
                           rel="noopener noreferrer"
                         >

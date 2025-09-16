@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
+// Dynamic baseUrl to switch easily between localhost and production backend
+const baseUrl = window.location.hostname === 'localhost'
+  ? 'http://localhost:5000'  // adjust port to your local backend port if different
+  : 'https://backend.vjcoverseas.com';
+
 const styles = {
   container: { fontFamily: 'system-ui, sans-serif', backgroundColor: '#f0f2f5', padding: 30, borderRadius: 12, },
   sectionTitle: { fontSize: '1.75rem', fontWeight: '700', color: '#333', borderBottom: '3px solid #007bff', paddingBottom: 8, marginBottom: 20, },
@@ -21,6 +26,7 @@ const styles = {
   pending: { color: '#ffc107' },
 };
 
+
 export default function LeaveApplication({ onMessage }) {
   const [leaveType, setLeaveType] = useState('Casual Leave');
   const [leaveStart, setLeaveStart] = useState('');
@@ -29,13 +35,14 @@ export default function LeaveApplication({ onMessage }) {
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [userRole, setUserRole] = useState('');
 
+
   useEffect(() => {
     async function fetchData() {
       try {
-        const { data: auth } = await axios.get('https ://backend.vjcoverseas.com/check-auth', { withCredentials: true });
+        const { data: auth } = await axios.get(`${baseUrl}/check-auth`, { withCredentials: true });
         setUserRole(auth.role || '');
         const url = auth.role === 'chairman' ? '/all-leave-requests' : '/my-leave-requests';
-        const res = await axios.get(`https://backend.vjcoverseas.com${url}`, { withCredentials: true });
+        const res = await axios.get(`${baseUrl}${url}`, { withCredentials: true });
         setLeaveRequests(res.data.map(r => ({ ...r, remarksInput: '' })));
       } catch {
         onMessage('❌ Failed to load leave requests or role');
@@ -44,11 +51,12 @@ export default function LeaveApplication({ onMessage }) {
     fetchData();
   }, [onMessage]);
 
+
   const applyLeave = async () => {
     if (!leaveStart || !leaveEnd || !leaveReason.trim()) return onMessage('❌ Please fill all fields');
     if (new Date(leaveEnd) < new Date(leaveStart)) return onMessage('❌ End date cannot be before start date');
     try {
-      await axios.post('https://backend.vjcoverseas.com/apply-leave', {
+      await axios.post(`${baseUrl}/apply-leave`, {
         leave_type: leaveType,
         start_date: leaveStart,
         end_date: leaveEnd,
@@ -64,15 +72,17 @@ export default function LeaveApplication({ onMessage }) {
     }
   };
 
+
   const refreshRequests = async () => {
     try {
       const url = userRole === 'chairman' ? '/all-leave-requests' : '/my-leave-requests';
-      const res = await axios.get(`https://backend.vjcoverseas.com${url}`, { withCredentials: true });
+      const res = await axios.get(`${baseUrl}${url}`, { withCredentials: true });
       setLeaveRequests(res.data.map(r => ({ ...r, remarksInput: '' })));
     } catch {
       onMessage('❌ Failed to refresh requests');
     }
   };
+
 
   const updateRemarks = (idx, val) => {
     setLeaveRequests(prev => {
@@ -82,11 +92,12 @@ export default function LeaveApplication({ onMessage }) {
     });
   };
 
+
   const takeAction = async (idx, action) => {
     const req = leaveRequests[idx];
     if (!req.remarksInput.trim()) return onMessage('❌ Add remarks to proceed');
     try {
-      await axios.post('https://backend.vjcoverseas.com/leave-action', {
+      await axios.post(`${baseUrl}/leave-action`, {
         id: req.id,
         action,
         remarks: req.remarksInput,
@@ -98,16 +109,18 @@ export default function LeaveApplication({ onMessage }) {
     }
   };
 
+
   const deleteRequest = async (id) => {
     if (!window.confirm('Delete this leave request?')) return;
     try {
-      await axios.delete(`https://backend.vjcoverseas.com/delete-leave/${id}`, { withCredentials: true });
+      await axios.delete(`${baseUrl}/delete-leave/${id}`, { withCredentials: true });
       setLeaveRequests(prev => prev.filter(r => r.id !== id));
       onMessage('✅ Deleted successfully');
     } catch {
       onMessage('❌ Failed to delete leave request');
     }
   };
+
 
   const getStatusStyle = (status) => {
     switch ((status || '').toLowerCase()) {
@@ -117,6 +130,7 @@ export default function LeaveApplication({ onMessage }) {
       default: return {};
     }
   };
+
 
   return (
     <div style={styles.container}>
@@ -150,7 +164,9 @@ export default function LeaveApplication({ onMessage }) {
         </>
       )}
 
+
       <h3 style={{...styles.sectionTitle, marginTop: 40}}>{userRole === 'chairman' ? "All Leave Requests" : "Your Leave Requests"}</h3>
+
 
       {leaveRequests.length ? (
         <div style={styles.tableWrapper}>
