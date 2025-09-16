@@ -267,8 +267,15 @@ export default function ChairmanDashboard() {
         )}
       </div>
       <Payroll />
-      <SalaryUpload />
-      <Markabsent />
+      <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+  <div style={{ flex: "1 1 400px", minWidth: 300 }}>
+    <SalaryUpload />
+  </div>
+  <div style={{ flex: "1 1 400px", minWidth: 300 }}>
+    <Markabsent />
+  </div>
+</div>
+
     </div>
   );
 }

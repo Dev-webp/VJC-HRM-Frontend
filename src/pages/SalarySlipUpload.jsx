@@ -130,7 +130,7 @@ const styles = {
     borderRadius: 15,
     boxShadow: "0 10px 30px rgba(0,0,0,0.1)",
     maxWidth: 450,
-    margin: "40px auto",
+   
   },
   header: {
     display: "flex",

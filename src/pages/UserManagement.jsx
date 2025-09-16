@@ -2,89 +2,197 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 
-// Dynamic backend URL switching
-const baseUrl = window.location.hostname === "localhost"
-  ? "http://localhost:5000"
-  : "https://backend.vjcoverseas.com";
+const baseUrl =
+  window.location.hostname === "localhost"
+    ? "http://localhost:5000"
+    : "https://backend.vjcoverseas.com";
+
+const colors = {
+  orange500: "#f97316", // Tailwind orange-500 approx
+  blue400: "#60a5fa",   // Tailwind blue-400 approx
+  white: "#ffffff",
+  gray100: "#f3f4f6",
+  gray300: "#d1d5db",
+  gray700: "#374151",
+};
 
 const styles = {
-  // ... your styles as-is ...
+  container: {
+    maxWidth: "full",
+    margin: "auto",
+    padding: "20px 16px 40px",
+    fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
+    color: colors.gray700,
+    backgroundColor: colors.gray100,
+    minHeight: "100vh",
+  },
+  header: {
+    display: "flex",
+    alignItems: "center",
+    gap: 16,
+    marginBottom: 24,
+    flexWrap: "wrap",
+  },
+  logo: {
+    width: 48,
+    height: 48,
+    backgroundColor: colors.orange500,
+    borderRadius: "50%",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontWeight: "700",
+    fontSize: 24,
+    color: colors.white,
+    userSelect: "none",
+  },
+  titleSection: {
+    flex: 1,
+    minWidth: 220,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: "700",
+    margin: 0,
+    color: colors.orange500,
+    userSelect: "none",
+  },
+  subtitle: {
+    fontSize: 16,
+    color: colors.gray700,
+    marginTop: 4,
+  },
   section: {
+    backgroundColor: colors.white,
+    borderRadius: 12,
+    padding: 24,
+    boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
     marginBottom: 40,
-    backgroundColor: "#fff",
-    padding: 20,
-    borderRadius: 10,
-    boxShadow: "0 5px 15px rgba(0,0,0,0.1)",
   },
   formRow: {
     display: "flex",
-    gap: 10,
+    gap: 16,
     flexWrap: "wrap",
-    marginBottom: 8,
+    marginBottom: 14,
   },
   input: {
-    padding: "8px 12px",
-    borderRadius: 5,
-    border: "1.5px solid #ccc",
-    fontSize: 14,
-    outlineColor: "#007bff",
-    width: "100%",
-    boxSizing: "border-box",
+    flex: "1 1 220px",
+    padding: "10px 14px",
+    borderRadius: 8,
+    border: `2px solid ${colors.gray300}`,
+    fontSize: 15,
+    outlineOffset: 2,
     transition: "border-color 0.3s ease",
+    boxSizing: "border-box",
   },
   inputError: {
-    borderColor: "red",
+    borderColor: colors.orange500,
   },
   btn: {
     cursor: "pointer",
-    padding: "8px 14px",
-    borderRadius: 5,
+    padding: "10px 22px",
+    borderRadius: 8,
     border: "none",
-    fontWeight: "600",
-    color: "#fff",
+    fontWeight: "700",
+    fontSize: 16,
     transition: "background-color 0.3s ease",
-    margin: "0 5px",
+    userSelect: "none",
+  },
+  btnPrimary: {
+    backgroundColor: colors.orange500,
+    color: colors.white,
+  },
+  btnPrimaryHover: {
+    backgroundColor: "#ea580c", // darker orange
+  },
+  btnSecondary: {
+    backgroundColor: colors.blue400,
+    color: colors.white,
+  },
+  btnSecondaryHover: {
+    backgroundColor: "#3b82f6", // darker blue
+  },
+  btnDanger: {
+    backgroundColor: "#ef4444", // red-500
+    color: colors.white,
+  },
+  btnDangerHover: {
+    backgroundColor: "#dc2626", // red-600
   },
   table: {
     width: "100%",
     borderCollapse: "collapse",
-    marginTop: 10,
+    marginTop: 16,
+    fontSize: 14,
+  },
+  th: {
+    borderBottom: `2px solid ${colors.gray300}`,
+    padding: "12px 10px",
+    textAlign: "left",
+    color: colors.orange500,
+    fontWeight: "700",
+    position: "sticky",
+    top: 0,
+    backgroundColor: colors.white,
+    zIndex: 1,
   },
   td: {
-    border: "1px solid #ddd",
-    padding: 8,
+    borderBottom: `1px solid ${colors.gray300}`,
+    padding: "10px",
+    verticalAlign: "middle",
   },
   searchInput: {
-    padding: 8,
+    padding: 12,
     fontSize: 16,
     width: "100%",
     maxWidth: 400,
-    marginBottom: 20,
-    borderRadius: 5,
-    border: "1px solid #ccc",
+    marginBottom: 24,
+    borderRadius: 8,
+    border: `2px solid ${colors.gray300}`,
+    boxSizing: "border-box",
   },
   toggleBtn: {
-    backgroundColor: "#007bff",
-    padding: "8px 16px",
-    fontWeight: "600",
-    color: "white",
-    borderRadius: 5,
+    backgroundColor: colors.orange500,
+    padding: "12px 22px",
+    fontWeight: "700",
+    color: colors.white,
+    borderRadius: 8,
     cursor: "pointer",
     border: "none",
-    marginBottom: 16,
+    marginBottom: 24,
+    width: "fit-content",
+    userSelect: "none",
+    transition: "background-color 0.3s ease",
+  },
+  toggleBtnHover: {
+    backgroundColor: "#ea580c",
   },
   labelWithWarning: {
     display: "flex",
     alignItems: "center",
     gap: 6,
-    fontWeight: "600",
-    color: "#555",
+    fontWeight: "700",
+    color: colors.gray700,
   },
   warningSymbol: {
-    color: "red",
-    fontWeight: "bold",
-    fontSize: 18,
+    color: colors.orange500,
+    fontWeight: "900",
+    fontSize: 20,
     lineHeight: 1,
+    userSelect: "none",
+  },
+  msgSuccess: {
+    marginTop: 12,
+    color: "#22c55e", // green-500
+    fontWeight: "600",
+  },
+  msgError: {
+    marginTop: 12,
+    color: "#ef4444", // red-500
+    fontWeight: "600",
+  },
+  responsiveTableWrapper: {
+    overflowX: "auto",
   },
 };
 
@@ -114,8 +222,6 @@ export default function UserManagement() {
   const [editedUser, setEditedUser] = useState({});
   const [showAllUsers, setShowAllUsers] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  
-  // Track missing fields for validation highlights
   const [missingFields, setMissingFields] = useState([]);
 
   const fetchUsers = async () => {
@@ -130,7 +236,10 @@ export default function UserManagement() {
         role: info.role || "",
         location: info.location || "",
         employeeId: info.employeeId || info.employee_id || "",
-        salary: info.salary !== null && info.salary !== undefined ? String(info.salary) : "",
+        salary:
+          info.salary !== null && info.salary !== undefined
+            ? String(info.salary)
+            : "",
         bank_account: info.bankAccount || info.bank_account || "",
         dob: info.dob || "",
         doj: info.doj || "",
@@ -150,8 +259,15 @@ export default function UserManagement() {
   }, [showAllUsers]);
 
   const validateNewUser = () => {
-    const requiredFields = ["email", "password", "name", "location", "employeeId", "salary"];
-    const missing = requiredFields.filter(f => !newUser[f]?.trim());
+    const requiredFields = [
+      "email",
+      "password",
+      "name",
+      "location",
+      "employeeId",
+      "salary",
+    ];
+    const missing = requiredFields.filter((f) => !newUser[f]?.trim());
     setMissingFields(missing);
     return missing.length === 0;
   };
@@ -159,7 +275,7 @@ export default function UserManagement() {
   const handleCreateUser = async () => {
     setUserCreationMsg("");
     if (!validateNewUser()) {
-      setUserCreationMsg("❌ Please fill all mandatory fields marked in red");
+      setUserCreationMsg("❌ Please fill all mandatory fields marked in orange");
       return;
     }
     try {
@@ -298,33 +414,40 @@ export default function UserManagement() {
   // Filter users by search term
   const filteredUsers = users.filter(({ email, name }) => {
     const term = searchTerm.toLowerCase();
-    return email.toLowerCase().includes(term) || (name && name.toLowerCase().includes(term));
+    return (
+      email.toLowerCase().includes(term) || (name && name.toLowerCase().includes(term))
+    );
   });
 
   // Helper to check if field is missing for new user validation
   const isMissing = (field) => missingFields.includes(field);
 
   return (
-    <section style={styles.section}>
-      <h2 style={{ marginBottom: 10 }}>👤 Chairman Dashboard</h2>
-      <p>Manage users and view overall team performance.</p>
+    <main style={styles.container}>
+     
       {/* User Creation Section */}
-      <div style={{ marginTop: 20, marginBottom: 20 }}>
-        <h3>➕ Create New User</h3>
+      <section style={styles.section} aria-labelledby="create-user-heading">
+        <h2 id="create-user-heading" style={{ color: colors.blue400, fontWeight: "700", marginBottom: 18 }}>
+          ➕ Create New User
+        </h2>
         <div style={styles.formRow}>
           <input
             type="email"
             placeholder="Email *"
             value={newUser.email}
             onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-            style={{ ...styles.input, ...(isMissing("email") ? { borderColor: "red" } : {}) }}
+            style={{ ...styles.input, ...(isMissing("email") ? styles.inputError : {}) }}
+            aria-invalid={isMissing("email")}
+            aria-describedby={isMissing("email") ? "email-error" : undefined}
           />
           <input
             type="password"
             placeholder="Password *"
             value={newUser.password}
             onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-            style={{ ...styles.input, ...(isMissing("password") ? { borderColor: "red" } : {}) }}
+            style={{ ...styles.input, ...(isMissing("password") ? styles.inputError : {}) }}
+            aria-invalid={isMissing("password")}
+            aria-describedby={isMissing("password") ? "password-error" : undefined}
           />
         </div>
         <div style={styles.formRow}>
@@ -333,7 +456,9 @@ export default function UserManagement() {
             placeholder="Name *"
             value={newUser.name}
             onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
-            style={{ ...styles.input, ...(isMissing("name") ? { borderColor: "red" } : {}) }}
+            style={{ ...styles.input, ...(isMissing("name") ? styles.inputError : {}) }}
+            aria-invalid={isMissing("name")}
+            aria-describedby={isMissing("name") ? "name-error" : undefined}
           />
           <input
             type="text"
@@ -349,21 +474,27 @@ export default function UserManagement() {
             placeholder="Location (e.g., Hyderabad, Bangalore) *"
             value={newUser.location}
             onChange={(e) => setNewUser({ ...newUser, location: e.target.value })}
-            style={{ ...styles.input, ...(isMissing("location") ? { borderColor: "red" } : {}) }}
+            style={{ ...styles.input, ...(isMissing("location") ? styles.inputError : {}) }}
+            aria-invalid={isMissing("location")}
+            aria-describedby={isMissing("location") ? "location-error" : undefined}
           />
           <input
             type="text"
             placeholder="Employee ID *"
             value={newUser.employeeId}
             onChange={(e) => setNewUser({ ...newUser, employeeId: e.target.value })}
-            style={{ ...styles.input, ...(isMissing("employeeId") ? { borderColor: "red" } : {}) }}
+            style={{ ...styles.input, ...(isMissing("employeeId") ? styles.inputError : {}) }}
+            aria-invalid={isMissing("employeeId")}
+            aria-describedby={isMissing("employeeId") ? "employeeId-error" : undefined}
           />
           <input
             type="number"
             placeholder="Salary *"
             value={newUser.salary}
             onChange={(e) => setNewUser({ ...newUser, salary: e.target.value })}
-            style={{ ...styles.input, ...(isMissing("salary") ? { borderColor: "red" } : {}) }}
+            style={{ ...styles.input, ...(isMissing("salary") ? styles.inputError : {}) }}
+            aria-invalid={isMissing("salary")}
+            aria-describedby={isMissing("salary") ? "salary-error" : undefined}
           />
         </div>
         <div style={styles.formRow}>
@@ -374,22 +505,24 @@ export default function UserManagement() {
             onChange={(e) => setNewUser({ ...newUser, bankAccount: e.target.value })}
             style={styles.input}
           />
-          <div style={{...styles.formRow, flexDirection: "column", flex: "1 1 120px"}}>
-            <label style={{fontWeight: "600"}}>
+          <div style={styles.formRow}>
+            <label htmlFor="dob" style={{ fontWeight: "700", marginBottom: 4, color: colors.gray700 }}>
               DOB
             </label>
             <input
+              id="dob"
               type="date"
               value={newUser.dob}
               onChange={(e) => setNewUser({ ...newUser, dob: e.target.value })}
               style={styles.input}
             />
           </div>
-          <div style={{...styles.formRow, flexDirection: "column", flex: "1 1 120px"}}>
-            <label style={{fontWeight: "600"}}>
+          <div style={styles.formRow}>
+            <label htmlFor="doj" style={{ fontWeight: "700", marginBottom: 4, color: colors.gray700 }}>
               DOJ
             </label>
             <input
+              id="doj"
               type="date"
               value={newUser.doj}
               onChange={(e) => setNewUser({ ...newUser, doj: e.target.value })}
@@ -421,20 +554,43 @@ export default function UserManagement() {
           />
         </div>
         <button
-          style={{
-            ...styles.btn,
-            backgroundColor: "#007bff",
-            marginTop: 15,
-          }}
+          style={{ ...styles.btn, ...styles.btnPrimary }}
           onClick={handleCreateUser}
+          type="button"
+          onMouseOver={(e) =>
+            (e.currentTarget.style.backgroundColor = styles.btnPrimaryHover.backgroundColor)
+          }
+          onMouseOut={(e) =>
+            (e.currentTarget.style.backgroundColor = styles.btnPrimary.backgroundColor)
+          }
         >
           ➕ Create User
         </button>
-        {userCreationMsg && <p style={{ marginTop: 8 }}>{userCreationMsg}</p>}
-      </div>
+        {userCreationMsg && (
+          <p
+            style={
+              userCreationMsg.startsWith("✅") ? styles.msgSuccess : styles.msgError
+            }
+            role="alert"
+          >
+            {userCreationMsg}
+          </p>
+        )}
+      </section>
 
       {/* Show/Hide Users Toggle */}
-      <button style={styles.toggleBtn} onClick={() => setShowAllUsers((p) => !p)}>
+      <button
+        style={{ ...styles.toggleBtn }}
+        onClick={() => setShowAllUsers((p) => !p)}
+        type="button"
+        aria-pressed={showAllUsers}
+        onMouseOver={(e) =>
+          (e.currentTarget.style.backgroundColor = styles.toggleBtnHover.backgroundColor)
+        }
+        onMouseOut={(e) =>
+          (e.currentTarget.style.backgroundColor = colors.orange500)
+        }
+      >
         {showAllUsers ? "Hide Users" : "Show All Users"}
       </button>
 
@@ -442,34 +598,37 @@ export default function UserManagement() {
       {showAllUsers && (
         <>
           <input
-            type="text"
+            type="search"
             placeholder="Search by Email or Name..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             style={styles.searchInput}
+            aria-label="Search users by email or name"
           />
-          <div>
-            <h3>👥 Users List</h3>
+          <div aria-live="polite" aria-relevant="all" style={styles.responsiveTableWrapper}>
+            <h2 style={{ color: colors.blue400, fontWeight: "700", marginBottom: 18 }}>
+              👥 Users List
+            </h2>
             {loading ? (
               <p>Loading users...</p>
             ) : filteredUsers.length ? (
               <table style={styles.table}>
                 <thead>
                   <tr>
-                    <th style={styles.td}>Email</th>
-                    <th style={styles.td}>Name</th>
-                    <th style={styles.td}>Role</th>
-                    <th style={styles.td}>Location</th>
-                    <th style={styles.td}>Employee ID</th>
-                    <th style={styles.td}>Salary</th>
-                    <th style={styles.td}>Bank A/c No</th>
-                    <th style={styles.td}>DOB</th>
-                    <th style={styles.td}>DOJ</th>
-                    <th style={styles.td}>PAN NO</th>
-                    <th style={styles.td}>IFSC Code</th>
-                    <th style={styles.td}>Department</th>
-                    <th style={styles.td}>Password (Reset)</th>
-                    <th style={styles.td}>Actions</th>
+                    <th style={styles.th}>Email</th>
+                    <th style={styles.th}>Name</th>
+                    <th style={styles.th}>Role</th>
+                    <th style={styles.th}>Location</th>
+                    <th style={styles.th}>Employee ID</th>
+                    <th style={styles.th}>Salary</th>
+                    <th style={styles.th}>Bank A/c No</th>
+                    <th style={styles.th}>DOB</th>
+                    <th style={styles.th}>DOJ</th>
+                    <th style={styles.th}>PAN NO</th>
+                    <th style={styles.th}>IFSC Code</th>
+                    <th style={styles.th}>Department</th>
+                    <th style={styles.th}>Password (Reset)</th>
+                    <th style={styles.th}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -485,6 +644,7 @@ export default function UserManagement() {
                               value={editedUser.name || ""}
                               onChange={(e) => handleChangeUserField("name", e.target.value)}
                               style={styles.input}
+                              aria-label="Edit name"
                             />
                           ) : (
                             user.name
@@ -497,6 +657,7 @@ export default function UserManagement() {
                               value={editedUser.role || ""}
                               onChange={(e) => handleChangeUserField("role", e.target.value)}
                               style={styles.input}
+                              aria-label="Edit role"
                             />
                           ) : (
                             user.role
@@ -509,6 +670,7 @@ export default function UserManagement() {
                               value={editedUser.location || ""}
                               onChange={(e) => handleChangeUserField("location", e.target.value)}
                               style={styles.input}
+                              aria-label="Edit location"
                             />
                           ) : (
                             user.location
@@ -521,6 +683,7 @@ export default function UserManagement() {
                               value={editedUser.employeeId || ""}
                               onChange={(e) => handleChangeUserField("employeeId", e.target.value)}
                               style={styles.input}
+                              aria-label="Edit employee ID"
                             />
                           ) : (
                             user.employeeId || ""
@@ -533,6 +696,7 @@ export default function UserManagement() {
                               value={editedUser.salary || ""}
                               onChange={(e) => handleChangeUserField("salary", e.target.value)}
                               style={styles.input}
+                              aria-label="Edit salary"
                             />
                           ) : (
                             user.salary || ""
@@ -545,6 +709,7 @@ export default function UserManagement() {
                               value={editedUser.bankAccount || ""}
                               onChange={(e) => handleChangeUserField("bankAccount", e.target.value)}
                               style={styles.input}
+                              aria-label="Edit bank account"
                             />
                           ) : (
                             user.bank_account || ""
@@ -557,6 +722,7 @@ export default function UserManagement() {
                               value={editedUser.dob || ""}
                               onChange={(e) => handleChangeUserField("dob", e.target.value)}
                               style={styles.input}
+                              aria-label="Edit date of birth"
                             />
                           ) : (
                             user.dob || ""
@@ -569,6 +735,7 @@ export default function UserManagement() {
                               value={editedUser.doj || ""}
                               onChange={(e) => handleChangeUserField("doj", e.target.value)}
                               style={styles.input}
+                              aria-label="Edit date of joining"
                             />
                           ) : (
                             user.doj || ""
@@ -581,6 +748,7 @@ export default function UserManagement() {
                               value={editedUser.panNo || ""}
                               onChange={(e) => handleChangeUserField("panNo", e.target.value)}
                               style={styles.input}
+                              aria-label="Edit PAN number"
                             />
                           ) : (
                             user.pan_no || ""
@@ -593,6 +761,7 @@ export default function UserManagement() {
                               value={editedUser.ifscCode || ""}
                               onChange={(e) => handleChangeUserField("ifscCode", e.target.value)}
                               style={styles.input}
+                              aria-label="Edit IFSC code"
                             />
                           ) : (
                             user.ifsc_code || ""
@@ -605,6 +774,7 @@ export default function UserManagement() {
                               value={editedUser.department || ""}
                               onChange={(e) => handleChangeUserField("department", e.target.value)}
                               style={styles.input}
+                              aria-label="Edit department"
                             />
                           ) : (
                             user.department || ""
@@ -618,31 +788,56 @@ export default function UserManagement() {
                               value={editedUser.password || ""}
                               onChange={(e) => handleChangeUserField("password", e.target.value)}
                               style={styles.input}
+                              aria-label="Edit password"
                             />
                           ) : (
                             "••••••"
                           )}
                         </td>
-                        <td style={styles.td}>
+                        <td style={{ ...styles.td, whiteSpace: "nowrap" }}>
                           {isEditing ? (
                             <>
                               <button
-                                style={{ ...styles.btn, backgroundColor: "#28a745" }}
+                                style={{ ...styles.btn, ...styles.btnPrimary, marginBottom: 6, width: "100%" }}
                                 onClick={saveUserEdits}
+                                type="button"
+                                aria-label={`Save changes for ${user.email}`}
+                                onMouseOver={(e) =>
+                                  (e.currentTarget.style.backgroundColor = styles.btnPrimaryHover.backgroundColor)
+                                }
+                                onMouseOut={(e) =>
+                                  (e.currentTarget.style.backgroundColor = styles.btnPrimary.backgroundColor)
+                                }
                               >
                                 💾 Save
                               </button>
                               <button
-                                style={{ ...styles.btn, backgroundColor: "#dc3545" }}
+                                style={{ ...styles.btn, ...styles.btnDanger, width: "100%" }}
                                 onClick={cancelEditing}
+                                type="button"
+                                aria-label={`Cancel editing for ${user.email}`}
+                                onMouseOver={(e) =>
+                                  (e.currentTarget.style.backgroundColor = styles.btnDangerHover.backgroundColor)
+                                }
+                                onMouseOut={(e) =>
+                                  (e.currentTarget.style.backgroundColor = "#ef4444")
+                                }
                               >
                                 ✖ Cancel
                               </button>
                             </>
                           ) : (
                             <button
-                              style={{ ...styles.btn, backgroundColor: "#007bff" }}
+                              style={{ ...styles.btn, ...styles.btnSecondary, width: "100%" }}
                               onClick={() => startEditingUser(user.email, user)}
+                              type="button"
+                              aria-label={`Edit user ${user.email}`}
+                              onMouseOver={(e) =>
+                                (e.currentTarget.style.backgroundColor = styles.btnSecondaryHover.backgroundColor)
+                              }
+                              onMouseOut={(e) =>
+                                (e.currentTarget.style.backgroundColor = styles.btnSecondary.backgroundColor)
+                              }
                             >
                               ✏ Edit
                             </button>
@@ -659,9 +854,12 @@ export default function UserManagement() {
           </div>
         </>
       )}
+
       {/* Offer Letter Upload Section */}
-      <div style={{ marginTop: 20, marginBottom: 20 }}>
-        <h3>📄 Upload Offer Letter</h3>
+      <section style={styles.section} aria-labelledby="offer-letter-heading">
+        <h2 id="offer-letter-heading" style={{ color: colors.blue400, fontWeight: "700", marginBottom: 18 }}>
+          📄 Upload Offer Letter
+        </h2>
         <p>You can upload an offer letter for any existing user by their email.</p>
         <div style={{ ...styles.formRow, alignItems: "center" }}>
           <input
@@ -670,23 +868,45 @@ export default function UserManagement() {
             value={offerLetterEmail}
             onChange={(e) => setOfferLetterEmail(e.target.value)}
             style={{ ...styles.input, flex: 2 }}
+            aria-label="Enter employee email to upload offer letter"
           />
           <input
             type="file"
             accept=".pdf,.doc,.docx"
             onChange={(e) => setOfferLetterFile(e.target.files[0])}
             style={{ ...styles.input, flex: 3 }}
+            aria-label="Select offer letter file"
           />
         </div>
-        {offerLetterFile && <p style={{ marginTop: 5 }}>Selected file: {offerLetterFile.name}</p>}
+        {offerLetterFile && (
+          <p style={{ marginTop: 8, fontWeight: "600", color: colors.gray700 }}>
+            Selected file: {offerLetterFile.name}
+          </p>
+        )}
         <button
-          style={{ ...styles.btn, backgroundColor: "#28a745", marginTop: 8 }}
+          style={{ ...styles.btn, ...styles.btnPrimary, marginTop: 12 }}
           onClick={handleOfferLetterUpload}
+          type="button"
+          onMouseOver={(e) =>
+            (e.currentTarget.style.backgroundColor = styles.btnPrimaryHover.backgroundColor)
+          }
+          onMouseOut={(e) =>
+            (e.currentTarget.style.backgroundColor = styles.btnPrimary.backgroundColor)
+          }
         >
           ⬆️ Upload Letter
         </button>
-        {offerLetterMsg && <p style={{ marginTop: 8 }}>{offerLetterMsg}</p>}
-      </div>
-    </section>
+        {offerLetterMsg && (
+          <p
+            style={
+              offerLetterMsg.startsWith("✅") ? styles.msgSuccess : styles.msgError
+            }
+            role="alert"
+          >
+            {offerLetterMsg}
+          </p>
+        )}
+      </section>
+    </main>
   );
 }
