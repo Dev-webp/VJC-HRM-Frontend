@@ -401,20 +401,25 @@ function AttendanceDashboard() {
       })
       .catch(() => setMessage('❌ Failed to fetch attendance logs'));
   }
-  function fetchHolidays() {
-    if (!selectedMonth) return;
-    axios.get(`${baseUrl}/holidays?month=${selectedMonth}`, { withCredentials: true })
-      .then(res => {
-        const map = new Map();
-        res.data.forEach(h => {
-          if (h.date && h.name) {
-            map.set(h.date, { name: h.name, isPaid: h.is_paid });
-          }
-        });
-        setHolidays(map);
-      })
-      .catch(() => setMessage('❌ Failed to fetch holidays'));
-  }
+function fetchHolidays() {
+  if (!selectedMonth) return;
+  axios.get(`${baseUrl}/holidays?month=${selectedMonth}`, { withCredentials: true })
+    .then(res => {
+      const map = new Map();
+      res.data.forEach(h => {
+        if (h.date && h.name) {
+          map.set(h.date, { name: h.name, isPaid: h.is_paid });
+        }
+      });
+      setHolidays(map);
+      setMessage('');
+    })
+    .catch(error => {
+      console.error('Failed to fetch holidays:', error.response || error.message || error);
+      setMessage('❌ Failed to fetch holidays (see console)');
+    });
+}
+
   const logsByDate = useMemo(() => {
     const map = new Map();
     for (const l of logs) if (l && l.date) map.set(l.date, l);

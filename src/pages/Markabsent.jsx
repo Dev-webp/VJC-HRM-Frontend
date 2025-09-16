@@ -31,14 +31,18 @@ function MarkHolidayPanel({ selectedMonth: propSelectedMonth, onHolidayMarked })
   }, [selectedMonth]);
 
   function fetchHolidays() {
-    if (!selectedMonth) return;
-    axios.get(`${backendBaseUrl}/holidays?month=${selectedMonth}`, { withCredentials: true })
-      .then(res => {
-        setHolidays(res.data);
-        setMsg('');
-      })
-      .catch(() => setMsg('Failed to fetch holidays'));
-  }
+  if (!selectedMonth) return;
+  axios.get(`${backendBaseUrl}/holidays?month=${selectedMonth}`, { withCredentials: true })
+    .then(res => {
+      setHolidays(res.data);
+      setMsg('');
+    })
+    .catch(error => {
+      console.error('Failed to fetch holidays:', error.response || error);
+      setMsg('Failed to fetch holidays. See console for details.');
+    });
+}
+
 
   function markHoliday() {
     if (!date || !name.trim()) {
