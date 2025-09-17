@@ -1,48 +1,42 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
-function MarkHolidayPanel({ selectedMonth: propSelectedMonth, onHolidayMarked }) {
+function MarkHolidayPanel({ selectedYear: propSelectedYear, onHolidayMarked }) {
   const [date, setDate] = useState('');
   const [name, setName] = useState('');
   const [msg, setMsg] = useState('');
   const [holidays, setHolidays] = useState([]);
 
-  // Hardcoded backend base URL - change this to your production or local URL
-  // For production:
-  // const backendBaseUrl = "https://backend.vjcoverseas.com";
-  // For local development, uncomment the next line and comment above:
-  // const backendBaseUrl = "http://localhost:5000";
-
-  // Example to auto switch based on window.location.hostname:
+  // Backend base URL auto-switch
   let backendBaseUrl = "https://backend.vjcoverseas.com";
   if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
     backendBaseUrl = "http://localhost:5000";
   }
 
-  // Default to current month if prop not provided
-  const selectedMonth = propSelectedMonth || (() => {
+  // Default to current year if prop not provided (YYYY)
+  const selectedYear = propSelectedYear || (() => {
     const now = new Date();
-    return now.toISOString().slice(0, 7);
+    return now.getFullYear().toString();
   })();
 
   useEffect(() => {
+    console.log(`Fetching holidays for year: ${selectedYear}`);
     fetchHolidays();
     // eslint-disable-next-line
-  }, [selectedMonth]);
+  }, [selectedYear]);
 
   function fetchHolidays() {
-  if (!selectedMonth) return;
-  axios.get(`${backendBaseUrl}/holidays?month=${selectedMonth}`, { withCredentials: true })
-    .then(res => {
-      setHolidays(res.data);
-      setMsg('');
-    })
-    .catch(error => {
-      console.error('Failed to fetch holidays:', error.response || error);
-      setMsg('Failed to fetch holidays. See console for details.');
-    });
-}
-
+    if (!selectedYear) return;
+    axios.get(`${backendBaseUrl}/holidays?month=${selectedYear}`, { withCredentials: true })  // month param used as year
+      .then(res => {
+        setHolidays(res.data);
+        setMsg('');
+      })
+      .catch(error => {
+        console.error('Failed to fetch holidays:', error.response || error);
+        setMsg('Failed to fetch holidays. See console for details.');
+      });
+  }
 
   function markHoliday() {
     if (!date || !name.trim()) {
@@ -122,94 +116,104 @@ function MarkHolidayPanel({ selectedMonth: propSelectedMonth, onHolidayMarked })
 
 const styles = {
   container: {
-    maxWidth: 500,
-    margin: 'auto',
+    maxWidth: 520,
+    margin: '30px auto',
     padding: 20,
     fontFamily: '"Segoe UI", Tahoma, Geneva, Verdana, sans-serif',
-    background: '#f9f9f9',
-    borderRadius: 8,
-    boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
+    background: '#fff',
+    borderRadius: 12,
+    boxShadow: '0 4px 15px rgba(0,0,0,0.12)',
   },
   heading: {
-    fontSize: 24,
-    marginBottom: 15,
-    color: '#333',
+    fontSize: 28,
+    marginBottom: 20,
+    color: '#f97316', // Orange-500
+    userSelect: 'none',
+    fontWeight: 700,
+    textAlign: 'center',
   },
   formRow: {
     display: 'flex',
-    gap: 10,
+    gap: 14,
     alignItems: 'center',
+    marginBottom: 18,
+    flexWrap: 'wrap',
   },
   dateInput: {
     flexShrink: 0,
-    width: 150,
-    padding: '8px 10px',
-    fontSize: 16,
-    borderRadius: 4,
-    border: '1px solid #ccc',
+    width: 160,
+    padding: '10px 12px',
+    fontSize: 17,
+    borderRadius: 6,
+    border: '1.5px solid #60a5fa', // Blue-400 border
+    outlineColor: '#60a5fa',
   },
   textInput: {
     flexGrow: 1,
-    padding: '8px 10px',
-    fontSize: 16,
-    borderRadius: 4,
-    border: '1px solid #ccc',
+    padding: '10px 12px',
+    fontSize: 17,
+    borderRadius: 6,
+    border: '1.5px solid #60a5fa',
+    outlineColor: '#60a5fa',
   },
   markButton: {
-    padding: '9px 18px',
-    fontSize: 16,
-    fontWeight: '600',
+    padding: '11px 22px',
+    fontSize: 17,
+    fontWeight: '700',
     color: 'white',
-    background: 'linear-gradient(45deg, #667eea, #764ba2)',
+    backgroundColor: '#f97316',
     border: 'none',
-    borderRadius: 4,
+    borderRadius: 6,
     cursor: 'pointer',
     userSelect: 'none',
-    transition: 'background 0.3s ease',
+    transition: 'background-color 0.3s ease',
   },
   message: {
-    marginTop: 12,
-    color: '#2e7d32',
-    fontWeight: 'bold',
+    marginTop: 14,
+    color: '#16a34a', // Green-600
+    fontWeight: '600',
+    textAlign: 'center',
   },
   subheading: {
-    marginTop: 30,
-    fontSize: 20,
-    borderBottom: '2px solid #764ba2',
+    marginTop: 36,
+    fontSize: 22,
+    borderBottom: '3px solid #f97316',
     paddingBottom: 6,
-    color: '#444',
+    color: '#374151',
+    userSelect: 'none',
   },
   noHolidays: {
     fontStyle: 'italic',
-    color: '#666',
-    marginTop: 12,
+    color: '#6b7280',
+    marginTop: 14,
+    textAlign: 'center',
   },
   holidayList: {
     listStyle: 'none',
     padding: 0,
-    marginTop: 10,
+    marginTop: 12,
   },
   holidayItem: {
-    background: 'white',
-    marginBottom: 8,
-    padding: '10px 15px',
-    borderRadius: 6,
+    background: '#60a5fa33', // light Blue-400 transparent background
+    marginBottom: 10,
+    padding: '12px 18px',
+    borderRadius: 8,
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-    fontSize: 16,
+    fontSize: 17,
+    fontWeight: '500',
   },
   deleteButton: {
     background: 'transparent',
     border: 'none',
-    color: '#c62828',
+    color: '#ef4444', // Red-500
     cursor: 'pointer',
-    fontSize: 20,
+    fontSize: 22,
     lineHeight: 1,
     padding: 0,
     transition: 'color 0.3s ease',
-  }
+  },
 };
 
 export default MarkHolidayPanel;
