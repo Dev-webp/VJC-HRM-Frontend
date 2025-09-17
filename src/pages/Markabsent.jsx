@@ -7,34 +7,31 @@ function MarkHolidayPanel({ selectedYear: propSelectedYear, onHolidayMarked }) {
   const [msg, setMsg] = useState('');
   const [holidays, setHolidays] = useState([]);
 
-  // Backend base URL auto-switch
-  let backendBaseUrl = "https://backend.vjcoverseas.com";
-  if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
-    backendBaseUrl = "http://localhost:5000";
-  }
+  // Backend URL auto-switching
+  const backendUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? 'http://localhost:5000'
+    : 'https://backend.vjcoverseas.com';
 
-  // Default to current year if prop not provided (YYYY)
-  const selectedYear = propSelectedYear || (() => {
-    const now = new Date();
-    return now.getFullYear().toString();
-  })();
+  const selectedYear = propSelectedYear || new Date().getFullYear().toString();
 
   useEffect(() => {
-    console.log(`Fetching holidays for year: ${selectedYear}`);
     fetchHolidays();
-    // eslint-disable-next-line
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedYear]);
 
   function fetchHolidays() {
-    if (!selectedYear) return;
-    axios.get(`${backendBaseUrl}/holidays?month=${selectedYear}`, { withCredentials: true })  // month param used as year
+    if (!selectedYear) {
+      setHolidays([]);
+      return;
+    }
+    axios.get(`${backendUrl}/holidays?month=${selectedYear}`, { withCredentials: true })
       .then(res => {
         setHolidays(res.data);
         setMsg('');
       })
-      .catch(error => {
-        console.error('Failed to fetch holidays:', error.response || error);
-        setMsg('Failed to fetch holidays. See console for details.');
+      .catch((error) => {
+        console.error('Failed to fetch holidays', error);
+        setMsg('Failed to fetch holidays. Please try again later.');
       });
   }
 
@@ -43,26 +40,30 @@ function MarkHolidayPanel({ selectedYear: propSelectedYear, onHolidayMarked }) {
       setMsg('Please enter both date and holiday name.');
       return;
     }
-    axios.post(`${backendBaseUrl}/mark-holiday`, { date, name }, { withCredentials: true })
-      .then(res => {
-        setMsg(res.data.message || "Holiday marked successfully!");
+    axios.post(`${backendUrl}/mark-holiday`, { date, name }, { withCredentials: true })
+      .then(() => {
+        setMsg('✅ Holiday marked successfully.');
         setDate('');
         setName('');
         fetchHolidays();
         if (onHolidayMarked) onHolidayMarked();
       })
-      .catch(() => setMsg("Failed to mark holiday."));
+      .catch(() => {
+        setMsg('Failed to mark holiday.');
+      });
   }
 
   function deleteHoliday(dateToDelete) {
-    if (!window.confirm(`Are you sure you want to delete holiday on ${dateToDelete}?`)) return;
-    axios.delete(`${backendBaseUrl}/delete-holiday/${dateToDelete}`, { withCredentials: true })
-      .then(res => {
-        setMsg(res.data.message || "Holiday deleted.");
+    if (!window.confirm(`Are you sure you want to delete the holiday on ${dateToDelete}?`)) return;
+    axios.delete(`${backendUrl}/delete-holiday/${dateToDelete}`, { withCredentials: true })
+      .then(() => {
+        setMsg('✅ Holiday deleted successfully.');
         fetchHolidays();
         if (onHolidayMarked) onHolidayMarked();
       })
-      .catch(() => setMsg('Failed to delete holiday.'));
+      .catch(() => {
+        setMsg('Failed to delete holiday.');
+      });
   }
 
   return (
@@ -74,38 +75,28 @@ function MarkHolidayPanel({ selectedYear: propSelectedYear, onHolidayMarked }) {
           value={date}
           onChange={e => setDate(e.target.value)}
           style={styles.dateInput}
-          aria-label="Select Holiday Date"
+          aria-label="Select holiday date"
         />
         <input
           type="text"
           value={name}
           onChange={e => setName(e.target.value)}
-          placeholder="Holiday Name"
+          placeholder="Holiday name"
           style={styles.textInput}
-          aria-label="Enter Holiday Name"
+          aria-label="Enter holiday name"
         />
         <button onClick={markHoliday} style={styles.markButton}>Mark</button>
       </div>
-
       {msg && <div style={styles.message}>{msg}</div>}
-
       <h3 style={styles.subheading}>Existing Holidays</h3>
       {holidays.length === 0 ? (
-        <p style={styles.noHolidays}>No holidays found</p>
+        <p style={styles.noHolidays}>No holidays found.</p>
       ) : (
         <ul style={styles.holidayList}>
           {holidays.map(({ date, name }) => (
             <li key={date} style={styles.holidayItem}>
-              <span>
-                <strong>{date}</strong> - {name}
-              </span>
-              <button
-                onClick={() => deleteHoliday(date)}
-                style={styles.deleteButton}
-                aria-label={`Delete holiday on ${date}`}
-              >
-                ✕
-              </button>
+              <span><strong>{date}</strong> - {name}</span>
+              <button onClick={() => deleteHoliday(date)} style={styles.deleteButton} aria-label={`Delete holiday on ${date}`}>×</button>
             </li>
           ))}
         </ul>
@@ -120,17 +111,17 @@ const styles = {
     margin: '30px auto',
     padding: 20,
     fontFamily: '"Segoe UI", Tahoma, Geneva, Verdana, sans-serif',
-    background: '#fff',
+    backgroundColor: '#fff',
     borderRadius: 12,
     boxShadow: '0 4px 15px rgba(0,0,0,0.12)',
   },
   heading: {
     fontSize: 28,
     marginBottom: 20,
-    color: '#f97316', // Orange-500
-    userSelect: 'none',
-    fontWeight: 700,
+    color: '#f97316',
+    fontWeight: '700',
     textAlign: 'center',
+    userSelect: 'none',
   },
   formRow: {
     display: 'flex',
@@ -145,22 +136,22 @@ const styles = {
     padding: '10px 12px',
     fontSize: 17,
     borderRadius: 6,
-    border: '1.5px solid #60a5fa', // Blue-400 border
-    outlineColor: '#60a5fa',
+    border: '1.5px solid #60aaff',
+    outlineColor: '#60aaff',
   },
   textInput: {
     flexGrow: 1,
     padding: '10px 12px',
     fontSize: 17,
     borderRadius: 6,
-    border: '1.5px solid #60a5fa',
-    outlineColor: '#60a5fa',
+    border: '1.5px solid #60aaff',
+    outlineColor: '#60aaff',
   },
   markButton: {
     padding: '11px 22px',
     fontSize: 17,
     fontWeight: '700',
-    color: 'white',
+    color: '#fff',
     backgroundColor: '#f97316',
     border: 'none',
     borderRadius: 6,
@@ -170,7 +161,7 @@ const styles = {
   },
   message: {
     marginTop: 14,
-    color: '#16a34a', // Green-600
+    color: '#16a34a',
     fontWeight: '600',
     textAlign: 'center',
   },
@@ -194,7 +185,7 @@ const styles = {
     marginTop: 12,
   },
   holidayItem: {
-    background: '#60a5fa33', // light Blue-400 transparent background
+    backgroundColor: 'rgba(96, 170, 255, 0.2)',
     marginBottom: 10,
     padding: '12px 18px',
     borderRadius: 8,
@@ -202,12 +193,12 @@ const styles = {
     justifyContent: 'space-between',
     alignItems: 'center',
     fontSize: 17,
-    fontWeight: '500',
+    fontWeight: 500,
   },
   deleteButton: {
-    background: 'transparent',
+    backgroundColor: 'transparent',
     border: 'none',
-    color: '#ef4444', // Red-500
+    color: '#ef4444',
     cursor: 'pointer',
     fontSize: 22,
     lineHeight: 1,
