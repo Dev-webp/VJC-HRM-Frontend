@@ -229,7 +229,7 @@ function classifyDayPolicy({ isoDate, weekday, log, holidaysMap, monthlyLateStat
   const logoutTime = parseTime(log.office_out);
   const logoutCutoff = parseTime(LOGOUT_CUTOFF);
   const logoutBeforeCutoff = logoutTime && logoutTime < logoutCutoff;
-
+  
   // Logic when late logins exceed limit or login beyond 10:15
   if ((lateInfo.isLate && lateInfo.isWithinGrace && isExceededLate) || (lateInfo.isLate && lateInfo.isBeyondGrace)) {
     // If worked hours >= 8, classify half day, else full day (reversed)
@@ -274,21 +274,21 @@ function classifyDayPolicy({ isoDate, weekday, log, holidaysMap, monthlyLateStat
 
   // If logout before 19:00 but not late user exceeding limits
   if (logoutBeforeCutoff) {
-    if (netHours >= 8) {
+    if (netHours >= 4 && netHours < 8) {
       return {
         bucket: 'halfday',
-        reason: 'Logout before 19:00 with >=8 hours worked (Half Day Applied)',
+        reason: 'Worked between 4 and 8 hours with timely login/logout - Half Day',
         netHHMM,
         netHours,
-        flags: ['halfday_logout_early'],
+        flags: ['halfday_worked_4_to_8'],
       };
-    } else {
+    } else if (netHours < 4) {
       return {
         bucket: 'absent',
-        reason: 'Logout before 19:00 with <8 hours worked (Absent Applied)',
+        reason: 'Worked less than 4 hours - Absent',
         netHHMM,
         netHours,
-        flags: ['absent_logout_early'],
+        flags: ['absent_lt_4_hours'],
       };
     }
   }
