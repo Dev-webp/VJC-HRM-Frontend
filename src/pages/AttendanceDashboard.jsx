@@ -6,24 +6,21 @@ const baseUrl = window.location.hostname === 'localhost'
   : 'https://backend.vjcoverseas.com'; // Production backend URL
 
 // --- Utility functions (unchanged except adjusting parseTime to Asia/Kolkata) ---
-function parseTime(timeStr) {
+function parseTime(timeStr, dateStr) {
   if (!timeStr) return null;
-  const cleaned = timeStr.split('.')[0];
-  const parts = cleaned.split(':');
-  const h = parseInt(parts[0] || '0', 10);
-  const m = parseInt(parts[1] || '0', 10);
-  const s = parseInt(parts[2] || '0', 10);
-  if (isNaN(h) || isNaN(m) || isNaN(s)) return null;
-  // Parsing time as Asia/Kolkata by constructing Date in UTC and then adjusting offset +5:30
-  const dateUTC = new Date(Date.UTC(1970, 0, 1, h, m, s));
-  // Applying +5:30 offset in milliseconds
-  return new Date(dateUTC.getTime() + (5 * 60 + 30) * 60000);
+  // Compose ISO string with date
+  let baseDate = dateStr || (new Date()).toISOString().slice(0,10);
+  let iso = `${baseDate}T${timeStr}Z`; // treat as UTC
+  let dateUtc = new Date(iso);
+  // Convert to IST offset (+5:30)
+  return new Date(dateUtc.getTime() + (5.5*60*60*1000));
 }
-function diffMillis(startStr, endStr) {
-  const a = parseTime(startStr), b = parseTime(endStr);
+function diffMillis(startStr, endStr, dateStr) {
+  const a = parseTime(startStr, dateStr), b = parseTime(endStr, dateStr);
   if (!a || !b || b < a) return 0;
   return b - a;
 }
+
 function fmtDecimalHours(ms) {
   const hours = ms / (1000 * 60 * 60);
   return hours.toFixed(2) + ' hrs';
