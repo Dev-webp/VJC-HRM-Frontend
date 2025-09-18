@@ -1,13 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-
 // Base API URL logic
 const baseUrl = window.location.hostname === 'localhost'
   ? 'http://localhost:5000' // Your local backend URL
   : 'https://backend.vjcoverseas.com'; // Production backend URL
 
-
-// --- Utility functions (unchanged) ---
+// --- Utility functions (unchanged except adjusting parseTime to Asia/Kolkata) ---
 function parseTime(timeStr) {
   if (!timeStr) return null;
   const cleaned = timeStr.split('.')[0];
@@ -16,18 +14,19 @@ function parseTime(timeStr) {
   const m = parseInt(parts[1] || '0', 10);
   const s = parseInt(parts[2] || '0', 10);
   if (isNaN(h) || isNaN(m) || isNaN(s)) return null;
-  return new Date(Date.UTC(1970, 0, 1, h, m, s));
+  // Parsing time as Asia/Kolkata by constructing Date in UTC and then adjusting offset +5:30
+  const dateUTC = new Date(Date.UTC(1970, 0, 1, h, m, s));
+  // Applying +5:30 offset in milliseconds
+  return new Date(dateUTC.getTime() + (5 * 60 + 30) * 60000);
 }
 function diffMillis(startStr, endStr) {
   const a = parseTime(startStr), b = parseTime(endStr);
   if (!a || !b || b < a) return 0;
   return b - a;
 }
-function fmtHrsMinFromMillis(ms) {
-  const totalMinutes = Math.floor(ms / 60000);
-  const h = Math.floor(totalMinutes / 60);
-  const m = totalMinutes % 60;
-  return `${h}hrs ${m}min`;
+function fmtDecimalHours(ms) {
+  const hours = ms / (1000 * 60 * 60);
+  return hours.toFixed(2) + ' hrs';
 }
 function millisToDecimalHours(ms) {
   return ms / (1000 * 60 * 60);
@@ -81,7 +80,6 @@ const HALF_SLOT_B_END = '19:00:00';
 const MISUSE_GRACE_MIN = 10;
 const LUNCH_IN_LIMIT = '14:00:00';
 const LOGOUT_CUTOFF = '19:00:00';  // New logout time cutoff for half/absent logic
-
 // --- Main classification policy ---
 function calculateNetWorkMillis(log) {
   const { office_in, office_out, break_out, break_in, break_out_2, break_in_2, lunch_out, lunch_in } = log || {};
@@ -194,7 +192,6 @@ function classifyDayPolicy({ isoDate, weekday, log, holidaysMap, monthlyLateStat
         flags: ['grace_absent', `leave_${leaveStatus.toLowerCase()}`],
       };
     }
-    // Optionally, handle partial day grace if partial attendance (extend this logic as needed)
   }
   // Paid leave fully approved
   if (log && log.leave_type && log.leave_type.toLowerCase().includes('earned')) {
@@ -219,7 +216,7 @@ function classifyDayPolicy({ isoDate, weekday, log, holidaysMap, monthlyLateStat
   // Process attendance and normal classification logic as before
   const netMillis = calculateNetWorkMillis(log || {});
   const netHours = millisToDecimalHours(netMillis);
-  const netHHMM = fmtHrsMinFromMillis(netMillis);
+  const netHHMM = fmtDecimalHours(netMillis);
   const lateInfo = evaluateLateLogin(log);
   const isExceededLate = monthlyLateStats.exceededDates && monthlyLateStats.exceededDates.includes(isoDate);
   if (!log || !log.office_in || !log.office_out) {
@@ -271,7 +268,6 @@ function classifyDayPolicy({ isoDate, weekday, log, holidaysMap, monthlyLateStat
       };
     }
   }
-
   // If logout before 19:00 but not late user exceeding limits
   if (logoutBeforeCutoff) {
     if (netHours >= 4 && netHours < 8) {
@@ -292,7 +288,6 @@ function classifyDayPolicy({ isoDate, weekday, log, holidaysMap, monthlyLateStat
       };
     }
   }
-
   // New logic for login after 10:15 AM:
   if (lateInfo.isLate && lateInfo.isBeyondGrace) {
     if (netHours >= 8) {
@@ -313,18 +308,15 @@ function classifyDayPolicy({ isoDate, weekday, log, holidaysMap, monthlyLateStat
       };
     }
   }
-
   if (netHours < 4) {
     return { bucket: 'absent', reason: 'Worked less than 4 hours', netHHMM, netHours, flags: ['lt4h'] };
   }
-
   if (netHours < 8) {
     if (qualifiesHalfDayPresentBySlot(log)) {
       return { bucket: 'halfday', reason: 'Half-Day Present slot satisfied', netHHMM, netHours, flags: ['half_day_slot_present'] };
     }
     return { bucket: 'halfday', reason: 'Worked 4–8 hours', netHHMM, netHours, flags: ['ge4_lt8_no_slot'] };
   }
-
   return {
     bucket: 'fullday',
     reason: 'Full Day Present',
@@ -387,7 +379,6 @@ function AttendanceDashboard() {
     fetchHolidays();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMonth]);
-
   useEffect(() => {
     applyDateFilter();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -419,7 +410,6 @@ function fetchHolidays() {
       setMessage('❌ Failed to fetch holidays (see console)');
     });
 }
-
   const logsByDate = useMemo(() => {
     const map = new Map();
     for (const l of logs) if (l && l.date) map.set(l.date, l);
@@ -548,22 +538,20 @@ const filteredRows = useMemo(() => {
   return sorted.map(log => {
       const netMillis = calculateNetWorkMillis(log);
       const netHrs = millisToDecimalHours(netMillis);
-      const netWorkedHrsMin = fmtHrsMinFromMillis(netMillis);
-
+      const netWorkedHrsDecimal = netHrs.toFixed(2) + ' hrs';
       function fmtCell(timeStr) {
         if (!timeStr) return '-';
         const ms = parseTime(timeStr).getTime() - parseTime('00:00:00').getTime();
-        return fmtHrsMinFromMillis(ms);
+        return (ms / (1000 * 60 * 60)).toFixed(2) + ' hrs';
       }
       const iso = log.date;
       const cls = dayClassifications.get(iso);
       const remarks = cls?.reason || '';
-
       return {
         ...log,
         netMillis,
         netHrs,
-        netWorkedHrsMin,
+        netWorkedHrsDecimal,
         office_in_disp: fmtCell(log.office_in),
         break_out_disp: fmtCell(log.break_out),
         break_in_disp: fmtCell(log.break_in),
@@ -747,15 +735,15 @@ const filteredRows = useMemo(() => {
             <thead>
               <tr>
                 <th style={{ width: 56 }}>Date</th>
-                <th style={{ width: 48 }}>Login</th>
-                <th style={{ width: 52 }}>B.Out</th>
-                <th style={{ width: 52 }}>B.In</th>
-                <th style={{ width: 54 }}>L.Out</th>
-                <th style={{ width: 54 }}>L.In</th>
-                <th style={{ width: 54 }}>B2.Out</th>
-                <th style={{ width: 54 }}>B2.In</th>
-                <th style={{ width: 52 }}>Logout</th>
-                <th style={{ width: 62 }}>Net</th>
+                <th style={{ width: 60 }}>Login</th>
+                <th style={{ width: 60 }}>B.Out</th>
+                <th style={{ width: 60 }}>B.In</th>
+                <th style={{ width: 60 }}>L.Out</th>
+                <th style={{ width: 60 }}>L.In</th>
+                <th style={{ width: 60 }}>B2.Out</th>
+                <th style={{ width: 60 }}>B2.In</th>
+                <th style={{ width: 60 }}>Logout</th>
+                <th style={{ width: 60 }}>Net Hours</th>
                 <th style={{ width: 180, textAlign: 'left' }}>Remarks</th> {/* New Remarks column */}
               </tr>
             </thead>
@@ -771,7 +759,6 @@ const filteredRows = useMemo(() => {
                     key={log.date || index}
                     style={{
                       background: index % 2 ? '#f7fbff' : '#fff',
-
                       transition: 'background 0.18s',
                       verticalAlign: 'middle'
                     }}
@@ -810,7 +797,7 @@ const filteredRows = useMemo(() => {
                             : '#ffcdd2',
                         color: '#222',
                       }}>
-                        {log.netWorkedHrsMin}
+                        {log.netWorkedHrsDecimal}
                       </span>
                     </td>
                     <td title={log.remarks} style={{ fontSize: 11, fontStyle: 'italic', paddingLeft: 8, userSelect: 'text' }}>
@@ -846,7 +833,6 @@ const filteredRows = useMemo(() => {
     </div>
   );
 }
-
 // --- COLOR STYLES for buckets ---
 const dayStyles = {
   holiday:     { backgroundColor: '#90caf9', color: 'black' },     // Sundays and holidays - Blue
@@ -856,7 +842,6 @@ const dayStyles = {
   grace_absent: { backgroundColor: '#fa3a00ff', color: '#000' }, // Grace absent
   absent:      { backgroundColor: '#ffcdd2', color: 'black' },     // Absent / <4h / No Log - Light Red
 };
-
 const styles = {
   page: {
     padding: 20,
@@ -973,7 +958,7 @@ const styles = {
     color: '#134685',
     background: 'none',
     textAlign: 'left',
-    padding: '4px 4px',
+    padding: '5px 1px',
     whiteSpace: 'nowrap',
     maxWidth: 70,
     overflow: 'hidden',
@@ -986,7 +971,7 @@ const styles = {
     textAlign: 'center',
     padding: '3px',
     background: 'none',
-    maxWidth: 52,
+    maxWidth: 60,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap'
@@ -1000,8 +985,7 @@ const styles = {
     boxShadow: '0 0.5px 2px #ececec',
     background: '#eee',
     textAlign: 'center',
-    minWidth: 35
+    minWidth: 50
   },
 };
-
 export default AttendanceDashboard;
