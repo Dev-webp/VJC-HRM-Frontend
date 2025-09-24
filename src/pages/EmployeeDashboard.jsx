@@ -4,6 +4,7 @@ import LeaveApplication from "./LeaveApplication";
 import AttendanceDashboard from "./AttendanceDashboard";
 import SalarySlips from "./SalarySlips";
 import PayrollSlip from "./PayrollSlip";
+
 // Dynamic baseUrl to switch between local and prod backends
 const baseUrl =
   window.location.hostname === "localhost"
@@ -52,6 +53,7 @@ function UserMenu({ name = "User" }) {
     </div>
   );
 }
+
 const EditIcon = ({ size = 40, style = {}, onClick }) => (
   <div
     style={{
@@ -82,37 +84,35 @@ const EditIcon = ({ size = 40, style = {}, onClick }) => (
   </div>
 );
 
-const InfoIcon = ({ size = 28, onClick }) => (
+const InstructionButton = ({ onClick }) => (
   <div
     onClick={onClick}
     style={{
-      width: size,
-      height: size,
-      borderRadius: "50%",
       backgroundColor: "#60a5fa", // Blue-400
       color: "white",
+      padding: "8px 16px",
+      borderRadius: "20px",
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
       cursor: "pointer",
       fontWeight: "700",
-      fontSize: size * 0.8,
+      fontSize: "0.9rem",
       userSelect: "none",
       position: "absolute",
-      top: 14,
-      right: 14,
+      bottom: 20,
       boxShadow: "0 2px 10px rgba(0,0,0,0.15)",
-      zIndex: 105,
     }}
-    title="Instructions"
+    title="Show instructions"
     aria-label="Show instructions"
   >
-    i
+    👉 Instructions
   </div>
 );
 
 function EmployeeDashboard() {
   const [profile, setProfile] = useState(null);
+  const [localProfileImage, setLocalProfileImage] = useState(null); // New state for local image
   const [toast, setToast] = useState(null);
   const [salarySlips, setSalarySlips] = useState([]);
   const [imageFile, setImageFile] = useState(null);
@@ -126,15 +126,26 @@ function EmployeeDashboard() {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3500);
   };
+
   useEffect(() => {
+    // Load profile from backend
     axios
       .get(`${baseUrl}/me`, { withCredentials: true })
-      .then((res) => setProfile(res.data))
+      .then((res) => {
+        setProfile(res.data);
+      })
       .catch((err) => {
         console.log("❌ Failed to load profile", err.response?.data || err.message);
         showToast("❌ Failed to fetch profile", "error");
       });
+
+    // Check for locally stored profile image
+    const storedImage = localStorage.getItem("userProfileImage");
+    if (storedImage) {
+      setLocalProfileImage(storedImage);
+    }
   }, []);
+
   useEffect(() => {
     if (profile) {
       axios
@@ -143,14 +154,16 @@ function EmployeeDashboard() {
         .catch((err) => console.error("❌ Failed to fetch slips", err));
     }
   }, [profile]);
+
   // Profile edit
   const handleEditProfile = () => {
     setEditName(profile.name);
     setEditPassword("");
     setImageFile(null);
-    setEditImagePreview(profile.image || "https://placehold.co/150x150?text=Profile");
+    setEditImagePreview(localProfileImage || profile?.image || "https://placehold.co/150x150?text=Profile");
     setEditMode(true);
   };
+  
   const handleCancelEdit = () => {
     setEditMode(false);
     setEditName("");
@@ -158,56 +171,81 @@ function EmployeeDashboard() {
     setImageFile(null);
     setEditImagePreview("");
   };
+
   const handleProfileImageSelect = (e) => {
     const file = e.target.files[0];
     setImageFile(file);
-    setEditImagePreview(
-      file ? URL.createObjectURL(file) : profile.image || "https://placehold.co/150x150?text=Profile"
-    );
+    if (file) {
+      // Create a temporary URL for previewing the new image
+      setEditImagePreview(URL.createObjectURL(file));
+    } else {
+      setEditImagePreview(localProfileImage || profile?.image || "https://placehold.co/150x150?text=Profile");
+    }
   };
+
   const handleSaveProfile = async () => {
     try {
-      let updated = { ...profile };
+      let updatedProfile = { ...profile };
       let changes = [];
-      // Update image (file)
+  
       if (imageFile) {
-        const formData = new FormData();
-        formData.append("image", imageFile);
-        const res = await axios.post(`${baseUrl}/upload-profile-image`, formData, {
-          withCredentials: true,
-          headers: { "Content-Type": "multipart/form-data" },
-        });
-        updated.image = res.data.image;
-        changes.push("image");
+        // Read the image file and convert it to a Data URL
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+          const imageDataUrl = reader.result;
+          localStorage.setItem("userProfileImage", imageDataUrl);
+          setLocalProfileImage(imageDataUrl);
+          changes.push("image");
+  
+          // Now save other changes
+          await saveOtherChanges(updatedProfile, changes);
+        };
+        reader.readAsDataURL(imageFile);
+      } else {
+        // No new image selected, just save other changes
+        await saveOtherChanges(updatedProfile, changes);
       }
-      // Update name
-      if (editName && editName !== profile.name) {
+    } catch (err) {
+      showToast("❌ Failed to update profile", "error");
+    }
+  };
+
+  const saveOtherChanges = async (updatedProfile, changes) => {
+    // Update name
+    if (editName && editName !== updatedProfile.name) {
+      try {
         await axios.post(
           `${baseUrl}/update-profile-name`,
           new URLSearchParams({ name: editName }),
           { withCredentials: true }
         );
-        updated.name = editName;
+        updatedProfile.name = editName;
         changes.push("name");
+      } catch (err) {
+        showToast("❌ Failed to update name", "error");
       }
-      // Update password
-      if (editPassword) {
+    }
+
+    // Update password
+    if (editPassword) {
+      try {
         await axios.post(
           `${baseUrl}/update-password`,
           new URLSearchParams({ password: editPassword }),
           { withCredentials: true }
         );
         changes.push("password");
+      } catch (err) {
+        showToast("❌ Failed to update password", "error");
       }
-      setProfile(updated);
-      setEditMode(false);
-      showToast(
-        changes.length === 0 ? "No changes made." : `✅ Updated ${changes.join(", ")} successfully`,
-        "success"
-      );
-    } catch (err) {
-      showToast("❌ Failed to update profile", "error");
     }
+
+    setProfile(updatedProfile);
+    setEditMode(false);
+    showToast(
+      changes.length === 0 ? "No changes made." : `✅ Updated ${changes.join(", ")} successfully`,
+      "success"
+    );
   };
 
   return (
@@ -228,23 +266,24 @@ function EmployeeDashboard() {
       <div style={premiumStyles.mainLayout}>
         <div style={premiumStyles.leftColumn}>
           <div style={premiumStyles.profileCard}>
-            <div style={{ position: "relative" }}>
+            <div style={premiumStyles.profileImageSection}>
               <img
                 src={
                   editMode
                     ? editImagePreview
-                    : profile?.image || "https://placehold.co/150x150?text=Profile"
+                    : localProfileImage || `${baseUrl}${profile?.image}` || "https://placehold.co/150x150?text=Profile"
                 }
                 alt="Profile"
                 style={premiumStyles.avatar}
               />
-              <EditIcon onClick={handleEditProfile} />
-             
+              <div style={premiumStyles.profileImageOverlay}>
+                <h2 style={premiumStyles.profileName}>{profile?.name}</h2>
+              </div>
             </div>
-            <div style={premiumStyles.profileDetails}>
+
+            <div style={premiumStyles.profileDetailsSection}>
               {!editMode ? (
                 <>
-                  <h2 style={premiumStyles.profileName}>{profile?.name}</h2>
                   <div style={premiumStyles.profileInfoGrid}>
                     <div style={premiumStyles.profileInfoItem}>
                       <strong>Employee ID:</strong> {profile?.employeeId || profile?.id}
@@ -265,16 +304,17 @@ function EmployeeDashboard() {
                           href={`${baseUrl}${profile.offer_letter_url}`}
                           target="_blank"
                           rel="noopener noreferrer"
+                          style={{ color: "#007bff" }}
                         >
                           View Document
                         </a>
                       </div>
                     )}
                   </div>
-                   <InfoIcon onClick={() => setShowInstructions(true)} />
+                  <InstructionButton onClick={() => setShowInstructions(true)} />
                 </>
               ) : (
-                <div>
+                <div style={{ padding: '0 30px' }}>
                   <div style={{ marginBottom: 10 }}>
                     <label style={premiumStyles.editLabel}>
                       Name:
@@ -318,13 +358,14 @@ function EmployeeDashboard() {
                     </button>
                     <button
                       onClick={handleCancelEdit}
-                      style={{ ...premiumStyles.saveButton, backgroundColor: "#9CA3AF" }}
+                      style={{ ...premiumStyles.saveButton, backgroundColor: "#6c757d" }}
                     >
                       Cancel
                     </button>
                   </div>
                 </div>
               )}
+              <EditIcon onClick={handleEditProfile} style={{ right: 20, top: 20 }} />
             </div>
           </div>
         </div>
@@ -344,48 +385,46 @@ function EmployeeDashboard() {
           </div>
         </div>
       </div>
-{showInstructions && (
-  <div style={premiumStyles.instructionsOverlay}>
-    <div style={premiumStyles.instructionsPopup}>
-      <div style={premiumStyles.instructionsHeader}>
-        <h2>📋 Attendance & Profile Instructions</h2>
-        <button
-          onClick={() => setShowInstructions(false)}
-          aria-label="Close instructions"
-          style={premiumStyles.instructionsCloseButton}
-        >
-          ×
-        </button>
-      </div>
-      <div style={premiumStyles.instructionsContent}>
-        <ol>
-          <li>Update your profile photo by clicking the edit icon.</li>
-          <li>Change your displayed name and password in the profile section.</li>
-          <li>Use strong passwords with characters, numbers, and symbols.</li>
-          <li>View your offer letter document if provided by HR.</li>
-          <li>Clock in/out and log breaks using the attendance buttons.</li>
-          <li>Office hours start at <b>10:00 AM</b>; login after <b>10:15 AM</b> is late.</li>
-          <li><b>Login counts even milliseconds to so,try to keep login before 10 or else consider it as late login.</b></li>
-          <li>Grace allows <b>6 late logins per month</b>; exceeding this triggers penalties.</li>
-          <li>Late arrivals beyond grace or after 10:15 AM count as half-day or absent.</li>
-          <li>Minimum work duration for full day is <b>8 hours</b>.</li>
-          <li>Lunch time should be logged before <b>2:00 PM</b> for compliance.</li>
-          <li>Unapproved absences are classified as full-day absence.</li>
-          <li>Approved leaves and official holidays count as paid leave days.</li>
-           <li><b>User Forgots to keep logout then it is consider as absent.</b></li>
-          <li>Partial attendance in defined time slots contributes to half-day presence.</li>
-          <li>Attendance calculations subtract holidays, paid leaves, and penalties.</li>
-          <li>Use attendance action buttons per their current status; some are disabled after use.</li>
-          <li>Filter historic attendance by dates for detailed views.</li>
-          <li>Attendance logs show clock-in/out, breaks, and computed worked hours clearly.</li>
-          <li>Color-coded calendar for holidays, half-days, absences, and paid leaves.</li>
-          <li>Contact HR for help with payroll or attendance issues.</li>
-        </ol>
-      </div>
-    </div>
-  </div>
-)}
-
+      {showInstructions && (
+        <div style={premiumStyles.instructionsOverlay}>
+          <div style={premiumStyles.instructionsPopup}>
+            <div style={premiumStyles.instructionsHeader}>
+              <h2>📋 Attendance & Profile Instructions</h2>
+              <button
+                onClick={() => setShowInstructions(false)}
+                aria-label="Close instructions"
+                style={premiumStyles.instructionsCloseButton}
+              >
+                ×
+              </button>
+            </div>
+            <div style={premiumStyles.instructionsContent}>
+              <ol style={{ paddingLeft: "20px" }}>
+                <li style={premiumStyles.instructionsListItem}>Update your profile photo by clicking the edit icon.</li>
+                <li style={premiumStyles.instructionsListItem}>Change your displayed name and password in the profile section.</li>
+                <li style={premiumStyles.instructionsListItem}>Use strong passwords with characters, numbers, and symbols.</li>
+                <li style={premiumStyles.instructionsListItem}>View your offer letter document if provided by HR.</li>
+                <li style={premiumStyles.instructionsListItem}>Clock in/out and log breaks using the attendance buttons.</li>
+                <li style={premiumStyles.instructionsListItem}>Office hours start at <b>10:00 AM</b>; login after <b>10:15 AM</b> is late.</li>
+                <li style={premiumStyles.instructionsListItem}><b>Login counts even milliseconds to so,try to keep login before 10 or else consider it as late login.</b></li>
+                <li style={premiumStyles.instructionsListItem}>Grace allows <b>6 late logins per month</b>; exceeding this triggers penalties.</li>
+                <li style={premiumStyles.instructionsListItem}>Late arrivals beyond grace or after 10:15 AM count as half-day or absent.</li>
+                <li style={premiumStyles.instructionsListItem}>Minimum work duration for full day is <b>8 hours</b>.</li>
+                <li style={premiumStyles.instructionsListItem}>Lunch time should be logged before <b>2:00 PM</b> for compliance.</li>
+                <li style={premiumStyles.instructionsListItem}>Unapproved absences are classified as full-day absence.</li>
+                <li style={premiumStyles.instructionsListItem}><b>User Forgots to keep logout then it is consider as absent.</b></li>
+                <li style={premiumStyles.instructionsListItem}>Partial attendance in defined time slots contributes to half-day presence.</li>
+                <li style={premiumStyles.instructionsListItem}>Attendance calculations subtract holidays, paid leaves, and penalties.</li>
+                <li style={premiumStyles.instructionsListItem}>Use attendance action buttons per their current status; some are disabled after use.</li>
+                <li style={premiumStyles.instructionsListItem}>Filter historic attendance by dates for detailed views.</li>
+                <li style={premiumStyles.instructionsListItem}>Attendance logs show clock-in/out, breaks, and computed worked hours clearly.</li>
+                <li style={premiumStyles.instructionsListItem}>Color-coded calendar for holidays, half-days, absences, and paid leaves.</li>
+                <li style={premiumStyles.instructionsListItem}>Contact HR for help with payroll or attendance issues.</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -394,7 +433,7 @@ const premiumStyles = {
   page: {
     padding: "40px",
     fontFamily: "'Inter', 'Segoe UI', sans-serif",
-    backgroundColor: "#f0f2f5",
+    backgroundColor: "#f0f2f5", // Light theme page background
     minHeight: "100vh",
     boxSizing: "border-box",
     position: "relative",
@@ -464,38 +503,71 @@ const premiumStyles = {
   profileCard: {
     display: "flex",
     flexDirection: "column",
-    alignItems: "center",
     backgroundColor: "#fff",
-    padding: "30px",
+    padding: "0",
     borderRadius: "15px",
     boxShadow: "0 8px 30px rgba(0,0,0,0.08)",
     position: "sticky",
     top: "40px",
     zIndex: 1,
     minHeight: 350,
+    color: "#333",
+    overflow: 'hidden',
   },
-  avatarContainer: {
-    marginBottom: "10px",
-    position: "relative",
-    width: "150px",
-    height: "150px",
+  profileImageSection: {
+    position: 'relative',
+    height: 250,
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    padding: '0',
+    overflow: 'hidden',
   },
   avatar: {
-    width: "150px",
-    height: "150px",
-    borderRadius: "50%",
-    border: "4px solid #f40000ff",
-    objectFit: "cover",
-  },
-  profileDetails: {
-    textAlign: "center",
     width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    zIndex: 1,
+  },
+  profileImageOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    width: '100%',
+    padding: '20px',
+    background: 'linear-gradient(to top, rgba(0,0,0,0.8), rgba(0,0,0,0))',
+    zIndex: 2,
+    display: 'flex',
+    justifyContent: 'center',
+    boxSizing: 'border-box',
+  },
+  profileDetailsSection: {
+    padding: '30px',
+    backgroundColor: '#fff',
+    borderBottomLeftRadius: '15px',
+    borderBottomRightRadius: '15px',
+    textAlign: "left",
+    width: "100%",
+    boxSizing: 'border-box',
+    position: 'relative',
+    backgroundImage: `url('https://images.unsplash.com/photo-1510915228343-b91c784771e8?q=80&w=2940&auto=format&fit=crop')`,
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+    color: '#333',
+    minHeight: 300,
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'center',
   },
   profileName: {
     fontSize: "2rem",
-    margin: "0 0 8px",
-    color: "#1a202c",
+    margin: "0",
+    color: "#fff",
     fontWeight: "700",
+    textShadow: "2px 2px 4px rgba(0,0,0,0.5)",
   },
   profileInfoGrid: {
     display: "flex",
@@ -505,6 +577,9 @@ const premiumStyles = {
     marginBottom: "20px",
     textAlign: "left",
     width: "100%",
+    background: 'rgba(255,255,255,0.7)',
+    padding: '15px',
+    borderRadius: '8px',
   },
   profileInfoItem: {
     fontSize: "0.95rem",
@@ -521,7 +596,9 @@ const premiumStyles = {
   imageInput: {
     width: "100%",
     padding: "10px",
-    border: "1px solid #e2e8f0",
+    border: "1px solid #ccc",
+    backgroundColor: "#f9fafb",
+    color: "#333",
     borderRadius: "8px",
     fontSize: "1rem",
     transition: "border-color 0.2s",
@@ -530,13 +607,13 @@ const premiumStyles = {
   editLabel: {
     display: "block",
     fontWeight: 600,
-    color: "#333",
+    color: "#4a5568",
     marginBottom: "6px",
     fontSize: "15px",
   },
   fileUploadLabel: {
     padding: "10px 18px",
-    backgroundColor: "#4c556a",
+    backgroundColor: "#60a5fa",
     color: "white",
     borderRadius: "8px",
     cursor: "pointer",
@@ -598,10 +675,10 @@ const premiumStyles = {
   instructionsPopup: {
     backgroundColor: "#fff",
     borderRadius: "15px",
-    maxWidth: 600,
+    maxWidth: 700,
     maxHeight: "80vh",
     overflowY: "auto",
-    padding: 24,
+    padding: 0,
     boxShadow: "0 12px 30px rgba(0,0,0,0.3)",
     position: "relative",
   },
@@ -609,7 +686,11 @@ const premiumStyles = {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 16,
+    padding: "20px 30px",
+    background: "linear-gradient(45deg, #4c556a, #656d7b)",
+    color: "#fff",
+    borderTopLeftRadius: "15px",
+    borderTopRightRadius: "15px",
   },
   instructionsCloseButton: {
     fontSize: 28,
@@ -617,13 +698,19 @@ const premiumStyles = {
     border: "none",
     cursor: "pointer",
     lineHeight: 1,
-    color: "#444",
+    color: "#fff",
     fontWeight: "bold",
-    padding: 0,
+    padding: "0 10px",
   },
   instructionsContent: {
     fontSize: 16,
     color: "#333",
+    padding: "30px",
+  },
+  instructionsListItem: {
+    marginBottom: "10px",
+    padding: "5px 0",
+    borderBottom: "1px dotted #ccc",
   },
 };
 
