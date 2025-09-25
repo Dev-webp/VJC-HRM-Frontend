@@ -5,16 +5,13 @@ import UserManagement from "./UserManagement";
 import Markabsent from "./Markabsent";
 import Payroll from "./Payroll";
 
-// Add dynamic baseUrl for API requests depending on environment
 const baseUrl = window.location.hostname === "localhost"
-  ? "http://localhost:5000" // local development backend URL (adjust port if needed)
-  : "https://backend.vjcoverseas.com"; // remote backend production URL
+  ? "http://localhost:5000"
+  : "https://backend.vjcoverseas.com";
 
 function UserMenu({ name = "User" }) {
   const [open, setOpen] = useState(false);
-
   const toggleDropdown = () => setOpen((o) => !o);
-
   const handleLogout = async () => {
     try {
       await axios.get(`${baseUrl}/logout`, { withCredentials: true });
@@ -24,21 +21,16 @@ function UserMenu({ name = "User" }) {
       alert("Logout failed");
     }
   };
-
   const handleSwitchUser = () => {
     window.location.href = "/";
   };
-
   useEffect(() => {
     const onClickOutside = (e) => {
       if (!e.target.closest(".usermenu-container")) setOpen(false);
     };
     window.addEventListener("click", onClickOutside);
-    return () => {
-      window.removeEventListener("click", onClickOutside);
-    };
+    return () => window.removeEventListener("click", onClickOutside);
   }, []);
-
   return (
     <div className="usermenu-container" style={premiumStyles.userMenu.container}>
       <div style={premiumStyles.userMenu.avatar} onClick={toggleDropdown} title={name}>
@@ -59,41 +51,12 @@ function UserMenu({ name = "User" }) {
 }
 
 export default function ChairmanDashboard() {
-  const [logs, setLogs] = useState([]);
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [message, setMessage] = useState("");
-  const [searchEmail] = useState("");
-  const [, setFilteredLogs] = useState([]);
 
   useEffect(() => {
-    fetchLogs();
     fetchLeaveRequests();
   }, []);
-
-  useEffect(() => {
-    if (!searchEmail.trim()) {
-      setFilteredLogs(logs);
-    } else {
-      setFilteredLogs(
-        logs.filter((log) =>
-          log.email.toLowerCase().includes(searchEmail.trim().toLowerCase())
-        )
-      );
-    }
-  }, [searchEmail, logs]);
-
-  async function fetchLogs() {
-    try {
-      const res = await axios.get(`${baseUrl}/dashboard-data`, {
-        withCredentials: true,
-      });
-      setLogs(res.data);
-      setFilteredLogs(res.data);
-    } catch (error) {
-      alert("Failed to load attendance data.");
-      console.error(error);
-    }
-  }
 
   async function fetchLeaveRequests() {
     try {
@@ -128,13 +91,10 @@ export default function ChairmanDashboard() {
 
   async function deleteLeaveRequest(id) {
     if (!window.confirm("Are you sure you want to delete this leave request?")) return;
-
-    console.log("Deleting leave request ID:", id);
     try {
-      const res = await axios.delete(`${baseUrl}/delete-leave-request/${id}`, {
+      await axios.delete(`${baseUrl}/delete-leave-request/${id}`, {
         withCredentials: true,
       });
-      console.log("Delete response:", res.data);
       setMessage("✅ Leave request deleted");
       setLeaveRequests((prev) => prev.filter((r) => r.id !== id));
     } catch (error) {
@@ -266,19 +226,21 @@ export default function ChairmanDashboard() {
           </div>
         )}
       </div>
-      <Payroll />
-      <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-  <div style={{ flex: "1 1 400px", minWidth: 300 }}>
-    <SalaryUpload />
-  </div>
-  <div style={{ flex: "1 1 400px", minWidth: 300 }}>
-    <Markabsent />
-  </div>
-</div>
 
+      <Payroll />
+
+      <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+        <div style={{ flex: "1 1 400px", minWidth: 300 }}>
+          <SalaryUpload />
+        </div>
+        <div style={{ flex: "1 1 400px", minWidth: 300 }}>
+          <Markabsent />
+        </div>
+      </div>
     </div>
   );
 }
+
 
 const premiumStyles = {
   container: {
@@ -318,7 +280,6 @@ const premiumStyles = {
     borderCollapse: "separate",
     borderSpacing: "0 10px",
   },
-
   tableRow: {
     backgroundColor: "#fff",
     boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
