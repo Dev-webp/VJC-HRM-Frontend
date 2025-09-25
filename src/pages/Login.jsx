@@ -3,6 +3,7 @@ import { useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
+// Add this style string with keyframes in a style tag or CSS file
 const shinyAnimationStyles = `
 @keyframes shiny-text {
   0%, 100% {
@@ -41,6 +42,7 @@ function injectStyle() {
 }
 
 function Login() {
+  // Inject animation styles once
   injectStyle();
 
   const [email, setEmail] = useState('');
@@ -55,34 +57,6 @@ function Login() {
 
   const handleLogin = async (e) => {
     e.preventDefault();
-
-    // Step 1: Get the user's public IP address.
-    let userIP = '';
-    try {
-      const ipResponse = await axios.get('https://api.ipify.org?format=json');
-      userIP = ipResponse.data.ip;
-    } catch (ipError) {
-      console.error('Failed to get IP address:', ipError);
-      alert('❌ Cannot verify network connection. Please try again.');
-      return;
-    }
-
-    // Step 2: Validate the user's IP against the allowed list from your backend.
-    try {
-      const allowedIpsResponse = await axios.get(`${backendBaseUrl}/allowed-ips`);
-      const allowedIps = allowedIpsResponse.data.allowed_ips;
-      
-      if (!allowedIps.includes(userIP)) {
-        alert('❌ Login is only permitted from the office Wi-Fi network.');
-        return; // Stop the login process.
-      }
-    } catch (ipCheckError) {
-      console.error('Failed to fetch allowed IPs:', ipCheckError);
-      alert('❌ Network validation failed. Please contact support.');
-      return;
-    }
-
-    // Step 3: If validation passes, proceed with the actual login.
     const formData = new URLSearchParams();
     formData.append('email', email);
     formData.append('password', password);
@@ -137,6 +111,7 @@ function Login() {
             alt="VJC Overseas Logo"
             style={styles.logo}
           />
+          {/* Use the shiny-heading class for the premium shiny effect */}
           <h1 className="shiny-heading">HRM VJC-OVERSEAS</h1>
           <p style={styles.slogan}>
             Empower your potential, drive our success.<br />
@@ -174,7 +149,7 @@ function Login() {
                   </svg>
                 ) : (
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#FF8C1A" width="20px" height="20px">
-                    <path d="M1 12s4-7 11-7c3.18 0 5.94 1.64 7.58 4.09L19 10.5l2 2-1.42 1.41-1.9-1.9A7.927 7.927 0 0112 19c-7 0-11-7-11-7a13.766 13.766 0 012.02-3.03l-1.5-1.5L3 3 4.5 1.5l18 18-1.5 1.5-3.1-3.02z" />
+                    <path d="M1 12s4-7 11-7c3.18 0 5.94 1.64 7.58 4.09L19 10.5l2 2-1.42 1.41-1.9-1.9A7.927 7.927 0 0112 19c-7 0-11-7-11-7zm16.9 5.48L19.07 17 22 20.93 20.93 22l-2.58-2.58a9.925 9.925 0 01-5.35 1.46c-7 0-12-7-12-7a13.766 13.766 0 012.02-3.03l-1.5-1.5L3 3 4.5 1.5l18 18-1.5 1.5-3.1-3.02z" />
                   </svg>
                 )}
               </button>
@@ -211,7 +186,7 @@ function Feature({ label, desc }) {
   );
 }
 
-// --- Styles Object ---
+/// --- Styles Object ---
 
 const styles = {
   root: {

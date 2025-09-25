@@ -142,7 +142,7 @@ export default function LeaveApplication({ onMessage }) {
               <label style={styles.label}>Type</label>
               <select value={leaveType} onChange={e => setLeaveType(e.target.value)} style={styles.input}>
                 <option>Casual Leave</option>
-                <option>Paid Leave</option>
+                <option>Sick Leave</option>
                 <option>Earned Leave</option>
                 <option>Work From Home</option>
               </select>

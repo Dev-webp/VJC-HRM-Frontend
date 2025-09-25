@@ -164,8 +164,25 @@ function buildMonthlyLateStats(logsByDate, daysInMonth) {
 
 // --- Updated Classification logic with new policies ---
 function classifyDayPolicy({ isoDate, weekday, log, holidaysMap, monthlyLateStats, leaveStatus }) {
+  const netMillis = calculateNetWorkMillis(log || {});
+  const netHours = millisToDecimalHours(netMillis);
+  const netHHMM = fmtHrsMinFromMillis(netMillis);
+  const lateInfo = evaluateLateLogin(log);
+  const isExceededLate = monthlyLateStats.exceededDates && monthlyLateStats.exceededDates.includes(isoDate);
+
+  // Check for Half-Day Earned Leave with sufficient hours worked
+  if (log && log.leave_type && log.leave_type.toLowerCase().includes('earned') && netHours >= 4) {
+    return {
+      bucket: 'fullday_and_earned_leave',
+      reason: `Earned Leave (Half-Day) + Worked > 4h = Full Day`,
+      netHHMM,
+      netHours,
+      flags: ['earned_leave_fullday_override'],
+    };
+  }
+
   if (weekday === 0) {
-    return { bucket: 'holiday', reason: 'Sunday (Holiday)', netHHMM: '00:00', netHours: 0, flags: [] };
+    return { bucket: 'holiday', reason: 'Sunday (Holiday)', netHHMM: '00:00', netHours: 0, flags: ['sunday'] };
   }
   if (holidaysMap.has(isoDate)) {
     const holiday = holidaysMap.get(isoDate);
@@ -206,29 +223,39 @@ function classifyDayPolicy({ isoDate, weekday, log, holidaysMap, monthlyLateStat
       flags: ['unpaid_leave'],
     };
   }
-  const netMillis = calculateNetWorkMillis(log || {});
-  const netHours = millisToDecimalHours(netMillis);
-  const netHHMM = fmtHrsMinFromMillis(netMillis);
-  const lateInfo = evaluateLateLogin(log);
-  const isExceededLate = monthlyLateStats.exceededDates && monthlyLateStats.exceededDates.includes(isoDate);
+
   if (!log || !log.office_in || !log.office_out) {
     return { bucket: 'absent', reason: 'No attendance log', netHHMM: '00:00', netHours: 0, flags: [] };
   }
+
   const logoutTime = parseTime(log.office_out);
   const logoutCutoff = parseTime(LOGOUT_CUTOFF);
   const logoutBeforeCutoff = logoutTime && logoutTime < logoutCutoff;
 
+  // New logic for early logout
+  if (logoutBeforeCutoff) {
+    if (netHours >= 8) {
+      return {
+        bucket: 'halfday',
+        reason: 'Worked > 8 hours but logged out before 7 PM (Half Day)',
+        netHHMM,
+        netHours,
+        flags: ['early_logout_halfday'],
+      };
+    } else if (netHours < 4) {
+      return {
+        bucket: 'absent',
+        reason: 'Worked less than 4 hours and logged out before 7 PM (Absent)',
+        netHHMM,
+        netHours,
+        flags: ['early_logout_absent'],
+      };
+    }
+  }
+
+  // Late login logic (applies only if not caught by the early logout rule)
   if ((lateInfo.isLate && lateInfo.isWithinGrace && isExceededLate) || (lateInfo.isLate && lateInfo.isBeyondGrace)) {
     if (netHours >= 8) {
-      if (logoutBeforeCutoff) {
-        return {
-          bucket: 'halfday',
-          reason: 'Exceeded late logins or late beyond grace + logout before 19:00 (half day applied)',
-          netHHMM,
-          netHours,
-          flags: ['halfday_late_exceeded_logout_early'],
-        };
-      }
       return {
         bucket: 'halfday',
         reason: 'Exceeded permitted late logins or late beyond grace (Half Day Applied)',
@@ -237,67 +264,19 @@ function classifyDayPolicy({ isoDate, weekday, log, holidaysMap, monthlyLateStat
         flags: ['late_exceeded_or_beyond_grace'],
       };
     } else {
-      if (logoutBeforeCutoff) {
-        return {
-          bucket: 'absent',
-          reason: 'Exceeded lates or late beyond grace + worked <8h + logout before 19:00 (Absent)',
-          netHHMM,
-          netHours,
-          flags: ['absent_late_logout_early'],
-        };
-      }
-      return {
-        bucket: 'fullday',
-        reason: 'Exceeded permitted late logins or late beyond grace (Full Day Applied due to <8h worked)',
-        netHHMM,
-        netHours,
-        flags: ['late_exceeded_or_beyond_grace_full_day'],
-      };
-    }
-  }
-
-  if (logoutBeforeCutoff) {
-    if (netHours >= 4 && netHours < 8) {
-      return {
-        bucket: 'halfday',
-        reason: 'Worked between 4 and 8 hours with timely login/logout - Half Day',
-        netHHMM,
-        netHours,
-        flags: ['halfday_worked_4_to_8'],
-      };
-    } else if (netHours < 4) {
       return {
         bucket: 'absent',
-        reason: 'Worked less than 4 hours - Absent',
+        reason: 'Exceeded lates or late beyond grace + worked less than 8 hours (Absent)',
         netHHMM,
         netHours,
-        flags: ['absent_lt_4_hours'],
+        flags: ['absent_late_less_than_8h'],
       };
     }
   }
 
-  if (lateInfo.isLate && lateInfo.isBeyondGrace) {
-    if (netHours >= 8) {
-      return {
-        bucket: 'halfday',
-        reason: 'Login after 10:15 AM, worked >= 8 hours (Half Day)',
-        netHHMM,
-        netHours,
-        flags: ['late_beyond_1015_halfday'],
-      };
-    } else {
-      return {
-        bucket: 'absent',
-        reason: 'Login after 10:15 AM, worked less than 8 hours (Absent)',
-        netHHMM,
-        netHours,
-        flags: ['late_beyond_1015_absent'],
-      };
-    }
-  }
-
+  // Standard classification
   if (netHours < 4) {
-    return { bucket: 'absent', reason: 'Worked less than 4 hours', netHHMM, netHours, flags: ['lt4h'] };
+    return { bucket: 'absent', reason: 'Worked less than 4 hours - Full Day Absent', netHHMM, netHours, flags: ['lt4h'] };
   }
 
   if (netHours < 8) {
@@ -322,7 +301,9 @@ const dayStyles = {
   halfday: { background: '#ffe082' },
   absent: { background: '#ffcdd2' },
   holiday: { background: '#90caf9' },
-  paidleave: { background: '#ce93d8' }
+  paidleave: { background: '#ce93d8' },
+  // New style for earned leave + worked > 4h
+  fullday_and_earned_leave: { background: 'linear-gradient(to right, #ffe082, #ce93d8)' },
 };
 
 function getHoursCellStyle(bucket) {
@@ -373,6 +354,7 @@ function AttendanceDashboard() {
   const [logs, setLogs] = useState([]);
   const [holidays, setHolidays] = useState(new Map());
   const [message, setMessage] = useState('');
+  const [lunchMessage, setLunchMessage] = useState('');
   const [selectedMonth, setSelectedMonth] = useState(() => currentYearMonth());
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
@@ -431,7 +413,8 @@ function AttendanceDashboard() {
 
   function applyDateFilter() {
     if (!fromDate && !toDate) {
-      setFilteredLogs(logs);
+      // Default behavior: show last 10 logs
+      setFilteredLogs(logs.slice(-10));
       return;
     }
     let filtered = logs;
@@ -457,9 +440,10 @@ function AttendanceDashboard() {
     return result;
   }, [daysInMonth, logsByDate, holidays, monthlyLateStats]);
 
-  const summary = useMemo(() => {
-    let fullDays = 0;
+  // New function to handle half-day conversion
+  const calculateTotalDays = useMemo(() => {
     let halfDays = 0;
+    let fullDays = 0;
     let paidLeaves = 0;
     let absentDays = 0;
     let sundaysAndHolidays = 0;
@@ -472,6 +456,7 @@ function AttendanceDashboard() {
       }
       switch (classification.bucket) {
         case 'fullday':
+        case 'fullday_and_earned_leave':
           fullDays++;
           break;
         case 'halfday':
@@ -491,7 +476,14 @@ function AttendanceDashboard() {
           break;
       }
     }
-    const totalWorkingDays = fullDays + halfDays / 2 + paidLeaves;
+
+    // Convert two half days to one full day
+    const extraFullDaysFromHalfs = Math.floor(halfDays / 2);
+    const remainingHalfDays = halfDays % 2;
+    fullDays += extraFullDaysFromHalfs;
+    halfDays = remainingHalfDays;
+
+    const totalWorkingDays = fullDays + (halfDays * 0.5) + paidLeaves + sundaysAndHolidays;
     const totalDays = daysInMonth.length;
     const average = totalDays > sundaysAndHolidays ? (totalWorkingDays / (totalDays - sundaysAndHolidays)).toFixed(2) : 0;
     const sundays = daysInMonth.filter(d => d.date.getDay() === 0).length;
@@ -522,10 +514,10 @@ function AttendanceDashboard() {
   }
 
   useEffect(() => {
-    if (summary && selectedMonth) {
-      saveAttendanceSummary(summary, selectedMonth);
+    if (calculateTotalDays && selectedMonth) {
+      saveAttendanceSummary(calculateTotalDays, selectedMonth);
     }
-  }, [summary, selectedMonth]);
+  }, [calculateTotalDays, selectedMonth]);
 
   function getTodayLog() {
     const todayStr = new Date().toISOString().slice(0, 10);
@@ -577,7 +569,7 @@ function AttendanceDashboard() {
 
   function handleLunchInClick(lunchInTime) {
     const status = lunchInStatus(lunchInTime);
-    alert(status.text);
+    setLunchMessage(status.text);
   }
 
   function buildTooltip(iso) {
@@ -598,7 +590,7 @@ function AttendanceDashboard() {
       tooltip += 'Absent\nReason: No attendance log';
       return tooltip;
     }
-    
+
     tooltip += `Classification: ${cls?.bucket}\n`;
     tooltip += `Reason: ${cls?.reason}\n`;
     tooltip += `Worked: ${cls?.netHHMM || '00:00'}\n`;
@@ -614,14 +606,14 @@ function AttendanceDashboard() {
     <div style={styles.page}>
       <h2 style={styles.header}>📅 Attendance Calendar</h2>
       <div style={styles.summaryContainer}>
-        <div style={styles.summaryItem}><strong>Total Days:</strong> {summary.totalDays}</div>
-        <div style={styles.summaryItem}><strong>Sundays:</strong> {summary.sundays}</div>
-        <div style={styles.summaryItem}><strong>Full Days:</strong> {summary.fullDays}</div>
-        <div style={styles.summaryItem}><strong>Half Days:</strong> {summary.halfDays}</div>
-        <div style={styles.summaryItem}><strong>Paid Leaves & Holidays:</strong> {summary.paidLeaves + summary.paidHolidays}</div>
-        <div style={styles.summaryItem}><strong>Absent Days:</strong> {summary.absentDays}</div>
-        <div style={styles.summaryItem}><strong>Work Days (Total):</strong> {summary.totalWorkingDays.toFixed(1)}</div>
-        <div style={styles.summaryItem}><strong>Avg. Per Day:</strong> {summary.average}</div>
+        <div style={styles.summaryItem}><strong>Total Days:</strong> {calculateTotalDays.totalDays}</div>
+        <div style={styles.summaryItem}><strong>Sundays:</strong> {calculateTotalDays.sundays}</div>
+        <div style={styles.summaryItem}><strong>Full Days:</strong> {calculateTotalDays.fullDays}</div>
+        <div style={styles.summaryItem}><strong>Half Days:</strong> {calculateTotalDays.halfDays}</div>
+        <div style={styles.summaryItem}><strong>Paid Leaves & Holidays:</strong> {calculateTotalDays.paidLeaves + calculateTotalDays.paidHolidays}</div>
+        <div style={styles.summaryItem}><strong>Absent Days:</strong> {calculateTotalDays.absentDays}</div>
+        <div style={styles.summaryItem}><strong>Work Days (Total):</strong> {calculateTotalDays.totalWorkingDays}</div>
+        <div style={styles.summaryItem}><strong>Avg. Per Day:</strong> {calculateTotalDays.average}</div>
       </div>
       <div style={styles.actionSection}>
         <div style={styles.premiumButtonGrid}>
@@ -640,11 +632,11 @@ function AttendanceDashboard() {
               {action.replace('_', ' ').toUpperCase()}
             </button>
           ))}
-            <div style={styles.lateInfoPill}>
-          <span role="img" aria-label="clock">⏰</span> <strong>Late Logins:</strong> {monthlyLateStats.permittedLateCount} / {monthlyLateStats.maxPermitted} (Remaining {monthlyLateStats.remaining})
+          <div style={styles.lateInfoPill}>
+            <span role="img" aria-label="clock">⏰</span> <strong>Late Logins:</strong> {monthlyLateStats.permittedLateCount} / {monthlyLateStats.maxPermitted} (Remaining {monthlyLateStats.remaining})
+          </div>
         </div>
-        </div>
-      
+
       </div>
       <div style={styles.filterRow}>
         <label htmlFor="select-month" style={styles.filterLabel}>Select Month:</label>
@@ -691,6 +683,9 @@ function AttendanceDashboard() {
         <div style={styles.legendItem}>
           <span style={{ ...styles.legendColor, backgroundColor: '#ce93d8' }} /> Paid Leave
         </div>
+        <div style={styles.legendItem}>
+          <span style={{ ...styles.legendColor, background: 'linear-gradient(to right, #ffe082, #ce93d8)' }} /> Half day &amp; Paid leave Day
+        </div>
       </div>
       <h3 style={styles.historyHeader}>🗂️ Attendance History</h3>
       <div style={styles.historyFilterContainer}>
@@ -708,7 +703,7 @@ function AttendanceDashboard() {
           onClick={() => {
             setFromDate('');
             setToDate('');
-            setFilteredLogs(logs.slice(-5));
+            setFilteredLogs(logs.slice(-10));
           }}
         >
           Reset
@@ -803,6 +798,7 @@ function AttendanceDashboard() {
           </button>
         ))}
       </div>
+      {lunchMessage && <p style={styles.message}>{lunchMessage}</p>}
       <p style={styles.message}>{message}</p>
     </div>
   );
@@ -913,63 +909,68 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: '10px',
     marginBottom: '1rem',
   },
   filterLabel: {
+    fontSize: '1rem',
+    marginRight: '8px',
     fontWeight: '500',
     color: '#555',
   },
   monthInput: {
     padding: '8px',
-    borderRadius: '6px',
+    borderRadius: '8px',
     border: '1px solid #ccc',
-    fontSize: '0.9rem',
-    '@media (min-width: 768px)': {
-      fontSize: '1rem',
-    }
+    fontSize: '1rem',
+    cursor: 'pointer',
   },
   calendarGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(7, 1fr)',
-    gap: '6px',
+    gap: '5px',
     backgroundColor: '#ffffff',
-    padding: '0.5rem',
+    padding: '1rem',
     borderRadius: '12px',
     boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
-    '@media (min-width: 768px)': {
-      gap: '8px',
-      padding: '1rem',
-    }
   },
   weekdayHeader: {
-    textAlign: 'center',
     fontWeight: 'bold',
-    padding: '8px 0',
-    color: '#555',
+    textAlign: 'center',
+    padding: '10px 0',
+    color: '#333',
+    backgroundColor: '#e9e9e9',
+    borderRadius: '4px',
     fontSize: '0.8rem',
     '@media (min-width: 768px)': {
       fontSize: '1rem',
-      padding: '10px 0',
     }
   },
-   dayCell: {
+  dayCell: {
+    height: 'auto',
+    width: '100%',
+    paddingTop: '35%',
+    paddingBottom: '5%',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: '6px',
-    fontWeight: '500',
-    fontSize: '0.8rem',
-    border: '1px solid #e9ecef',
-    transition: 'background-color 0.2s',
-    minHeight: '40px', // Adjusted height
-    padding: '4px', // Reduced padding
+    fontWeight: '600',
+    borderRadius: '8px',
+    boxShadow: 'inset 0 0 5px rgba(0,0,0,0.05)',
+    transition: 'transform 0.2s',
+    fontSize: '0.9rem',
+    userSelect: 'none',
+    border: '1px solid #f0f0f0',
+    color: '#555',
+    position: 'relative',
     '@media (min-width: 768px)': {
-      fontSize: '1rem',
-      borderRadius: '8px',
-      minHeight: '50px',
-      padding: '6px',
-    }
+      fontSize: '1.2rem',
+    },
+  },
+  dayCellDate: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: 'translate(-50%, -50%)',
   },
   legend: {
     display: 'flex',
@@ -977,61 +978,39 @@ const styles = {
     justifyContent: 'center',
     gap: '10px',
     marginTop: '1rem',
-    fontSize: '0.8rem',
-    padding: '10px',
-    background: '#f8f9fa',
-    borderRadius: '10px',
-    '@media (min-width: 768px)': {
-      gap: '20px',
-      marginTop: '1.5rem',
-      fontSize: '0.9rem',
-      padding: '15px',
-    }
+    fontSize: '0.9rem',
   },
   legendItem: {
     display: 'flex',
     alignItems: 'center',
+    gap: '5px',
+    fontWeight: '500',
+    color: '#555',
   },
   legendColor: {
-    width: '16px',
-    height: '16px',
+    width: '18px',
+    height: '18px',
     borderRadius: '4px',
-    marginRight: '6px',
-    border: '1px solid #ddd',
-    '@media (min-width: 768px)': {
-      width: '18px',
-      height: '18px',
-      marginRight: '8px',
-    }
+    border: '1px solid #ccc',
   },
   historyHeader: {
+    textAlign: 'center',
+    fontSize: '1.5rem',
+    color: '#2c3e50',
     marginTop: '2rem',
     marginBottom: '1rem',
-    textAlign: 'center',
-    fontSize: '1.2rem',
-    color: '#2c3e50',
-    '@media (min-width: 768px)': {
-      marginTop: '2.5rem',
-      marginBottom: '1.5rem',
-      fontSize: '1.5rem',
-    }
   },
   historyFilterContainer: {
     display: 'flex',
     flexWrap: 'wrap',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: '10px',
+    gap: '15px',
+    marginBottom: '1.5rem',
     padding: '1rem',
-    backgroundColor: '#eaf3f9',
+    backgroundColor: '#ffffff',
     borderRadius: '12px',
-    boxShadow: '0 2px 10px rgba(0, 16, 40, 0.05)',
-    marginBottom: '1rem',
-    '@media (min-width: 768px)': {
-      gap: '15px',
-      padding: '1.5rem',
-      marginBottom: '1.5rem',
-    }
+    boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
   },
   historyFilterGroup: {
     display: 'flex',
@@ -1039,180 +1018,115 @@ const styles = {
     gap: '8px',
   },
   dateInput: {
-    padding: '6px',
-    borderRadius: '6px',
+    padding: '8px',
+    borderRadius: '8px',
     border: '1px solid #ccc',
-    fontSize: '0.9rem',
-    '@media (min-width: 768px)': {
-      padding: '8px',
-      fontSize: '1rem',
-    }
+    fontSize: '1rem',
   },
   filterButton: {
-    padding: '8px 16px',
+    padding: '10px 15px',
+    fontSize: '1rem',
+    fontWeight: '600',
     borderRadius: '8px',
-    border: 'none',
+    border: '1px solid #007bff',
     backgroundColor: '#007bff',
     color: '#fff',
-    fontSize: '0.9rem',
     cursor: 'pointer',
-    transition: 'background-color 0.2s',
-    '@media (min-width: 768px)': {
-      padding: '10px 20px',
-      fontSize: '1rem',
-    }
+    transition: 'background-color 0.2s, color 0.2s',
+    ':hover': {
+      backgroundColor: '#0056b3',
+    },
   },
   tableContainer: {
     overflowX: 'auto',
-    overflowY: 'auto',
-    maxHeight: '300px',
-    borderRadius: '14px',
-    boxShadow: '0 3px 16px rgba(80,100,130,0.07)',
-    backgroundColor: '#fff',
-    marginBottom: '1.5rem',
+    overflowY: 'scroll', // Make the table scrollable
+    maxHeight: '400px', // Set a fixed height for scrolling (adjust as needed)
+    marginBottom: '1rem',
+    borderRadius: '12px',
+    boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
   },
   attendanceTable: {
     width: '100%',
     borderCollapse: 'collapse',
     textAlign: 'center',
     fontSize: '0.8rem',
-    '@media (min-width: 768px)': {
-      fontSize: '0.9rem',
-    }
+    backgroundColor: '#fff',
+    overflow: 'hidden',
   },
   tableHeader: {
-    padding: '10px 5px',
-    backgroundColor: '#f1f4f8',
-    borderBottom: '2px solid #e9ecef',
+    padding: '12px 8px',
+    backgroundColor: '#eef2f7',
+    color: '#555',
     fontWeight: '600',
-    color: '#444',
-    whiteSpace: 'nowrap',
-    '@media (min-width: 768px)': {
-      padding: '12px 8px',
-    }
+    borderBottom: '2px solid #ddd',
+    textTransform: 'uppercase',
+    position: 'sticky',
+    top: 0,
+    zIndex: 1,
   },
   cellDate: {
-    padding: '10px 5px',
-    whiteSpace: 'nowrap',
+    padding: '12px 8px',
     fontWeight: '600',
     color: '#333',
-    '@media (min-width: 768px)': {
-      padding: '12px 8px',
-    }
+    whiteSpace: 'nowrap',
   },
   cellMono: {
-    fontFamily: 'SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-    padding: '10px 5px',
+    padding: '12px 8px',
+    fontFamily: 'monospace',
+    color: '#666',
     whiteSpace: 'nowrap',
-    color: '#555',
-    '@media (min-width: 768px)': {
-      padding: '12px 8px',
-    }
-  },
-  workedPill: {
-    display: 'inline-block',
-    padding: '4px 8px',
-    borderRadius: '20px',
-    fontWeight: 'bold',
-    fontSize: '0.7rem',
-    minWidth: '50px',
-    '@media (min-width: 768px)': {
-      padding: '4px 10px',
-      fontSize: '0.8rem',
-      minWidth: '60px',
-    }
   },
   remarksCell: {
-    fontSize: '0.7rem',
-    fontStyle: 'italic',
-    padding: '10px 5px',
+    padding: '12px 8px',
     textAlign: 'left',
-    userSelect: 'text',
+    fontSize: '0.8rem',
     color: '#777',
     whiteSpace: 'nowrap',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
-    maxWidth: '120px',
-    '@media (min-width: 768px)': {
-      fontSize: '0.8rem',
-      padding: '12px 8px',
-      maxWidth: '180px',
-    }
+    maxWidth: '200px',
+  },
+  workedPill: {
+    display: 'inline-block',
+    padding: '4px 8px',
+    borderRadius: '15px',
+    fontWeight: 'bold',
+    color: '#333',
+    fontSize: '0.8em',
   },
   noLogsMessage: {
     textAlign: 'center',
-    marginTop: '15px',
     color: '#888',
-    fontStyle: 'italic',
-    fontWeight: '500',
+    fontSize: '1rem',
+    marginTop: '2rem',
   },
   buttonGrid: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: '8px',
-    marginTop: '15px',
-    '@media (min-width: 768px)': {
-      gap: '10px',
-      marginTop: '20px',
-    }
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
+    gap: '10px',
+    marginTop: '1.5rem',
   },
   button: {
-    padding: '10px 15px',
+    padding: '12px 8px',
+    fontSize: '0.8rem',
+    fontWeight: 'bold',
     borderRadius: '8px',
     border: 'none',
-    backgroundColor: '#17a2b8',
     color: '#fff',
-    fontSize: '0.9rem',
+    backgroundColor: '#4a90e2',
     cursor: 'pointer',
     transition: 'background-color 0.2s',
-    '@media (min-width: 768px)': {
-      padding: '12px 20px',
-      fontSize: '1rem',
-    }
+    ':hover': {
+      backgroundColor: '#3a72b8',
+    },
+    whiteSpace: 'nowrap',
   },
   message: {
     textAlign: 'center',
-    marginTop: '15px',
-    fontSize: '0.9rem',
+    marginTop: '1rem',
     fontWeight: 'bold',
-    '@media (min-width: 768px)': {
-      fontSize: '1rem',
-    }
+    fontSize: '1rem',
   },
 };
-
-// CSS-in-JS for media queries
-const styleSheet = document.createElement('style');
-styleSheet.innerText = `
-@media (min-width: 768px) {
-  .page { padding: 2rem; }
-  .header { font-size: 2rem; }
-  .summary-container { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; padding: 1.5rem; margin-bottom: 1.5rem; }
-  .summary-item { font-size: 1rem; padding: 10px; }
-  .action-section { flex-direction: row; justify-content: space-between; gap: 20px; margin-bottom: 1.5rem; }
-  .premium-button { padding: 12px 20px; font-size: 1rem; }
-  .late-info-pill { padding: 12px 18px; font-size: 1rem; }
-  .calendar-grid { gap: 8px; padding: 1rem; }
-  .weekday-header { font-size: 1rem; padding: 10px 0; }
-  .day-cell { font-size: 1rem; border-radius: 8px; min-height: 40px; }
-  .legend { gap: 20px; margin-top: 1.5rem; font-size: 0.9rem; padding: 15px; }
-  .legend-color { width: 18px; height: 18px; margin-right: 8px; }
-  .history-header { margin-top: 2.5rem; margin-bottom: 1.5rem; font-size: 1.5rem; }
-  .history-filter-container { gap: 15px; padding: 1.5rem; margin-bottom: 1.5rem; }
-  .date-input { padding: 8px; font-size: 1rem; }
-  .filter-button { padding: 10px 20px; font-size: 1rem; }
-  .attendance-table { font-size: 0.9rem; }
-  .table-header { padding: 12px 8px; }
-  .cell-date { padding: 12px 8px; }
-  .cell-mono { padding: 12px 8px; }
-  .worked-pill { padding: 4px 10px; font-size: 0.8rem; min-width: 60px; }
-  .remarks-cell { font-size: 0.8rem; padding: 12px 8px; max-width: 180px; }
-  .button { padding: 12px 20px; font-size: 1rem; }
-  .message { font-size: 1rem; }
-}
-`;
-document.head.appendChild(styleSheet);
-
 
 export default AttendanceDashboard;
