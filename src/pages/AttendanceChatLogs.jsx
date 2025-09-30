@@ -1,0 +1,498 @@
+import React, { useEffect, useState } from "react";
+import axios from "axios";
+
+const baseUrl =
+  window.location.hostname === "localhost"
+    ? "http://localhost:5000"
+    : "https://backend.vjcoverseas.com";
+
+export default function AttendanceChatLogs() {
+  const [attendanceData, setAttendanceData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [expandedUserEmail, setExpandedUserEmail] = useState(null);
+  const [showCards, setShowCards] = useState(true); 
+
+  const fetchAttendanceLogs = async () => {
+    setLoading(true);
+    setError("");
+    const today = new Date().toISOString().slice(0, 10);
+    const month = today.slice(0, 7);
+    try {
+      const res = await axios.get(`${baseUrl}/all-attendance?month=${month}`, {
+        withCredentials: true,
+      });
+      const usersObj = res.data || {};
+      const usersArray = Object.entries(usersObj).map(([email, user]) => ({
+        email,
+        ...user,
+      }));
+      setAttendanceData(usersArray);
+    } catch (error) {
+      setError("Failed to fetch attendance logs");
+      setAttendanceData([]);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchAttendanceLogs();
+  }, []);
+
+  const todayDate = new Date();
+  const todayStr = todayDate.toISOString().slice(0, 10);
+  const formattedToday = todayDate.toLocaleDateString('en-US', {
+    weekday: 'long', 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric' 
+  });
+
+  const formatTime = (t) => (t ? t.slice(0, 5) : "-");
+
+  const userLogs = attendanceData
+    .map((user) => {
+      const todayAttendance =
+        (user.attendance || []).find((a) => a.date === todayStr) || {};
+      return { ...user, todayAttendance };
+    })
+    .sort((a, b) => {
+      if (a.todayAttendance.office_in && !b.todayAttendance.office_in) return -1;
+      if (!a.todayAttendance.office_in && b.todayAttendance.office_in) return 1;
+      const nameA = a.name || a.email;
+      const nameB = b.name || b.email;
+      return nameA.localeCompare(nameB);
+    });
+
+  const totalUsers = userLogs.length;
+  const presentUsers = userLogs.filter((u) => u.todayAttendance.office_in).length;
+  const absentUsers = totalUsers - presentUsers;
+
+  // --- Expanded Log Section Component (Modal) ---
+  const ExpandedLogSection = ({ user }) => (
+    <div style={premiumStyles.expandedModalBackdrop}>
+      <div style={premiumStyles.expandedModalContent}>
+        <div style={premiumStyles.modalHeader}>
+          <h2>
+            Monthly Attendance Log for <span style={{color: premiumStyles.viewLogButton.backgroundColor}}>{user.name || user.email}</span>
+          </h2>
+          <button
+            style={premiumStyles.modalCloseButton}
+            onClick={() => setExpandedUserEmail(null)}
+          >
+            &times;
+          </button>
+        </div>
+        
+        <div style={premiumStyles.tableWrapper}> 
+          <table style={premiumStyles.table}>
+            <thead>
+              <tr style={premiumStyles.tableHeaderRow}>
+                <th style={premiumStyles.tableTh}>Date</th>
+                <th style={premiumStyles.tableTh}>In</th>
+                <th style={premiumStyles.tableTh}>B. Out 1</th>
+                <th style={premiumStyles.tableTh}>B. In 1</th>
+                <th style={premiumStyles.tableTh}>L. Out</th>
+                <th style={premiumStyles.tableTh}>L. In</th>
+                <th style={premiumStyles.tableTh}>B. Out 2</th>
+                <th style={premiumStyles.tableTh}>B. In 2</th>
+                <th style={premiumStyles.tableTh}>Out</th>
+                <th style={premiumStyles.tableTh}>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {user.attendance.map((log) => (
+                <tr
+                  key={log.date}
+                  style={{
+                    ...premiumStyles.tableBodyRow,
+                    ...(log.date === todayStr ? premiumStyles.highlightRow : {}),
+                  }}
+                >
+                  <td style={premiumStyles.tableTd}>{log.date}</td>
+                  <td style={premiumStyles.tableTd}>{formatTime(log.office_in)}</td>
+                  <td style={premiumStyles.tableTd}>{formatTime(log.break_out)}</td>
+                  <td style={premiumStyles.tableTd}>{formatTime(log.break_in)}</td>
+                  <td style={premiumStyles.tableTd}>{formatTime(log.lunch_out)}</td>
+                  <td style={premiumStyles.tableTd}>{formatTime(log.lunch_in)}</td>
+                  <td style={premiumStyles.tableTd}>{formatTime(log.break_out_2)}</td>
+                  <td style={premiumStyles.tableTd}>{formatTime(log.break_in_2)}</td>
+                  <td style={premiumStyles.tableTd}>{formatTime(log.office_out)}</td>
+                  <td style={{ ...premiumStyles.tableTd, ...premiumStyles.notesCell }}>
+                    {log.paid_leave_reason || log.reason || "-"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+  // --- End Expanded Log Section Component ---
+
+  const expandedUser = userLogs.find(u => u.email === expandedUserEmail);
+
+  return (
+    <div style={premiumStyles.container}>
+      {/* Premium Summary Bar with Current Date (Professional Formatting) */}
+      <div style={premiumStyles.summaryBar}>
+        {/* Current Date Display */}
+        <div style={premiumStyles.dateDisplay}>
+            <span style={{ fontSize: '1.2rem', marginRight: 10 }}>📅</span>
+            <strong>{formattedToday}</strong> 
+        </div>
+
+        {/* Attendance Summary Stats */}
+        <div style={premiumStyles.statsGroup}>
+            <div style={premiumStyles.summaryItem}>
+              {/* Refined label style */}
+              <span style={premiumStyles.statLabel}>Total Employees:</span> 
+              <span style={premiumStyles.statValue}>{totalUsers}</span>
+            </div>
+            <div style={{ ...premiumStyles.summaryItem, color: "#10b981" }}>
+              {/* Refined label style */}
+              <span style={premiumStyles.statLabel}>Present Today:</span> 
+              <span style={premiumStyles.statValue}>{presentUsers}</span>
+            </div>
+            <div style={{ ...premiumStyles.summaryItem, color: "#ef4444" }}>
+              {/* Refined label style */}
+              <span style={premiumStyles.statLabel}>Absent Today:</span> 
+              <span style={premiumStyles.statValue}>{absentUsers}</span>
+            </div>
+        </div>
+        
+        {/* Toggle Button for Cards */}
+        <button
+          style={premiumStyles.showUsersButton}
+          onClick={() => setShowCards(!showCards)}
+        >
+          {showCards ? "Hide User Cards" : "Show User Cards"}
+        </button>
+      </div>
+
+      {error && <div style={premiumStyles.error}>{error}</div>}
+
+      {loading ? (
+        <div style={premiumStyles.loading}>Loading attendance records...</div>
+      ) : (
+        showCards && (
+          <div style={premiumStyles.cardsContainer}>
+            {userLogs.map((user) => {
+              const isPresent = user.todayAttendance.office_in;
+              return (
+                <div
+                  key={user.email}
+                  style={{
+                    ...premiumStyles.card,
+                    borderLeft: isPresent
+                      ? "5px solid #10b981"
+                      : "5px solid #ef4444",
+                  }}
+                >
+                  <div style={premiumStyles.cardContent}>
+                    <div>
+                      <span style={premiumStyles.cardName}>
+                        {user.name || "Unknown Employee"}
+                      </span>
+                      <div style={premiumStyles.cardEmail}>{user.email}</div>
+                    </div>
+                    <button
+                      style={premiumStyles.viewLogButton}
+                      onClick={() => setExpandedUserEmail(user.email)}
+                    >
+                      View Logs
+                    </button>
+                  </div>
+
+                  <div style={premiumStyles.todayAttendance}>
+                    <div
+                      style={{
+                        color: isPresent ? "#10b981" : "#ef4444",
+                        fontWeight: 700,
+                        marginBottom: 8,
+                      }}
+                    >
+                      {isPresent ? "🟢 Present Today" : "🔴 Absent Today"}
+                    </div>
+                    {isPresent ? (
+                      <div style={premiumStyles.logLine}>
+                        <span style={premiumStyles.logLabel}>Login:</span>
+                        <span style={premiumStyles.logTime}>
+                          {formatTime(user.todayAttendance.office_in)}
+                        </span>
+                      </div>
+                    ) : (
+                      <div style={premiumStyles.logLine}>
+                        <span style={premiumStyles.logLabel}>Status:</span>
+                        <span style={premiumStyles.logTime}>
+                          {user.todayAttendance.paid_leave_reason || user.todayAttendance.reason || "Not Logged In"}
+                        </span>
+                      </div>
+                    )}
+                    {user.todayAttendance.office_out && (
+                      <div style={premiumStyles.logLine}>
+                        <span style={premiumStyles.logLabel}>Logout:</span>
+                        <span style={premiumStyles.logTime}>
+                          {formatTime(user.todayAttendance.office_out)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )
+      )}
+
+      {/* Render the modal log view if a user is expanded */}
+      {expandedUser && <ExpandedLogSection user={expandedUser} />}
+    </div>
+  );
+}
+const premiumStyles = {
+  container: {
+    width: "100%",
+    fontFamily: "'Inter', sans-serif",
+    minHeight: 'auto',
+    height: 'auto',
+    backgroundColor: '#f7fafc',
+    padding: '30px 20px',
+  },
+  summaryBar: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "18px 25px",
+    backgroundColor: "#1e40af",  // stylish deep blue
+    borderRadius: 12,
+    color: "#f9fafb",  // light text on dark bg
+    marginBottom: 30,
+    boxShadow: "0 4px 20px rgb(30 64 175 / 0.3)", // subtle glowing shadow
+    flexWrap: "wrap",
+    border: 'none',
+    boxSizing: 'border-box',
+    fontSize: '1.1rem',
+    fontWeight: '700',
+    letterSpacing: '0.04em',
+  },
+  dateDisplay: {
+    display: 'flex',
+    alignItems: 'center',
+    fontWeight: 600,
+    color: "#e0e7ff", // gentle lavender tint
+    paddingRight: 30,
+    marginRight: 20,
+    borderRight: '2px solid #3b82f6',  // vibrant blue separator
+    letterSpacing: '0.05em',
+  },
+  statsGroup: {
+    display: 'flex',
+    gap: 60,
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    paddingLeft: 20,
+    flexGrow: 1,
+  },
+  summaryItem: {
+    display: 'flex',
+    gap: 10,
+    alignItems: 'baseline',
+  },
+  statLabel: {
+    fontSize: 17,
+    fontWeight: 600,
+    color: 'rgba(255, 255, 255, 0.8)',
+    whiteSpace: 'nowrap',
+  },
+  statValue: {
+    fontSize: 25,
+    fontWeight: 900,
+    color: '#fbbf24', // amber highlight
+    textShadow: '1px 1px 2px #444',
+  },
+  showUsersButton: {
+    backgroundColor: "#fbbf24",  // warm accent button
+    color: "#1e40af",
+    fontWeight: 700,
+    border: "none",
+    borderRadius: 8,
+    padding: "12px 28px",
+    fontSize: 15,
+    cursor: "pointer",
+    transition: 'background-color 0.3s ease',
+    boxShadow: "0 5px 10px rgb(251 191 36 / 0.4)",
+    userSelect: "none",
+  },
+  error: {
+    color: "#b22222",
+    backgroundColor: "#ffd4d4",
+    borderRadius: 6,
+    padding: 12,
+    marginBottom: 20,
+    fontWeight: 600,
+    textAlign: "center",
+    fontSize: 15,
+  },
+  loading: {
+    textAlign: "center",
+    fontWeight: "bold",
+    color: "#444",
+    padding: 50,
+    fontSize: 18,
+    fontStyle: "italic",
+  },
+  cardsContainer: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+    gap: 25,
+    justifyContent: "center",
+  },
+  card: {
+    backgroundColor: "#ffffff",
+    borderRadius: 14,
+    padding: 22,
+    boxShadow: "0 10px 30px rgb(0 0 0 / 0.1)",
+    boxSizing: "border-box",
+    transition: "transform 0.25s ease, box-shadow 0.25s ease",
+    cursor: "default",
+    "&:hover": {
+      transform: "translateY(-4px)",
+      boxShadow: "0 14px 38px rgb(0 0 0 / 0.2)",
+    },
+  },
+  cardContent: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 18,
+  },
+  cardName: {
+    fontWeight: 800,
+    fontSize: 20,
+    color: "#1e3a8a", // rich blue
+    userSelect: "text",
+  },
+  cardEmail: {
+    fontSize: 13,
+    fontStyle: "italic",
+    color: "#667085",
+    marginTop: 3,
+  },
+  viewLogButton: {
+    backgroundColor: "#2563eb",
+    color: "#fff",
+    border: "none",
+    borderRadius: 8,
+    padding: "10px 18px",
+    fontSize: 15,
+    fontWeight: 700,
+    cursor: "pointer",
+    boxShadow: "0 6px 12px rgb(37 99 235 / 0.4)",
+    transition: "background-color 0.3s ease",
+    userSelect: "none",
+  },
+  todayAttendance: {
+    fontSize: 14,
+    color: "#334155",
+    marginTop: 10,
+  },
+  absent: {
+    color: "#f50808ff",
+    fontWeight: 700,
+    marginTop: 10,
+  },
+  expandedModalBackdrop: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(30, 64, 175, 0.85)',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1100,
+    padding: 20,
+  },
+  expandedModalContent: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    boxShadow: '0 20px 40px rgba(30,64,175,0.7)',
+    width: '95%',
+    maxWidth: '1200px',
+    maxHeight: '90vh',
+    overflowY: 'auto',
+    display: 'flex',
+    flexDirection: 'column',
+    position: 'relative',
+  },
+  modalHeader: {
+    padding: "20px 30px",
+    borderBottom: '2px solid #2563eb',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#dbeafe',
+    fontWeight: '700',
+    fontSize: 22,
+    color: "#1e40af",
+  },
+  modalCloseButton: {
+    background: '#ef4444',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '50%',
+    width: 36,
+    height: 36,
+    fontSize: 26,
+    cursor: 'pointer',
+    lineHeight: '28px',
+    padding: 0,
+    fontWeight: 'bold',
+  },
+  tableWrapper: {
+    overflowX: "auto",
+    padding: 15,
+    flexGrow: 1,
+  },
+  table: {
+    width: "100%",
+    minWidth: 1020,
+    borderCollapse: "collapse",
+  },
+  tableTh: {
+    padding: 12,
+    textAlign: "center",
+    backgroundColor: "#2563eb",
+    color: "#ffffff",
+    fontWeight: 700,
+    position: 'sticky',
+    top: 0,
+    zIndex: 100,
+    borderRight: '1px solid rgba(255, 255, 255, 0.15)',
+    borderBottom: '2px solid #1e3a8a',
+  },
+  tableTd: {
+    padding: 10,
+    textAlign: "center",
+    borderRight: "1px solid #f3f4f6",
+    borderBottom: "1px solid #e0e7ff",
+    color: '#334155',
+    fontSize: 14,
+    lineHeight: 1.5,
+  },
+  highlightRow: {
+    backgroundColor: '#bfdbfe',
+    fontWeight: 'bold',
+    color: '#1e40af',
+  },
+  notesCell: {
+    whiteSpace: 'normal',
+    maxWidth: '220px',
+    textAlign: 'left',
+    color: '#475569',
+    fontSize: 13,
+  }
+};
