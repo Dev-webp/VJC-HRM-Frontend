@@ -302,7 +302,7 @@ function PayrollSlip() {
               userSelect: "none",
             }}
           >
-            VJC IMMIGRATION AND VISA CONSULTANT (P) Ltd. | VJC OVERSEAS
+            VJC IMMIGRATION AND VISA CONSULTANT (P) LTD.
           </div>
 
           {/* Payroll Month Header */}
