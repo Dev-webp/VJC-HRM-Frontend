@@ -4,9 +4,8 @@ import axios from "axios";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 
-// Dynamic baseUrl for local development or production backend
 const baseUrl = window.location.hostname === "localhost"
-  ? "http://localhost:5000"  // Change if your local backend runs on a different port
+  ? "http://localhost:5000"
   : "https://backend.vjcoverseas.com";
 
 function PayrollSlip() {
@@ -47,12 +46,11 @@ function PayrollSlip() {
   }, [month]);
 
   const getDaysInMonth = (monthStr) => {
-    if (!monthStr) return "-";
+    if (!monthStr) return 30; // fallback to 30 days
     const [year, m] = monthStr.split("-").map(Number);
     return new Date(year, m, 0).getDate();
   };
 
-  // Convert number to words (Indian Rupees). Limited for demo.
   const numberToWords = (num) => {
     if (!num) return "Zero Rupees";
     const a = [
@@ -126,9 +124,17 @@ function PayrollSlip() {
 
   let earnings = [];
   let deductions = [];
+  let payable = 0;
   if (slip) {
     const totalSalary = Number(slip.base_salary) || 0;
-    const payable = Number(slip.payable_salary) || 0;
+    const totalDaysInMonth = getDaysInMonth(month) || 30;
+
+    // Calculate per day salary and payable based on actual work days
+    const salaryPerDay = totalSalary / totalDaysInMonth;
+    const actualWorkDays = slip.work_days || slip.workDays || totalDaysInMonth;
+    payable = salaryPerDay * actualWorkDays;
+
+    // Earnings breakdown remains as is for display purpose
     const basic = Math.round(totalSalary * 0.6);
     const hra = Math.round(totalSalary * 0.1);
     const conveyance = Math.round(totalSalary * 0.1);
@@ -139,6 +145,7 @@ function PayrollSlip() {
       { desc: "Conveyance", amount: conveyance },
       { desc: "Work Allowance", amount: workAllowance },
     ];
+
     const leaveDeduction = totalSalary - payable;
     deductions = [
       { desc: "PF", amount: 0 },
@@ -147,7 +154,6 @@ function PayrollSlip() {
     ];
   }
 
-  // Office addresses based on location
   const officeAddresses = {
     bangalore: {
       title: "VJC Overseas-Bangalore",
@@ -175,12 +181,10 @@ function PayrollSlip() {
     },
   };
 
-  // determine location key for address (default bangalore)
   const loc = (profile?.location || slip?.location || "").toLowerCase();
   const locationKey = loc.includes("hyderab") ? "hyderabad" : "bangalore";
   const office = officeAddresses[locationKey];
 
-  // Format payroll month heading
   const payrollMonth = month
     ? new Date(month + "-01").toLocaleDateString(undefined, {
         month: "long",
@@ -188,10 +192,9 @@ function PayrollSlip() {
       })
     : "-";
 
-  // Download CSV function
   const downloadCSV = () => {
     if (!slip) return;
-    let csv = `Payroll Slip,${profile?.name || slip.employee_name}\nMonth,${slip.month}\nPayable Salary,${slip.payable_salary}\n\n`;
+    let csv = `Payroll Slip,${profile?.name || slip.employee_name}\nMonth,${slip.month}\nPayable Salary,${payable.toFixed(2)}\n\n`;
     csv += "Earnings,Amount\n";
     earnings.forEach((r) => {
       csv += `${r.desc},${r.amount}\n`;
@@ -218,7 +221,6 @@ function PayrollSlip() {
     window.URL.revokeObjectURL(url);
   };
 
-  // Download PDF function
   const downloadPDF = async () => {
     if (!slipRef.current) return;
     const canvas = await html2canvas(slipRef.current, { scale: 2, useCORS: true });
@@ -230,7 +232,6 @@ function PayrollSlip() {
     pdf.save(`Payslip_${profile?.name || slip.employee_name}.pdf`);
   };
 
-  // Download PNG function
   const downloadPNG = async () => {
     if (!slipRef.current) return;
     const canvas = await html2canvas(slipRef.current, { scale: 2, useCORS: true });
@@ -255,7 +256,6 @@ function PayrollSlip() {
     <div style={{ maxWidth: 820, margin: "2rem auto", fontFamily: "Segoe UI, Arial, sans-serif" }}>
       <h2 style={{ textAlign: "center", marginBottom: 8 }}>👤 Employee auto Payroll Slip</h2>
       <div style={{ margin: "20px 0" }}>
-        {/* Month selector below header */}
         <div
           style={{
             textAlign: "center",
@@ -289,7 +289,6 @@ function PayrollSlip() {
 
       {slip && (
         <div ref={slipRef} style={slipContainerStyle}>
-          {/* Company Name Heading */}
           <div
             style={{
               backgroundColor: "#FFB847",
@@ -305,7 +304,6 @@ function PayrollSlip() {
             VJC IMMIGRATION AND VISA CONSULTANT (P) LTD.
           </div>
 
-          {/* Payroll Month Header */}
           <div
             style={{
               color: "#131212",
@@ -320,7 +318,6 @@ function PayrollSlip() {
             Payroll Slip for {payrollMonth}
           </div>
 
-          {/* Employee Info Tables */}
           <div
             style={{
               display: "flex",
@@ -336,10 +333,7 @@ function PayrollSlip() {
               <tbody>
                 <InfoRow label="Id No" value={profile?.employeeId || slip.employee_id || "-"} />
                 <InfoRow label="Name" value={profile?.name || slip.employee_name || "-"} />
-                <InfoRow
-                  label="Bank A/c No"
-                  value={profile?.bankAccount || slip.bank_account || "-"}
-                />
+                <InfoRow label="Bank A/c No" value={profile?.bankAccount || slip.bank_account || "-"} />
                 <InfoRow label="IFSC Code" value={profile?.ifscCode || slip.ifsc_code || "-"} />
                 <InfoRow label="PAN No" value={profile?.panNo || slip.pan_no || "-"} />
                 <InfoRow label="Location" value={profile?.location || slip.location || "-"} />
@@ -358,7 +352,6 @@ function PayrollSlip() {
             </table>
           </div>
 
-          {/* Earnings & Deductions */}
           <div
             style={{
               display: "flex",
@@ -376,7 +369,6 @@ function PayrollSlip() {
             </div>
           </div>
 
-          {/* Net Pay Section */}
           <div
             style={{
               backgroundColor: "#ffb847",
@@ -395,7 +387,7 @@ function PayrollSlip() {
           >
             <div>
               Net Pay (Take-home): ₹{" "}
-              {(slip.payable_salary || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+              {payable.toLocaleString(undefined, { minimumFractionDigits: 2 })}
             </div>
             <div
               style={{
@@ -406,11 +398,10 @@ function PayrollSlip() {
                 textAlign: "right",
               }}
             >
-              In Words: {numberToWords(Number(slip.payable_salary))}
+              In Words: {numberToWords(payable)}
             </div>
           </div>
 
-          {/* Message Section */}
           <div
             style={{
               whiteSpace: "pre-line",
@@ -432,7 +423,6 @@ Important: Please call/mail us with your latest Mobile number and Email id to av
 Note: This is a computer-generated pay slip, no signature is required.`}
           </div>
 
-          {/* Office Address Block centered and nicely spaced */}
           <div
             style={{
               fontSize: 14,
@@ -458,7 +448,7 @@ Note: This is a computer-generated pay slip, no signature is required.`}
                 </React.Fragment>
               ))}
             </div>
-            {/* Contact details side by side */}
+
             <div
               style={{
                 marginTop: 16,
@@ -496,7 +486,6 @@ Note: This is a computer-generated pay slip, no signature is required.`}
   );
 }
 
-// Utility Components for display
 function InfoRow({ label, value }) {
   return (
     <tr>
@@ -572,7 +561,6 @@ function InfoTable({ data, emptyText = "No data", type }) {
   );
 }
 
-// Styles
 const slipContainerStyle = {
   background: "white",
   boxShadow: "0 0 18px rgb(0 0 0 / 0.12)",
