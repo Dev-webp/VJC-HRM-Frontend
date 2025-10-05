@@ -7,6 +7,17 @@ const baseUrl = window.location.hostname === 'localhost'
     ? 'http://localhost:5000' // Your local backend URL
     : 'https://backend.vjcoverseas.com'; // Production backend URL
 
+const clickSound = new Audio('/on-click.mp3');
+
+function playClickSound() {
+    try {
+        clickSound.currentTime = 0;
+        clickSound.play();
+    } catch (e) {
+        // Ignore playback errors such as user not interacted yet
+    }
+}    
+
 // --- Utility functions ---
 function parseTime(timeStr) {
     if (!timeStr) return null;
@@ -471,49 +482,48 @@ export default function AttendanceDashboard() {
         return logsByDate.get(todayStr) || {};
     }
 async function sendAction(actionParam) {
-    const todayLog = getTodayLog();
+        playClickSound();  // Play sound on every button click
+        const todayLog = getTodayLog();
 
-if (actionParam === 'extra_break_in' || actionParam === 'extra_break_out') {
-    if (!isActionAllowed(actionParam, todayLog)) {
-        setMessage('⛔ Action not permitted at current state.');
-        return;
-    }
-    try {
-        const d = new Date();
-        const pad = x => x.toString().padStart(2, "0");
-        const nowTime = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; // Local time, not UTC
-        const res = await axios.post(
-            `${baseUrl}/attendance`,
-            new URLSearchParams({ action: actionParam, time: nowTime }),
-            { withCredentials: true }
-        );
-        setMessage('✅ ' + res.data.message);
-        await fetchAttendance();
-    } catch (err) {
-        setMessage('❌ ' + (err.response?.data?.message || 'Something went wrong'));
-    }
-    return;
-}
+        if (actionParam === 'extra_break_in' || actionParam === 'extra_break_out') {
+            if (!isActionAllowed(actionParam, todayLog)) {
+                setMessage('⛔ Action not permitted at current state.');
+                return;
+            }
+            try {
+                const d = new Date();
+                const pad = x => x.toString().padStart(2, "0");
+                const nowTime = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; // Local time, not UTC
+                const res = await axios.post(
+                    `${baseUrl}/attendance`,
+                    new URLSearchParams({ action: actionParam, time: nowTime }),
+                    { withCredentials: true }
+                );
+                setMessage('✅ ' + res.data.message);
+                await fetchAttendance();
+            } catch (err) {
+                setMessage('❌ ' + (err.response?.data?.message || 'Something went wrong'));
+            }
+            return;
+        }
 
-    // Handle normal actions same way, fetch logs after success
-    if (!isActionAllowed(actionParam, todayLog)) {
-        setMessage('⛔ Action not permitted at current state.');
-        return;
+        if (!isActionAllowed(actionParam, todayLog)) {
+            setMessage('⛔ Action not permitted at current state.');
+            return;
+        }
+        try {
+            const res = await axios.post(
+                `${baseUrl}/attendance`,
+                new URLSearchParams({ action: actionParam }),
+                { withCredentials: true }
+            );
+            setMessage('✅ ' + res.data.message);
+            await fetchAttendance();
+        } catch (err) {
+            setMessage('❌ ' + (err.response?.data?.message || 'Something went wrong'));
+        }
     }
-    try {
-        const res = await axios.post(
-            `${baseUrl}/attendance`,
-            new URLSearchParams({ action: actionParam }),
-            { withCredentials: true }
-        );
-        setMessage('✅ ' + res.data.message);
 
-        // Fetch updated logs for normal actions too
-        await fetchAttendance();
-    } catch (err) {
-        setMessage('❌ ' + (err.response?.data?.message || 'Something went wrong'));
-    }
-}
 const filteredRows = useMemo(() => {
     const sorted = [...(filteredLogs || [])].sort((a, b) => a.date.localeCompare(b.date));
     return sorted.map(log => {
@@ -629,7 +639,7 @@ const extraBreakOuts = Array.isArray(log.extra_break_outs) ? log.extra_break_out
 
             <div className="action-section">
     {/* CONSOLIDATED premium-button-grid for all essential actions */}
-    <div className="premium-button-grid" style={{ gridTemplateColumns: 'repeat(4, auto)', gap: '10px' }}>
+    <div className="premium-button-grid" style={{ gridTemplateColumns: 'repeat(4, auto)', gap: '15px' }}>
         
         {/* OFFICE IN/OUT Buttons */}
         {['office_in', 'office_out'].map(action => (
@@ -647,7 +657,9 @@ const extraBreakOuts = Array.isArray(log.extra_break_outs) ? log.extra_break_out
                 {action.replace('_', ' ').toUpperCase()}
             </button>
         ))}
-
+          <div className="late-info-pill" title="Late logins info">
+        <span role="img" aria-label="clock">⏰</span> <strong>Late Logins:</strong> {monthlyLateStats.permittedLateCount} / {monthlyLateStats.maxPermitted} (Remaining {monthlyLateStats.remaining})
+    </div>
         {/* EXTRA BREAK IN Button */}
         <button
             className="premium-button"
@@ -678,9 +690,7 @@ const extraBreakOuts = Array.isArray(log.extra_break_outs) ? log.extra_break_out
     </div>
 
     {/* Late Info Pill (Kept separate for cleaner alignment) */}
-    <div className="late-info-pill" title="Late logins info">
-        <span role="img" aria-label="clock">⏰</span> <strong>Late Logins:</strong> {monthlyLateStats.permittedLateCount} / {monthlyLateStats.maxPermitted} (Remaining {monthlyLateStats.remaining})
-    </div>
+  
 </div>
 
            
