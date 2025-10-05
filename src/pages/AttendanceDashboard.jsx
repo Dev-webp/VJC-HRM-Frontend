@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
+import './AttendanceDashboard.css';
 
 // Base API URL logic
 const baseUrl = window.location.hostname === 'localhost'
@@ -31,7 +32,6 @@ function toIndianTime(isoTimeStr) {
             timeZone: 'Asia/Kolkata'
         });
     } catch (e) {
-        // console.error('Failed to convert time:', isoTimeStr, e);
         return isoTimeStr;
     }
 }
@@ -93,12 +93,10 @@ const HALF_SLOT_B_END = '19:00:00';
 const LUNCH_IN_LIMIT = '14:00:00';
 const LOGOUT_CUTOFF = '19:00:00';
 
-// --- Main classification policy ---
 function calculateNetWorkMillis(log) {
-    const { office_in, office_out, break_out, break_in, break_out_2, break_in_2, lunch_out, lunch_in } = log || {};
+    const { office_in, office_out, break_in, break_out, break_in_2, break_out_2, lunch_in, lunch_out, extra_break_ins = [], extra_break_outs = [] } = log || {};
     if (!office_in || !office_out) return 0;
 
-    // Adjust office_in time if earlier than 10:00
     let actualOfficeIn = office_in;
     const loginTime = parseTime(office_in);
     const officeStartTime = parseTime(OFFICE_START);
@@ -107,10 +105,19 @@ function calculateNetWorkMillis(log) {
     }
 
     const grossMillis = diffMillis(actualOfficeIn, office_out);
+
     let breaks = 0;
-    if (break_out && break_in) breaks += diffMillis(break_out, break_in);
-    if (break_out_2 && break_in_2) breaks += diffMillis(break_out_2, break_in_2);
-    if (lunch_out && lunch_in) breaks += diffMillis(lunch_out, lunch_in);
+    // Existing breaks sum
+    if (break_in && break_out) breaks += diffMillis(break_in, break_out);
+    if (break_in_2 && break_out_2) breaks += diffMillis(break_in_2, break_out_2);
+    if (lunch_in && lunch_out) breaks += diffMillis(lunch_in, lunch_out);
+
+    // Extra multiple breaks sum (pair by index)
+    for (let i = 0; i < Math.min(extra_break_ins.length, extra_break_outs.length); i++) {
+        if (extra_break_ins[i] && extra_break_outs[i]) {
+            breaks += diffMillis(extra_break_ins[i], extra_break_outs[i]);
+        }
+    }
 
     let net = grossMillis - breaks;
     return net < 0 ? 0 : net;
@@ -216,7 +223,6 @@ function classifyDayPolicy({ isoDate, weekday, log, holidaysMap, monthlyLateStat
     const logoutBefore = logoutTime && logoutCutoff && logoutTime < logoutCutoff;
     const logoutAfter = logoutTime && logoutCutoff && logoutTime >= logoutCutoff;
 
-    // New rule: after 7PM and between 4–8 hrs worked
     if (logoutAfter && netHours >= 4 && netHours < 8) {
         return { bucket: 'halfday', reason: 'Worked 4–8 hours and logged out at/after 7 PM (Half Day)', netHHMM, netHours, flags: ['logout_after7pm_halfday'] };
     }
@@ -272,9 +278,25 @@ function isActionAllowed(action, todayLog) {
     if (action === 'break_out_2') return todayLog?.office_in && todayLog.break_in_2 && !todayLog.break_out_2;
     if (action === 'lunch_in') return todayLog?.office_in && !todayLog.lunch_out && !todayLog.lunch_in;
     if (action === 'lunch_out') return todayLog?.office_in && todayLog.lunch_in && !todayLog.lunch_out;
+
+    // Additional actions for multiple extra breaks
+    if (action === 'extra_break_in') {
+        // Only allow if office_in exists and 
+        // either extra_break_ins not set or length <= extra_break_outs length (allow next break_in)
+        if (!todayLog?.office_in) return false;
+        const insLen = todayLog.extra_break_ins ? todayLog.extra_break_ins.length : 0;
+        const outsLen = todayLog.extra_break_outs ? todayLog.extra_break_outs.length : 0;
+        return insLen === outsLen;
+    }
+    if (action === 'extra_break_out') {
+        // Allow only if extra_break_outs length < extra_break_ins length
+        if (!todayLog?.office_in || !todayLog.extra_break_ins) return false;
+        const insLen = todayLog.extra_break_ins.length;
+        const outsLen = todayLog.extra_break_outs ? todayLog.extra_break_outs.length : 0;
+        return outsLen < insLen;
+    }
     return false;
 }
-
 
 // --- Attendance Dashboard Component ---
 export default function AttendanceDashboard() {
@@ -290,12 +312,12 @@ export default function AttendanceDashboard() {
     useEffect(() => {
         fetchAttendance();
         fetchHolidays();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedMonth]);
 
     useEffect(() => {
         applyDateFilter();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [logs, fromDate, toDate]);
 
     function fetchAttendance() {
@@ -340,15 +362,12 @@ export default function AttendanceDashboard() {
 
     function applyDateFilter() {
         if (!fromDate && !toDate) {
-            // Default behavior: show last 10 logs
             setFilteredLogs([...logs].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10));
             return;
         }
         let filtered = logs;
         if (fromDate) filtered = filtered.filter(log => dateStrGTE(log.date, fromDate));
         if (toDate) filtered = filtered.filter(log => dateStrLTE(log.date, toDate));
-        
-        // Sort the filtered logs by date (ascending)
         setFilteredLogs([...filtered].sort((a, b) => a.date.localeCompare(b.date)));
     }
 
@@ -369,7 +388,6 @@ export default function AttendanceDashboard() {
         return result;
     }, [daysInMonth, logsByDate, holidays, monthlyLateStats]);
 
-    // New function to handle half-day conversion
     const calculateTotalDays = useMemo(() => {
         let halfDays = 0;
         let fullDays = 0;
@@ -406,7 +424,6 @@ export default function AttendanceDashboard() {
             }
         }
 
-        // Convert two half days to one full day
         const extraFullDaysFromHalfs = Math.floor(halfDays / 2);
         const remainingHalfDays = halfDays % 2;
         fullDays += extraFullDaysFromHalfs;
@@ -439,7 +456,7 @@ export default function AttendanceDashboard() {
                 summary
             }, { withCredentials: true });
         } catch (error) {
-            // console.error("Failed to save attendance summary:", error);
+            // failed silently
         }
     }
 
@@ -453,50 +470,95 @@ export default function AttendanceDashboard() {
         const todayStr = new Date().toISOString().slice(0, 10);
         return logsByDate.get(todayStr) || {};
     }
+async function sendAction(actionParam) {
+    const todayLog = getTodayLog();
 
-    async function sendAction(actionParam) {
-        const todayLog = getTodayLog();
-        if (!isActionAllowed(actionParam, todayLog)) {
-            setMessage('⛔ Action not permitted at current state.');
-            return;
-        }
-        try {
-            const res = await axios.post(`${baseUrl}/attendance`, new URLSearchParams({ action: actionParam }), { withCredentials: true });
-            setMessage('✅ ' + res.data.message);
-            fetchAttendance();
-        } catch (err) {
-            setMessage('❌ ' + (err.response?.data?.message || 'Something went wrong'));
-        }
+if (actionParam === 'extra_break_in' || actionParam === 'extra_break_out') {
+    if (!isActionAllowed(actionParam, todayLog)) {
+        setMessage('⛔ Action not permitted at current state.');
+        return;
     }
+    try {
+        const d = new Date();
+        const pad = x => x.toString().padStart(2, "0");
+        const nowTime = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; // Local time, not UTC
+        const res = await axios.post(
+            `${baseUrl}/attendance`,
+            new URLSearchParams({ action: actionParam, time: nowTime }),
+            { withCredentials: true }
+        );
+        setMessage('✅ ' + res.data.message);
+        await fetchAttendance();
+    } catch (err) {
+        setMessage('❌ ' + (err.response?.data?.message || 'Something went wrong'));
+    }
+    return;
+}
 
-    const filteredRows = useMemo(() => {
-        const sorted = [...(filteredLogs || [])].sort((a, b) => a.date.localeCompare(b.date));
-        return sorted.map(log => {
-            const netMillis = calculateNetWorkMillis(log);
-            const netHrs = millisToDecimalHours(netMillis);
-            const netWorkedHrsMin = fmtHrsMinFromMillis(netMillis);
-            const iso = log.date;
-            const cls = dayClassifications.get(iso);
-            const remarks = cls?.reason || '';
+    // Handle normal actions same way, fetch logs after success
+    if (!isActionAllowed(actionParam, todayLog)) {
+        setMessage('⛔ Action not permitted at current state.');
+        return;
+    }
+    try {
+        const res = await axios.post(
+            `${baseUrl}/attendance`,
+            new URLSearchParams({ action: actionParam }),
+            { withCredentials: true }
+        );
+        setMessage('✅ ' + res.data.message);
 
-            return {
-                ...log,
-                netMillis,
-                netHrs,
-                netWorkedHrsMin,
-                office_in_disp: toIndianTime(log.office_in),
-                break_out_disp: toIndianTime(log.break_out),
-                break_in_disp: toIndianTime(log.break_in),
-                break_out_2_disp: toIndianTime(log.break_out_2),
-                break_in_2_disp: toIndianTime(log.break_in_2),
-                lunch_out_disp: toIndianTime(log.lunch_out),
-                lunch_in_disp: toIndianTime(log.lunch_in),
-                office_out_disp: toIndianTime(log.office_out),
-                remarks,
-            };
-        });
-    }, [filteredLogs, dayClassifications]);
+        // Fetch updated logs for normal actions too
+        await fetchAttendance();
+    } catch (err) {
+        setMessage('❌ ' + (err.response?.data?.message || 'Something went wrong'));
+    }
+}
+const filteredRows = useMemo(() => {
+    const sorted = [...(filteredLogs || [])].sort((a, b) => a.date.localeCompare(b.date));
+    return sorted.map(log => {
+        const netMillis = calculateNetWorkMillis(log);
+        const netHrs = millisToDecimalHours(netMillis);
+        const netWorkedHrsMin = fmtHrsMinFromMillis(netMillis);
+        const iso = log.date;
+        const cls = dayClassifications.get(iso);
+        const remarks = cls?.reason || '';
 
+        // Safe parser for array fields
+        const extraBreakIns = Array.isArray(log.extra_break_ins) ? log.extra_break_ins : [];
+const extraBreakOuts = Array.isArray(log.extra_break_outs) ? log.extra_break_outs : [];
+
+
+        const extraBreakInsDisplay = extraBreakIns.length > 0
+            ? extraBreakIns.map((t, i) => <div key={`in-${i}`}>{toIndianTime(t)}</div>)
+            : '';
+
+        const extraBreakOutsDisplay = extraBreakOuts.length > 0
+            ? extraBreakOuts.map((t, i) => <div key={`out-${i}`}>{toIndianTime(t)}</div>)
+            : '';
+
+        return {
+            ...log,
+            netMillis,
+            netHrs,
+            netWorkedHrsMin,
+            office_in_disp: toIndianTime(log.office_in),
+            break_out_disp: toIndianTime(log.break_out),
+            break_in_disp: toIndianTime(log.break_in),
+            break_out_2_disp: toIndianTime(log.break_out_2),
+            break_in_2_disp: toIndianTime(log.break_in_2),
+            lunch_out_disp: toIndianTime(log.lunch_out),
+            lunch_in_disp: toIndianTime(log.lunch_in),
+            office_out_disp: toIndianTime(log.office_out),
+            extraBreakInsDisplay,
+            extraBreakOutsDisplay,
+            remarks,
+        };
+    });
+}, [filteredLogs, dayClassifications]);
+
+
+    // eslint-disable-next-line no-unused-vars
     function handleLunchInClick(lunchInTime) {
         const status = lunchInStatus(lunchInTime);
         setLunchMessage(status.text);
@@ -528,135 +590,200 @@ export default function AttendanceDashboard() {
         tooltip += `Logout: ${toIndianTime(log.office_out) || '-'}\n`;
         if (log.break_in || log.break_out) tooltip += `Break 1: ${toIndianTime(log.break_in) || '-'} → ${toIndianTime(log.break_out) || '-'}\n`;
         if (log.break_in_2 || log.break_out_2) tooltip += `Break 2: ${toIndianTime(log.break_in_2) || '-'} → ${toIndianTime(log.break_out_2) || '-'}\n`;
+
+        // Show extra breaks in/out (multiple)
+        if (log.extra_break_ins && log.extra_break_outs) {
+            for (let i = 0; i < Math.min(log.extra_break_ins.length, log.extra_break_outs.length); i++) {
+                tooltip += `Extra Break ${i+1}: ${toIndianTime(log.extra_break_ins[i]) || '-'} → ${toIndianTime(log.extra_break_outs[i]) || '-'}\n`;
+            }
+        }
         if (log.lunch_in || log.lunch_out) tooltip += `Lunch: ${toIndianTime(log.lunch_in) || '-'} → ${toIndianTime(log.lunch_out) || '-'}\n`;
         return tooltip.trimEnd();
     }
 
-    return (
-        <div style={styles.page}>
-            <h2 style={styles.header}>📅 Attendance Calendar</h2>
-            <div style={styles.summaryContainer}>
-                <div style={styles.summaryItem}><strong>Total Days:</strong> {calculateTotalDays.totalDays}</div>
-                <div style={styles.summaryItem}><strong>Sundays:</strong> {calculateTotalDays.sundays}</div>
-                <div style={styles.summaryItem}><strong>Full Days:</strong> {calculateTotalDays.fullDays}</div>
-                <div style={styles.summaryItem}><strong>Half Days:</strong> {calculateTotalDays.halfDays}</div>
-                <div style={styles.summaryItem}><strong>Paid Leaves & Holidays:</strong> {calculateTotalDays.paidLeaves + calculateTotalDays.paidHolidays}</div>
-                <div style={styles.summaryItem}><strong>Absent Days:</strong> {calculateTotalDays.absentDays}</div>
-                <div style={styles.summaryItem}><strong>Work Days (Total):</strong> {calculateTotalDays.totalWorkingDays}</div>
-                <div style={styles.summaryItem}><strong>Avg. Per Day:</strong> {calculateTotalDays.average}</div>
-            </div>
-            <div style={styles.actionSection}>
-                <div style={styles.premiumButtonGrid}>
-                    {['office_in', 'office_out'].map(action => (
-                        <button
-                            key={action}
-                            style={{
-                                ...styles.premiumButton,
-                                opacity: isActionAllowed(action, getTodayLog()) ? 1 : 0.5,
-                                cursor: isActionAllowed(action, getTodayLog()) ? 'pointer' : 'not-allowed',
-                            }}
-                            onClick={() => sendAction(action)}
-                            disabled={!isActionAllowed(action, getTodayLog())}
-                            title={action.replace('_', ' ').toUpperCase()}
-                        >
-                            {action.replace('_', ' ').toUpperCase()}
-                        </button>
-                    ))}
-                    <div style={styles.lateInfoPill}>
-                        <span role="img" aria-label="clock">⏰</span> <strong>Late Logins:</strong> {monthlyLateStats.permittedLateCount} / {monthlyLateStats.maxPermitted} (Remaining {monthlyLateStats.remaining})
-                    </div>
-                </div>
+    function getBucketClass(bucket) {
+        switch (bucket) {
+            case 'fullday': return 'fullday';
+            case 'halfday': return 'halfday';
+            case 'absent': return 'absent';
+            case 'holiday': return 'holiday';
+            case 'paidleave': return 'paidleave';
+            case 'fullday_and_earned_leave': return 'fullday_and_earned_leave';
+            default: return '';
+        }
+    }
 
+    return (
+        <div className="page">
+            <h2 className="header">📅 Attendance Calendar</h2>
+            <div className="summary-container">
+                <div className="summary-item"><strong>Total Days:</strong> {calculateTotalDays.totalDays}</div>
+                <div className="summary-item"><strong>Sundays:</strong> {calculateTotalDays.sundays}</div>
+                <div className="summary-item"><strong>Full Days:</strong> {calculateTotalDays.fullDays}</div>
+                <div className="summary-item"><strong>Half Days:</strong> {calculateTotalDays.halfDays}</div>
+                <div className="summary-item"><strong>Paid Leaves & Holidays:</strong> {calculateTotalDays.paidLeaves + calculateTotalDays.paidHolidays}</div>
+                <div className="summary-item"><strong>Absent Days:</strong> {calculateTotalDays.absentDays}</div>
+                <div className="summary-item"><strong>Work Days (Total):</strong> {calculateTotalDays.totalWorkingDays}</div>
+                <div className="summary-item"><strong>Avg. Per Day:</strong> {calculateTotalDays.average}</div>
             </div>
-            <div style={styles.filterRow}>
-                <label htmlFor="select-month" style={styles.filterLabel}>Select Month:</label>
+
+            <div className="action-section">
+    {/* CONSOLIDATED premium-button-grid for all essential actions */}
+    <div className="premium-button-grid" style={{ gridTemplateColumns: 'repeat(4, auto)', gap: '10px' }}>
+        
+        {/* OFFICE IN/OUT Buttons */}
+        {['office_in', 'office_out'].map(action => (
+            <button
+                key={action}
+                className="premium-button"
+                style={{
+                    opacity: isActionAllowed(action, getTodayLog()) ? 1 : 0.5,
+                    cursor: isActionAllowed(action, getTodayLog()) ? 'pointer' : 'not-allowed',
+                }}
+                onClick={() => sendAction(action)}
+                disabled={!isActionAllowed(action, getTodayLog())}
+                title={action.replace('_', ' ').toUpperCase()}
+            >
+                {action.replace('_', ' ').toUpperCase()}
+            </button>
+        ))}
+
+        {/* EXTRA BREAK IN Button */}
+        <button
+            className="premium-button"
+            style={{
+                opacity: isActionAllowed('extra_break_in', getTodayLog()) ? 1 : 0.5,
+                cursor: isActionAllowed('extra_break_in', getTodayLog()) ? 'pointer' : 'not-allowed',
+            }}
+            onClick={() => sendAction('extra_break_in')}
+            disabled={!isActionAllowed('extra_break_in', getTodayLog())}
+            title="EXTRA BREAK IN"
+        >
+            BREAK IN 3
+        </button>
+
+        {/* EXTRA BREAK OUT Button */}
+        <button
+            className="premium-button"
+            style={{
+                opacity: isActionAllowed('extra_break_out', getTodayLog()) ? 1 : 0.5,
+                cursor: isActionAllowed('extra_break_out', getTodayLog()) ? 'pointer' : 'not-allowed',
+            }}
+            onClick={() => sendAction('extra_break_out')}
+            disabled={!isActionAllowed('extra_break_out', getTodayLog())}
+            title="EXTRA BREAK OUT"
+        >
+            BREAK OUT 3
+        </button>
+    </div>
+
+    {/* Late Info Pill (Kept separate for cleaner alignment) */}
+    <div className="late-info-pill" title="Late logins info">
+        <span role="img" aria-label="clock">⏰</span> <strong>Late Logins:</strong> {monthlyLateStats.permittedLateCount} / {monthlyLateStats.maxPermitted} (Remaining {monthlyLateStats.remaining})
+    </div>
+</div>
+
+           
+
+            <div className="filter-row">
+                <label htmlFor="select-month" className="filter-label">Select Month:</label>
                 <input
                     id="select-month"
                     type="month"
                     value={selectedMonth}
                     onChange={e => setSelectedMonth(e.target.value)}
-                    style={styles.monthInput}
+                    className="month-input"
                 />
             </div>
-            <div style={styles.calendarGrid}>
+
+            <div className="calendar-grid" aria-label="Attendance calendar grid">
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(dayName => (
-                    <div key={dayName} style={styles.weekdayHeader}>{dayName}</div>
+                    <div key={dayName} className="weekday-header">{dayName}</div>
                 ))}
                 {Array(daysInMonth[0].date.getDay()).fill(null).map((_, i) => (
-                    <div key={'blank-' + i} style={styles.dayCell} />
+                    <div key={'blank-' + i} className="day-cell" />
                 ))}
                 {daysInMonth.map(day => {
                     const iso = day.iso;
                     const cls = dayClassifications.get(iso);
-                    const style = getHoursCellStyle(cls?.bucket);
+                    const bucketClass = getBucketClass(cls?.bucket);
                     const tooltip = buildTooltip(iso);
                     return (
-                        <div key={iso} title={tooltip} style={{ ...styles.dayCell, ...style, cursor: 'default' }}>
-                            <div style={styles.dayCellDate}>{day.date.getDate()}</div>
+                        <div
+                            key={iso}
+                            className={`day-cell ${bucketClass}`}
+                            title={tooltip}
+                            style={{ cursor: 'default' }}
+                        >
+                            <div className="day-cell-date">{day.date.getDate()}</div>
                         </div>
                     );
                 })}
             </div>
-            <div style={styles.legend}>
-                <div style={styles.legendItem}>
-                    <span style={{ ...styles.legendColor, backgroundColor: '#90caf9' }} /> Sunday &amp; Holiday
+
+            <div className="legend" aria-label="Legend for attendance calendar colors">
+                <div className="legend-item">
+                    <span className="legend-color" style={{ backgroundColor: '#90caf9' }} /> Sunday &amp; Holiday
                 </div>
-                <div style={styles.legendItem}>
-                    <span style={{ ...styles.legendColor, backgroundColor: '#b9f6ca' }} /> Full Day
+                <div className="legend-item">
+                    <span className="legend-color" style={{ backgroundColor: '#b9f6ca' }} /> Full Day
                 </div>
-                <div style={styles.legendItem}>
-                    <span style={{ ...styles.legendColor, backgroundColor: '#ffe082' }} /> Half Day
+                <div className="legend-item">
+                    <span className="legend-color" style={{ backgroundColor: '#ffe082' }} /> Half Day
                 </div>
-                <div style={styles.legendItem}>
-                    <span style={{ ...styles.legendColor, backgroundColor: '#ffcdd2' }} /> Absent / &lt;4h Worked
+                <div className="legend-item">
+                    <span className="legend-color" style={{ backgroundColor: '#ffcdd2' }} /> Absent / &lt;4h Worked
                 </div>
-                <div style={styles.legendItem}>
-                    <span style={{ ...styles.legendColor, backgroundColor: '#ce93d8' }} /> Paid Leave
+                <div className="legend-item">
+                    <span className="legend-color" style={{ backgroundColor: '#ce93d8' }} /> Paid Leave
                 </div>
-                <div style={styles.legendItem}>
-                    <span style={{ ...styles.legendColor, background: 'linear-gradient(to right, #ffe082, #ce93d8)' }} /> Half day &amp; Paid leave Day
+                <div className="legend-item">
+                    <span className="legend-color" style={{ background: 'linear-gradient(to right, #ffe082, #ce93d8)' }} /> Half day &amp; Paid leave Day
                 </div>
             </div>
 
-            {/* --- Attendance History Section (The focus of the style enhancement) --- */}
-            <h3 style={styles.historyHeader}>🗂️ Attendance History</h3>
-            <div style={styles.historyFilterContainer}>
-                <div style={styles.historyFilterGroup}>
-                    <label style={styles.filterLabel}>From:</label>
-                    <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} style={styles.dateInput} />
+            <h3 className="history-header">🗂️ Attendance History</h3>
+            <div className="history-filter-container">
+                <div className="history-filter-group">
+                    <label className="filter-label">From:</label>
+                    <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="date-input" />
                 </div>
-                <div style={styles.historyFilterGroup}>
-                    <label style={styles.filterLabel}>To:</label>
-                    <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} style={styles.dateInput} />
+                <div className="history-filter-group">
+                    <label className="filter-label">To:</label>
+                    <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="date-input" />
                 </div>
-                <button style={styles.filterButton} onClick={applyDateFilter}>Apply Filter</button>
+                <button className="filter-button" onClick={applyDateFilter}>Apply Filter</button>
                 <button
-                    style={{ ...styles.filterButton, backgroundColor: '#b0bec5' }}
+                    className="filter-button"
+                    style={{ backgroundColor: '#b0bec5' }}
                     onClick={() => {
                         setFromDate('');
                         setToDate('');
-                        applyDateFilter(); // Re-apply default filter
+                        applyDateFilter();
                     }}
                 >
                     Reset
                 </button>
             </div>
-            {filteredRows.length > 0 ? (
-                <div style={styles.tableContainer}>
-                    <table style={styles.attendanceTable}>
+
+           {filteredRows.length > 0 ? (
+                <div className="table-container">
+                    <table className="attendance-table" aria-label="Attendance logs table">
                         <thead>
                             <tr>
-                                <th style={styles.tableHeader}>Date</th>
-                                <th style={styles.tableHeader}>Login</th>
-                                <th style={styles.tableHeader}>B.In</th>
-                                <th style={styles.tableHeader}>B.Out</th>
-                                <th style={styles.tableHeader}>L.In</th>
-                                <th style={styles.tableHeader}>L.Out</th>
-                                <th style={styles.tableHeader}>B2.In</th>
-                                <th style={styles.tableHeader}>B2.Out</th>
-                                <th style={styles.tableHeader}>Logout</th>
-                                <th style={styles.tableHeader}>Net</th>
-                                <th style={{ ...styles.tableHeader, textAlign: 'left' }}>Remarks</th>
+                                <th className="table-header">Date</th>
+                                <th className="table-header">Login</th>
+                                <th className="table-header">B.In</th>
+                                <th className="table-header">B.Out</th>
+                                <th className="table-header">L.In</th>
+                                <th className="table-header">L.Out</th>
+                                <th className="table-header">B2.In</th>
+                                <th className="table-header">B2.Out</th>
+                                <th className="table-header" style={{ textAlign: 'left' }}>Extra Break Ins</th>
+                                <th className="table-header" style={{ textAlign: 'left' }}>Extra Break Outs</th>
+                                <th className="table-header">Logout</th>
+                                <th className="table-header">Net</th>
+                                <th className="table-header" style={{ textAlign: 'left' }}>Remarks</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -664,8 +791,9 @@ export default function AttendanceDashboard() {
                                 const cls = dayClassifications.get(log.date);
                                 const rowStyle = {
                                     backgroundColor: index % 2 ? '#f7fbff' : '#fff',
-                                    borderBottom: '1px solid #eeeeee', // Neat row divider
+                                    borderBottom: '1px solid #eeeeee',
                                 };
+
                                 return (
                                     <tr
                                         key={log.date || index}
@@ -673,38 +801,34 @@ export default function AttendanceDashboard() {
                                         onMouseOver={e => e.currentTarget.style.backgroundColor = '#e3f2fd'}
                                         onMouseOut={e => e.currentTarget.style.backgroundColor = index % 2 ? '#f7fbff' : '#fff'}
                                     >
-                                        <td style={styles.cellDate}>{log.date}</td>
-                                        <td style={styles.cellMono}>{log.office_in_disp}</td>
-                                        <td style={styles.cellMono}>{log.break_in_disp}</td>
-                                        <td style={styles.cellMono}>{log.break_out_disp}</td>
-                                        <td
-                                            style={{
-                                                ...styles.cellMono,
-                                                cursor: log.lunch_in ? "pointer" : "not-allowed",
-                                                color: log.lunch_in ? "#0d47a1" : "#818281",
-                                                textDecoration: log.lunch_in ? "underline" : "none",
-                                                fontWeight: log.lunch_in ? 600 : 400,
-                                            }}
-                                            onClick={() => { if (log.lunch_in) handleLunchInClick(log.lunch_in); }}
-                                            title={log.lunch_in ? "Click to check lunch in status" : ""}
-                                        >
-                                            {log.lunch_in_disp}
+                                        <td className="cell-date">{log.date}</td>
+                                        <td className="cell-mono">{log.office_in_disp}</td>
+                                        <td className="cell-mono">{log.break_in_disp}</td>
+                                        <td className="cell-mono">{log.break_out_disp}</td>
+                                        <td className="cell-mono">{log.lunch_in_disp}</td>
+                                        <td className="cell-mono">{log.lunch_out_disp}</td>
+                                        <td className="cell-mono">{log.break_in_2_disp}</td>
+                                        <td className="cell-mono">{log.break_out_2_disp}</td>
+                                        <td className="cell-mono" style={{ whiteSpace: 'normal', textAlign: 'left' }}>
+                                            {log.extraBreakInsDisplay}
                                         </td>
-                                        <td style={styles.cellMono}>{log.lunch_out_disp}</td>
-                                        <td style={styles.cellMono}>{log.break_in_2_disp}</td>
-                                        <td style={styles.cellMono}>{log.break_out_2_disp}</td>
-                                        <td style={styles.cellMono}>{log.office_out_disp}</td>
-                                        <td style={{ ...styles.cellMono, borderLeft: styles.cellMono.borderLeft }}>
-                                            <span style={{
-                                                ...styles.workedPill,
-                                                background: getHoursCellStyle(cls?.bucket).background,
-                                                border: '1px solid #ccc',
-                                                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-                                            }}>
+                                        <td className="cell-mono" style={{ whiteSpace: 'normal', textAlign: 'left' }}>
+                                            {log.extraBreakOutsDisplay}
+                                        </td>
+                                        <td className="cell-mono">{log.office_out_disp}</td>
+                                        <td className="cell-mono" style={{ borderLeft: '1px dotted #e0e0e0' }}>
+                                            <span
+                                                className="worked-pill"
+                                                style={{
+                                                    background: getHoursCellStyle(cls?.bucket).background,
+                                                    border: '1px solid #ccc',
+                                                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                                                }}
+                                            >
                                                 {log.netWorkedHrsMin}
                                             </span>
                                         </td>
-                                        <td title={log.remarks} style={styles.remarksCell}>
+                                        <td className="remarks-cell" title={log.remarks}>
                                             {log.remarks}
                                         </td>
                                     </tr>
@@ -714,16 +838,17 @@ export default function AttendanceDashboard() {
                     </table>
                 </div>
             ) : (
-                <p style={styles.noLogsMessage}>No attendance logs found.</p>
+                <p className="no-logs-message">No attendance logs found.</p>
             )}
-            <div style={styles.buttonGrid}>
+
+            <div className="button-grid">
                 {['break_in', 'break_out', 'break_in_2', 'break_out_2', 'lunch_in', 'lunch_out'].map(action => (
                     <button
                         key={action}
                         onClick={() => sendAction(action)}
                         disabled={!isActionAllowed(action, getTodayLog())}
+                        className="button"
                         style={{
-                            ...styles.button,
                             opacity: isActionAllowed(action, getTodayLog()) ? 1 : 0.47,
                             cursor: isActionAllowed(action, getTodayLog()) ? 'pointer' : 'not-allowed',
                         }}
@@ -732,316 +857,9 @@ export default function AttendanceDashboard() {
                     </button>
                 ))}
             </div>
-            {lunchMessage && <p style={styles.message}>{lunchMessage}</p>}
-            <p style={styles.message}>{message}</p>
+
+            {lunchMessage && <p className="message">{lunchMessage}</p>}
+            <p className="message">{message}</p>
         </div>
     );
 }
-
-// --- STYLES ---
-const styles = {
-    page: {
-        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-        padding: '1rem',
-        backgroundColor: '#f5f7fa',
-        minHeight: '100vh',
-        color: '#333',
-        boxSizing: 'border-box',
-        // '@media (min-width: 768px)': { padding: '2rem', } // Non-standard in inline styles
-    },
-    header: {
-        textAlign: 'center',
-        fontSize: '1.5rem',
-        color: '#2c3e50',
-        marginBottom: '1rem',
-        // '@media (min-width: 768px)': { fontSize: '2rem', }
-    },
-    summaryContainer: {
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-        gap: '10px',
-        marginBottom: '1rem',
-        backgroundColor: '#ffffff',
-        padding: '1rem',
-        borderRadius: '12px',
-        boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
-        // '@media (min-width: 768px)': { gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', padding: '1.5rem', marginBottom: '1.5rem', }
-    },
-    summaryItem: {
-        fontSize: '0.9rem',
-        fontWeight: '500',
-        padding: '8px',
-        borderRadius: '8px',
-        background: '#f8f9fa',
-        border: '1px solid #e9ecef',
-        // '@media (min-width: 768px)': { fontSize: '1rem', padding: '10px', }
-    },
-    actionSection: {
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: '15px',
-        marginBottom: '1rem',
-        // '@media (min-width: 768px)': { flexDirection: 'row', justifyContent: 'space-between', gap: '20px', marginBottom: '1.5rem', }
-    },
-    premiumButtonGrid: {
-        display: 'flex',
-        flexWrap: 'wrap',
-        justifyContent: 'center',
-        gap: '8px',
-        // '@media (min-width: 768px)': { gap: '10px', }
-    },
-    premiumButton: {
-        padding: '10px 15px',
-        fontSize: '0.9rem',
-        fontWeight: 'bold',
-        borderRadius: '8px',
-        border: 'none',
-        color: '#fff',
-        background: 'linear-gradient(45deg, #1d6e90, #00c1e8)',
-        boxShadow: '0 4px 10px rgba(0, 193, 232, 0.3)',
-        transition: 'transform 0.2s, box-shadow 0.2s',
-        cursor: 'pointer',
-        // '@media (min-width: 768px)': { padding: '12px 20px', fontSize: '1rem', }
-    },
-    lateInfoPill: {
-        backgroundColor: '#fff',
-        padding: '10px 15px',
-        borderRadius: '8px',
-        boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-        fontWeight: '600',
-        fontSize: '0.9rem',
-        textAlign: 'center',
-        // '@media (min-width: 768px)': { padding: '12px 18px', fontSize: '1rem', }
-    },
-    filterRow: {
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: '1rem',
-    },
-    filterLabel: {
-        fontSize: '1rem',
-        marginRight: '8px',
-        fontWeight: '500',
-        color: '#555',
-    },
-    monthInput: {
-        padding: '8px',
-        borderRadius: '8px',
-        border: '1px solid #ccc',
-        fontSize: '1rem',
-        cursor: 'pointer',
-    },
-    calendarGrid: {
-        display: 'grid',
-        gridTemplateColumns: 'repeat(7, 1fr)',
-        gap: '5px',
-        backgroundColor: '#ffffff',
-        padding: '1rem',
-        borderRadius: '12px',
-        boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
-    },
-    weekdayHeader: {
-        fontWeight: 'bold',
-        textAlign: 'center',
-        padding: '10px 0',
-        color: '#333',
-        backgroundColor: '#e9e9e9',
-        borderRadius: '4px',
-        fontSize: '0.8rem',
-        // '@media (min-width: 768px)': { fontSize: '1rem', }
-    },
-    dayCell: {
-        height: 'auto',
-        width: '100%',
-        paddingTop: '35%',
-        paddingBottom: '5%',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontWeight: '600',
-        borderRadius: '8px',
-        boxShadow: 'inset 0 0 5px rgba(0,0,0,0.05)',
-        transition: 'transform 0.2s',
-        fontSize: '0.9rem',
-        userSelect: 'none',
-        border: '1px solid #f0f0f0',
-        color: '#555',
-        position: 'relative',
-        // '@media (min-width: 768px)': { fontSize: '1.2rem', },
-    },
-    dayCellDate: {
-        position: 'absolute',
-        top: '50%',
-        left: '50%',
-        transform: 'translate(-50%, -50%)',
-    },
-    legend: {
-        display: 'flex',
-        flexWrap: 'wrap',
-        justifyContent: 'center',
-        gap: '10px',
-        marginTop: '1rem',
-        fontSize: '0.9rem',
-    },
-    legendItem: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '5px',
-        fontWeight: '500',
-        color: '#555',
-    },
-    legendColor: {
-        width: '18px',
-        height: '18px',
-        borderRadius: '4px',
-        border: '1px solid #ccc',
-    },
-    historyHeader: {
-        textAlign: 'center',
-        fontSize: '1.5rem',
-        color: '#2c3e50',
-        marginTop: '2rem',
-        marginBottom: '1rem',
-        // PREMIUM LINES
-        borderTop: '2px solid #00c1e8',
-        borderBottom: '2px solid #00c1e8',
-        padding: '15px 0',
-        backgroundColor: '#e3f2fd',
-        borderRadius: '8px',
-    },
-    historyFilterContainer: {
-        display: 'flex',
-        flexWrap: 'wrap',
-        justifyContent: 'center',
-        alignItems: 'center',
-        gap: '15px',
-        marginBottom: '1.5rem',
-        padding: '1rem',
-        backgroundColor: '#ffffff',
-        borderRadius: '12px',
-        boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
-    },
-    historyFilterGroup: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-    },
-    dateInput: {
-        padding: '8px',
-        borderRadius: '8px',
-        border: '1px solid #ccc',
-        fontSize: '1rem',
-    },
-    filterButton: {
-        padding: '10px 15px',
-        fontSize: '1rem',
-        fontWeight: '600',
-        borderRadius: '8px',
-        border: '1px solid #007bff',
-        backgroundColor: '#007bff',
-        color: '#fff',
-        cursor: 'pointer',
-        transition: 'background-color 0.2s, color 0.2s',
-        // ':hover': { backgroundColor: '#0056b3', },
-    },
-    tableContainer: {
-        overflowX: 'auto',
-        overflowY: 'scroll', // Make the table scrollable
-        maxHeight: '400px', // Set a fixed height for scrolling
-        marginBottom: '1rem',
-        borderRadius: '12px',
-        boxShadow: '0 8px 30px rgba(0,0,0,0.1)', // More premium shadow
-        border: '1px solid #e0e0e0', // Overall table border
-    },
-    attendanceTable: {
-        width: '100%',
-        borderCollapse: 'collapse',
-        textAlign: 'center',
-        fontSize: '0.9rem',
-        backgroundColor: '#fff',
-        overflow: 'hidden',
-    },
-    tableHeader: {
-        padding: '12px 6px',
-        backgroundColor: '#eef2f7',
-        color: '#2c3e50',
-        fontWeight: '700',
-        borderBottom: '2px solid #c8e6c9', // Premium header line
-        textTransform: 'uppercase',
-        position: 'sticky',
-        top: 0,
-        zIndex: 1,
-        whiteSpace: 'nowrap',
-    },
-    cellDate: {
-        padding: '12px 8px',
-        fontWeight: '600',
-        color: '#333',
-        whiteSpace: 'nowrap',
-        minWidth: '100px',
-        textAlign: 'center',
-        borderLeft: '1px dotted #e0e0e0', // Vertical line
-    },
-    cellMono: {
-        padding: '12px 6px',
-        fontFamily: 'monospace',
-        color: '#555',
-        whiteSpace: 'nowrap',
-        fontSize: '0.85rem',
-        minWidth: '70px',
-        borderLeft: '1px dotted #e0e0e0', // Vertical line
-    },
-    remarksCell: {
-        padding: '12px 10px',
-        textAlign: 'left',
-        fontSize: '0.9rem',
-        color: '#777',
-        whiteSpace: 'normal',
-        maxWidth: '300px',
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        borderLeft: '1px dotted #e0e0e0', // Vertical line
-    },
-    workedPill: {
-        display: 'inline-block',
-        padding: '4px 8px',
-        borderRadius: '15px',
-        fontWeight: 'bold',
-        color: '#333',
-        fontSize: '0.8em',
-        minWidth: '55px',
-    },
-    noLogsMessage: {
-        textAlign: 'center',
-        color: '#888',
-        fontSize: '1rem',
-        marginTop: '2rem',
-    },
-    buttonGrid: {
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
-        gap: '10px',
-        marginTop: '1.5rem',
-    },
-    button: {
-        padding: '12px 8px',
-        fontSize: '0.8rem',
-        fontWeight: 'bold',
-        borderRadius: '8px',
-        border: 'none',
-        color: '#fff',
-        backgroundColor: '#4a90e2',
-        cursor: 'pointer',
-        transition: 'background-color 0.2s',
-        // ':hover': { backgroundColor: '#3a72b8', },
-        whiteSpace: 'nowrap',
-    },
-    message: {
-        textAlign: 'center',
-        marginTop: '1rem',
-        fontWeight: 'bold',
-        fontSize: '1rem',
-    },
-};

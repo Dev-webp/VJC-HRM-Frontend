@@ -88,16 +88,18 @@ export default function AttendanceChatLogs() {
           <table style={premiumStyles.table}>
             <thead>
               <tr style={premiumStyles.tableHeaderRow}>
-                <th style={premiumStyles.tableTh}>Date</th>
-                <th style={premiumStyles.tableTh}>In</th>
-                <th style={premiumStyles.tableTh}>B. Out 1</th>
-                <th style={premiumStyles.tableTh}>B. In 1</th>
-                <th style={premiumStyles.tableTh}>L. Out</th>
-                <th style={premiumStyles.tableTh}>L. In</th>
-                <th style={premiumStyles.tableTh}>B. Out 2</th>
-                <th style={premiumStyles.tableTh}>B. In 2</th>
-                <th style={premiumStyles.tableTh}>Out</th>
-                <th style={premiumStyles.tableTh}>Notes</th>
+                 <th style={premiumStyles.tableTh}>DATE</th>
+                    <th style={premiumStyles.tableTh}>LOGIN</th>
+                    <th style={premiumStyles.tableTh}>B.IN</th>
+                    <th style={premiumStyles.tableTh}>B.OUT</th>
+                    <th style={premiumStyles.tableTh}>L.IN</th>
+                    <th style={premiumStyles.tableTh}>L.OUT</th>
+                    <th style={premiumStyles.tableTh}>B2.IN</th>
+                    <th style={premiumStyles.tableTh}>B2.OUT</th>
+                    <th style={premiumStyles.tableTh}>EXTRA BREAK INS</th>
+                    <th style={premiumStyles.tableTh}>EXTRA BREAK OUTS</th>
+                    <th style={premiumStyles.tableTh}>LOGOUT</th>
+                    <th style={premiumStyles.tableTh}>REMARKS</th>
               </tr>
             </thead>
             <tbody>
@@ -109,21 +111,66 @@ export default function AttendanceChatLogs() {
                     ...(log.date === todayStr ? premiumStyles.highlightRow : {}),
                   }}
                 >
-                  <td style={premiumStyles.tableTd}>{log.date}</td>
-                  <td style={premiumStyles.tableTd}>{formatTime(log.office_in)}</td>
-                  <td style={premiumStyles.tableTd}>{formatTime(log.break_out)}</td>
-                  <td style={premiumStyles.tableTd}>{formatTime(log.break_in)}</td>
-                  <td style={premiumStyles.tableTd}>{formatTime(log.lunch_out)}</td>
-                  <td style={premiumStyles.tableTd}>{formatTime(log.lunch_in)}</td>
-                  <td style={premiumStyles.tableTd}>{formatTime(log.break_out_2)}</td>
-                  <td style={premiumStyles.tableTd}>{formatTime(log.break_in_2)}</td>
-                  <td style={premiumStyles.tableTd}>{formatTime(log.office_out)}</td>
-                  <td style={{ ...premiumStyles.tableTd, ...premiumStyles.notesCell }}>
-                    {log.paid_leave_reason || log.reason || "-"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
+                   <td style={premiumStyles.tableTd}>{log.date}</td>
+                      <td style={premiumStyles.tableTd}>
+                        {formatTime(log.office_in)}
+                      </td>
+                      <td style={premiumStyles.tableTd}>
+                        {formatTime(log.break_in)}
+                      </td>
+                      <td style={premiumStyles.tableTd}>
+                        {formatTime(log.break_out)}
+                      </td>
+                      <td style={premiumStyles.tableTd}>
+                        {formatTime(log.lunch_in)}
+                      </td>
+                      <td style={premiumStyles.tableTd}>
+                        {formatTime(log.lunch_out)}
+                      </td>
+                      <td style={premiumStyles.tableTd}>
+                        {formatTime(log.break_in_2)}
+                      </td>
+                      <td style={premiumStyles.tableTd}>
+                        {formatTime(log.break_out_2)}
+                      </td>
+                      <td
+                        style={{
+                          ...premiumStyles.tableTd,
+                          whiteSpace: "pre-wrap",
+                          textAlign: "center",
+                          fontSize: 12,
+                        }}
+                      >
+                        {log.extra_break_ins && log.extra_break_ins.length > 0
+                          ? log.extra_break_ins
+                              .map((t) => (t ? t : "-"))
+                              .join("\n")
+                          : "-"}
+                      </td>
+                      <td
+                        style={{
+                          ...premiumStyles.tableTd,
+                          whiteSpace: "pre-wrap",
+                          textAlign: "center",
+                          fontSize: 12,
+                        }}
+                      >
+                        {log.extra_break_outs && log.extra_break_outs.length > 0
+                          ? log.extra_break_outs
+                              .map((t) => (t ? t : "-"))
+                              .join("\n")
+                          : "-"}
+                      </td>
+                      <td style={premiumStyles.tableTd}>
+                        {formatTime(log.office_out)}
+                      </td>
+                    
+                      <td style={premiumStyles.tableTd}>
+                        {log.paid_leave_reason || log.reason || "-"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
           </table>
         </div>
       </div>
