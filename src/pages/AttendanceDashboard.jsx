@@ -115,7 +115,15 @@ function calculateNetWorkMillis(log) {
         actualOfficeIn = OFFICE_START;
     }
 
-    const grossMillis = diffMillis(actualOfficeIn, office_out);
+     // Clamp office_out if after 7 PM (19:00:00)
+    const officeOutTime = parseTime(office_out);
+    const cutoffTime = parseTime(LOGOUT_CUTOFF); // '19:00:00'
+    let adjustedOfficeOut = office_out;
+    if (officeOutTime && cutoffTime && officeOutTime > cutoffTime) {
+        adjustedOfficeOut = LOGOUT_CUTOFF;  // Clamp to 7 PM
+    }
+
+    const grossMillis = diffMillis(actualOfficeIn, adjustedOfficeOut);
 
     let breaks = 0;
     // Existing breaks sum
