@@ -1,15 +1,21 @@
 import React, { useState } from "react";
 import axios from "axios";
 
+// Either use environment or a hardcoded switch for backend URL
+const API_BASE =
+  process.env.NODE_ENV === "development"
+    ? "http://localhost:5000"
+    : "https://backend.vjcoverseas.com";
+
 export default function SalarySlipUpload() {
   const [formData, setFormData] = useState({
     email: "",
-    file: null,
+    salarySlip: null,
   });
   const [status, setStatus] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const isFormValid = formData.email.trim() && formData.file;
+  const isFormValid = formData.email.trim() && formData.salarySlip;
 
   const handleInputChange = (e) => {
     const { name, value, files } = e.target;
@@ -32,13 +38,13 @@ export default function SalarySlipUpload() {
 
     const payload = new FormData();
     payload.append("email", formData.email);
-    payload.append("salarySlip", formData.file);
+    payload.append("salarySlip", formData.salarySlip);
 
     setIsLoading(true);
     setStatus(null);
 
     try {
-      const res = await axios.post("https://backend.vjcoverseas.com/upload-salary-slip", payload, {
+      const res = await axios.post(`${API_BASE}/upload-salary-slip`, payload, {
         withCredentials: true,
         headers: { "Content-Type": "multipart/form-data" },
       });
@@ -46,7 +52,7 @@ export default function SalarySlipUpload() {
         message: res.data?.message || "✅ Salary slip uploaded successfully!",
         type: "success",
       });
-      setFormData({ email: "", file: null });
+      setFormData({ email: "", salarySlip: null });
     } catch (err) {
       const errorMessage =
         err.response?.data?.message || "Failed to upload salary slip.";
@@ -56,7 +62,7 @@ export default function SalarySlipUpload() {
     }
   };
 
-  const fileInputKey = formData.file ? formData.file.name : Date.now();
+  const fileInputKey = formData.salarySlip ? formData.salarySlip.name : Date.now();
 
   return (
     <div style={styles.card}>
@@ -92,14 +98,14 @@ export default function SalarySlipUpload() {
               id="file-upload"
               key={fileInputKey}
               type="file"
-              name="file"
+              name="salarySlip"
               accept="application/pdf,image/*"
               onChange={handleInputChange}
               style={{ display: "none" }}
               aria-label="Select Salary Slip File"
             />
             <span style={styles.fileName}>
-              {formData.file ? formData.file.name : "No file chosen"}
+              {formData.salarySlip ? formData.salarySlip.name : "No file chosen"}
             </span>
           </div>
         </div>
@@ -114,7 +120,12 @@ export default function SalarySlipUpload() {
       </form>
 
       {status && (
-        <p style={{ ...styles.statusMessage, color: status.type === "success" ? "#28a745" : "#dc3545" }}>
+        <p
+          style={{
+            ...styles.statusMessage,
+            color: status.type === "success" ? "#28a745" : "#dc3545",
+          }}
+        >
           {status.message}
         </p>
       )}
@@ -130,7 +141,6 @@ const styles = {
     borderRadius: 15,
     boxShadow: "0 10px 30px rgba(0,0,0,0.1)",
     maxWidth: 450,
-   
   },
   header: {
     display: "flex",
@@ -206,10 +216,6 @@ const styles = {
     fontSize: 16,
     transition: "transform 0.2s, box-shadow 0.2s, opacity 0.3s",
     boxShadow: "0 4px 10px rgba(40, 167, 69, 0.2)",
-    "&:hover": {
-      transform: "translateY(-2px)",
-      boxShadow: "0 6px 15px rgba(40, 167, 69, 0.3)",
-    },
   },
   statusMessage: {
     marginTop: 20,
