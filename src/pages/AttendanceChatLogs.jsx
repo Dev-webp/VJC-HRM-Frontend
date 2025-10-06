@@ -11,7 +11,7 @@ export default function AttendanceChatLogs() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [expandedUserEmail, setExpandedUserEmail] = useState(null);
-  const [showCards, setShowCards] = useState(true); 
+  const [showCards, setShowCards] = useState(false); 
 
   const fetchAttendanceLogs = async () => {
     setLoading(true);
@@ -304,7 +304,7 @@ const premiumStyles = {
     fontFamily: "'Inter', sans-serif",
     minHeight: 'auto',
     height: 'auto',
-    backgroundColor: '#f7fafc',
+   
     padding: '30px 20px',
   },
   summaryBar: {

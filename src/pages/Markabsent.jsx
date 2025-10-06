@@ -6,6 +6,7 @@ function MarkHolidayPanel({ selectedYear: propSelectedYear, onHolidayMarked }) {
   const [name, setName] = useState('');
   const [msg, setMsg] = useState('');
   const [holidays, setHolidays] = useState([]);
+  const [holidayCount, setHolidayCount] = useState(0);
 
   // Backend URL auto-switching
   const backendUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
@@ -22,16 +23,29 @@ function MarkHolidayPanel({ selectedYear: propSelectedYear, onHolidayMarked }) {
   function fetchHolidays() {
     if (!selectedYear) {
       setHolidays([]);
+      setHolidayCount(0);
       return;
     }
     axios.get(`${backendUrl}/holidays?month=${selectedYear}`, { withCredentials: true })
       .then(res => {
         setHolidays(res.data);
         setMsg('');
+        updateHolidayCount(selectedYear);
       })
       .catch((error) => {
         console.error('Failed to fetch holidays', error);
         setMsg('Failed to fetch holidays. Please try again later.');
+        setHolidayCount(0);
+      });
+  }
+
+  function updateHolidayCount(month) {
+    axios.post(`${backendUrl}/update-holiday-count`, { month }, { withCredentials: true })
+      .then(res => {
+        setHolidayCount(res.data.count || 0);
+      })
+      .catch(() => {
+        setHolidayCount(0);
       });
   }
 
@@ -88,7 +102,7 @@ function MarkHolidayPanel({ selectedYear: propSelectedYear, onHolidayMarked }) {
         <button onClick={markHoliday} style={styles.markButton}>Mark</button>
       </div>
       {msg && <div style={styles.message}>{msg}</div>}
-      <h3 style={styles.subheading}>Existing Holidays</h3>
+      <h3 style={styles.subheading}>Existing Holidays ({holidayCount} {holidayCount === 1 ? 'holiday' : 'holidays'})</h3>
       {holidays.length === 0 ? (
         <p style={styles.noHolidays}>No holidays found.</p>
       ) : (
