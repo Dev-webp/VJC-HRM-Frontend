@@ -9,7 +9,7 @@ const baseUrl =
 
 const colors = {
   orange500: "#f97316", // Tailwind orange-500 approx
-  blue400: "#60a5fa",   // Tailwind blue-400 approx
+  blue400: "#60a5fa", // Tailwind blue-400 approx
   white: "#ffffff",
   gray100: "#f3f4f6",
   gray300: "#d1d5db",
@@ -223,13 +223,39 @@ export default function UserManagement() {
   const [showAllUsers, setShowAllUsers] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [missingFields, setMissingFields] = useState([]);
+  
+  // 🆕 State for the logged-in user's data
+  const [currentUser, setCurrentUser] = useState(null);
+  const [currentUserLoading, setCurrentUserLoading] = useState(true);
+
+  // 🆕 Function to fetch the logged-in user's details
+  const fetchCurrentUser = async () => {
+    try {
+      const res = await axios.get(`${baseUrl}/me`, { withCredentials: true });
+      setCurrentUser(res.data);
+    } catch (err) {
+      console.error("❌ Failed to fetch current user:", err);
+      // Handle scenario where user is not logged in or token is expired
+    } finally {
+      setCurrentUserLoading(false);
+    }
+  };
+
+  // 🆕 Call fetchCurrentUser once on component mount
+  useEffect(() => {
+    fetchCurrentUser();
+  }, []);
 
   const fetchUsers = async () => {
+    // ⚠️ Only fetch if current user data is available
+    if (!currentUser) return;
+
     setLoading(true);
     try {
       const url = `${baseUrl}/all-attendance`;
       const res = await axios.get(url, { withCredentials: true });
       const data = res.data;
+      
       const formatted = Object.entries(data).map(([email, info]) => ({
         email,
         name: info.name || "",
@@ -247,16 +273,36 @@ export default function UserManagement() {
         ifsc_code: info.ifscCode || info.ifsc_code || "",
         department: info.department || "",
       }));
-      setUsers(formatted);
+
+      // 🆕 Logic to filter users based on role and location
+      let filteredData = formatted;
+      const userRole = currentUser.role?.toLowerCase();
+      const userLocation = currentUser.location?.toLowerCase();
+
+      if (userRole !== "chairman") {
+        // If not 'chairman', filter by location
+        if (userRole === "manager" && userLocation) {
+          filteredData = formatted.filter(
+            (user) => user.location?.toLowerCase() === userLocation
+          );
+        } else {
+          // Fallback for other roles, perhaps show no one or just themselves (though the backend should handle this if needed)
+          filteredData = [];
+        }
+      } 
+      // If role IS 'chairman', the list remains 'formatted' (all users)
+
+      setUsers(filteredData);
     } catch (err) {
       console.error("❌ Failed to fetch users:", err);
     }
     setLoading(false);
   };
 
+  // ⚠️ Dependency array now includes currentUser
   useEffect(() => {
-    if (showAllUsers) fetchUsers();
-  }, [showAllUsers]);
+    if (showAllUsers && currentUser) fetchUsers();
+  }, [showAllUsers, currentUser]);
 
   const validateNewUser = () => {
     const requiredFields = [
@@ -422,9 +468,13 @@ export default function UserManagement() {
   // Helper to check if field is missing for new user validation
   const isMissing = (field) => missingFields.includes(field);
 
+  // 🆕 Render a loading message while fetching current user data
+  if (currentUserLoading) {
+    return <div style={styles.container}><p>Authenticating user role...</p></div>;
+  }
+
   return (
     <main style={styles.container}>
-     
       {/* User Creation Section */}
       <section style={styles.section} aria-labelledby="create-user-heading">
         <h2 id="create-user-heading" style={{ color: colors.blue400, fontWeight: "700", marginBottom: 18 }}>

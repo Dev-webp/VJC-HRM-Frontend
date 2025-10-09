@@ -11,9 +11,31 @@ const baseUrl =
         ? "http://localhost:5000"
         : "https://backend.vjcoverseas.com";
 
-function UserMenu({ name = "User" }) {
+// --- Manager Login Button Component ---
+const ManagerLoginButton = () => {
+    const handleManagerDashboard = () => {
+        // Redirect to the manager dashboard URL
+        window.location.href = "/manager-dashboard";
+    };
+
+    return (
+        <div
+            onClick={handleManagerDashboard}
+            style={styles.managerLoginButton}
+            title="Switch to Manager Dashboard"
+        >
+            👉 Login as Manager
+        </div>
+    );
+};
+// --- END Manager Login Button Component ---
+
+function UserMenu({ name = "User", role = "employee" }) {
     const [open, setOpen] = useState(false);
     const toggleDropdown = () => setOpen((o) => !o);
+    
+    // NOTE: Removed the Manager Dashboard link from the dropdown to focus on the main dashboard button.
+
     const handleLogout = async () => {
         try {
             await axios.get(`${baseUrl}/logout`, { withCredentials: true });
@@ -23,9 +45,11 @@ function UserMenu({ name = "User" }) {
             alert("Logout failed");
         }
     };
+    
     const handleSwitchUser = () => {
         window.location.href = "/";
     };
+
     useEffect(() => {
         const onClickOutside = (e) => {
             if (!e.target.closest(".usermenu-container")) setOpen(false);
@@ -33,6 +57,7 @@ function UserMenu({ name = "User" }) {
         window.addEventListener("click", onClickOutside);
         return () => window.removeEventListener("click", onClickOutside);
     }, []);
+
     return (
         <div style={styles.userMenu.container} className="usermenu-container">
             <div onClick={toggleDropdown} style={styles.userMenu.avatar} title={name}>
@@ -62,18 +87,18 @@ const InstructionButton = ({ onClick }) => (
             borderRadius: "22px",
             padding: "10px 24px",
             fontSize: "1rem",
-            boxShadow: "0 3px 10px rgba(0,0,0,0.25)", // stronger shadow for visibility
-            border: "2px solid #fff", // White border for contrast on background
+            boxShadow: "0 3px 10px rgba(0,0,0,0.25)",
+            border: "2px solid #fff",
             display: "inline-block",
             letterSpacing: 0.8,
             cursor: "pointer",
             transition: "background 0.3s, transform 0.2s",
             textShadow: "1px 1px 4px #4442",
             userSelect: "none",
-            position: 'absolute', // Absolute positioning for the banner
-            bottom: 0, // Position on the bottom edge
-            right: 40, // Position on the right
-            zIndex: 100, // Ensure it's above other content
+            position: 'absolute',
+            bottom: 0,
+            right: 40,
+            zIndex: 100,
         }}
         onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#e86a0e"; e.currentTarget.style.transform = "scale(1.03)"; }}
         onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#ff7b16"; e.currentTarget.style.transform = "scale(1)"; }}
@@ -89,7 +114,7 @@ function EmployeeDashboard() {
     const [profile, setProfile] = useState(null);
     const [salarySlips, setSalarySlips] = useState([]);
     const [toast, setToast] = useState(null);
-    const [hoveredCard, setHoveredCard] = useState(null); // State for hover effect
+    const [hoveredCard, setHoveredCard] = useState(null);
 
     // Profile edit state
     const [editMode, setEditMode] = useState(false);
@@ -249,7 +274,7 @@ function EmployeeDashboard() {
     // --- RENDER START ---
     return (
         <div style={styles.page}>
-            <UserMenu name={profile?.name || "User"} />
+            <UserMenu name={profile?.name || "User"} role={profile?.role || "employee"} />
             {toast && (
                 <div
                     style={{
@@ -302,8 +327,8 @@ function EmployeeDashboard() {
                         />
                     </div>
 
-                    {/* Name and Edit Icon */}
-                    <div style={styles.nameAndEditWrap}>
+                    {/* Name, Edit Icon, and NEW Manager Button */}
+                    <div style={{ ...styles.nameAndEditWrap, gap: '15px' }}>
                         {!editMode ? (
                             <h2 style={styles.profileName}>{profile?.name}</h2>
                         ) : (
@@ -318,6 +343,12 @@ function EmployeeDashboard() {
                                 />
                             </label>
                         )}
+                        
+                        {/* CONDITIONAL MANAGER LOGIN BUTTON */}
+                        {profile?.role === 'manager' && (
+                            <ManagerLoginButton />
+                        )}
+
                         {/* Edit Button - Triggers all edits (Name, Password, Photos) */}
                         <div onClick={handleEditProfile} style={styles.profileEditPencil} title="Edit Profile Details">
                             {editMode ? "Viewing Edit Mode" : "✏️ Edit Profile"}
@@ -470,7 +501,7 @@ function EmployeeDashboard() {
     );
 }
 
-// Styling
+// Styling (Adding a new style for the Manager Button)
 const styles = {
     // New Content Width for all main sections
     CONTENT_MAX_WIDTH: 1400,
@@ -530,6 +561,27 @@ const styles = {
         },
     },
 
+    // NEW STYLE FOR MANAGER LOGIN BUTTON
+    managerLoginButton: {
+        padding: '10px 20px',
+        backgroundColor: '#2c6be0', // Blue color for a strong CTA
+        color: '#fff',
+        borderRadius: '25px',
+        fontWeight: '700',
+        cursor: 'pointer',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+        transition: 'background-color 0.2s, transform 0.2s',
+        fontSize: '1.05rem',
+        whiteSpace: 'nowrap',
+        minWidth: '180px',
+        textAlign: 'center',
+        // Hover effect for manager button
+        ':hover': {
+            backgroundColor: '#1e54a3',
+            transform: 'scale(1.02)'
+        }
+    },
+
     // --------------------------------------------------------
     // ** PROFILE STYLES - Width 1400px **
     // --------------------------------------------------------
@@ -541,14 +593,13 @@ const styles = {
     profileTopWrap: {
         maxWidth: 1400,
         width: '100%',
-        position: "relative", // Crucial for InstructionButton absolute positioning
+        position: "relative",
         boxSizing: 'border-box',
     },
     profileBg: {
         width: "100%",
         height: 250,
         borderRadius: "0 0 34px 34px",
-        // Static background styles applied directly in the component
         backgroundSize: "cover",
         backgroundPosition: "center",
         position: "relative",
@@ -621,7 +672,8 @@ const styles = {
         boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
         transition: 'background-color 0.2s',
         color: '#333',
-        fontSize: '1.05rem'
+        fontSize: '1.05rem',
+        whiteSpace: 'nowrap',
     },
 
     // Section 3: Details Row (CLEAN)
@@ -651,14 +703,13 @@ const styles = {
         maxWidth: '300px',
         padding: '18px',
         borderRadius: '8px',
-        // BG and Border-Left are set in getDetailCardStyle
         boxShadow: '0 1px 5px rgba(0,0,0,0.08)',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
         color: '#333',
-        transition: 'background-color 0.2s, transform 0.2s, box-shadow 0.2s', // Added transition for smooth hover
-        cursor: 'default', // Indicate it's not a clickable button
+        transition: 'background-color 0.2s, transform 0.2s, box-shadow 0.2s',
+        cursor: 'default',
     },
     detailCardLabel: {
         fontSize: '0.9rem',
@@ -684,7 +735,7 @@ const styles = {
     editForm: {
         width: '100%',
         paddingTop: 10,
-        backgroundColor: '#fff', // Added white BG to the edit form for visibility
+        backgroundColor: '#fff',
         padding: '20px',
         borderRadius: '10px',
         boxShadow: '0 2px 10px rgba(0,0,0,0.05)',

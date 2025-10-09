@@ -5,7 +5,7 @@ import UserManagement from "./UserManagement";
 import Markabsent from "./Markabsent";
 import Payroll from "./Payroll";
 import AttendanceChatLogs from "./AttendanceChatLogs";
-
+import ManagerAssignment from "./ManagerAssignment"; 
 const baseUrl =
   window.location.hostname === "localhost"
     ? "http://localhost:5000"
@@ -307,6 +307,10 @@ export default function ChairmanDashboard() {
       <div style={premiumStyles.contentBoxStack}>
         <UserManagement />
       </div>
+      <ManagerAssignment 
+      baseUrl={baseUrl} 
+      premiumStyles={premiumStyles} // <-- 🛑 This prop is critical and was likely missing 
+    />
 
       <div style={premiumStyles.separator} />
 

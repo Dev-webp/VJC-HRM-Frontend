@@ -14,11 +14,10 @@ const colors = {
   border: "#e0e0e0",
   success: "#28a745",
   danger: "#dc3545",
-  warning: "#ffc107"
+  warning: "#ffc107",
 };
 
 const styles = {
-  // Global/Table Styles
   td: {
     padding: 15,
     borderBottom: `1px solid ${colors.border}`,
@@ -34,25 +33,23 @@ const styles = {
     fontSize: 14,
     color: "#ffffff", // White text for header
     background: colors.primary, // Solid corporate blue header
-    borderBottom: `2px solid ${colors.primary}`
+    borderBottom: `2px solid ${colors.primary}`,
   },
   premiumTable: {
     width: "100%",
-    borderCollapse: "collapse", // No border spacing for professional look
+    borderCollapse: "collapse",
     marginTop: 10,
     borderRadius: 8,
     overflow: "hidden",
-    boxShadow: "0 4px 12px rgba(0,0,0,0.08)" // Subtle shadow
+    boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
   },
-
-  // Main Dashboard Layout
   mainSection: {
     marginBottom: 40,
     background: "#ffffff",
     padding: 30,
     borderRadius: 12,
     boxShadow: "0 8px 20px rgba(0,0,0,0.1)",
-    minHeight: 580
+    minHeight: 580,
   },
   header: {
     fontSize: 30,
@@ -61,21 +58,19 @@ const styles = {
     fontWeight: "900",
     letterSpacing: "0.02em",
     borderBottom: `3px solid ${colors.border}`,
-    paddingBottom: 15
+    paddingBottom: 15,
   },
-  
-  // Controls/Input Styles
   flexRow: {
     display: "flex",
     alignItems: "center",
     gap: 25,
     flexWrap: "wrap",
-    marginBottom: 20
+    marginBottom: 20,
   },
   label: {
     fontWeight: 600,
     fontSize: 16,
-    color: colors.text
+    color: colors.text,
   },
   monthInput: {
     fontWeight: "600",
@@ -85,7 +80,7 @@ const styles = {
     fontSize: 16,
     color: colors.text,
     cursor: "pointer",
-    backgroundColor: "#ffffff"
+    backgroundColor: "#ffffff",
   },
   holidayCount: {
     fontWeight: 600,
@@ -102,10 +97,8 @@ const styles = {
     border: `1px solid ${colors.border}`,
     outline: "none",
     boxShadow: "inset 0 1px 3px rgba(0,0,0,0.05)",
-    transition: "border-color 0.2s"
+    transition: "border-color 0.2s",
   },
-  
-  // Action Button (Neutral/Professional)
   effectButton: {
     cursor: "pointer",
     background: colors.secondary,
@@ -118,13 +111,14 @@ const styles = {
     fontWeight: 600,
     transition: "background-color .2s",
     boxShadow: "0 2px 6px rgba(0, 123, 255, 0.3)",
-    minWidth: 120
+    minWidth: 120,
   },
-
-  // Modal Styles
   overlayStyles: {
     position: "fixed",
-    top: 0, left: 0, right: 0, bottom: 0,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     zIndex: 1000,
     background: "rgba(10, 25, 47, 0.7)",
     display: "flex",
@@ -142,7 +136,8 @@ const styles = {
   },
   closeXStyles: {
     position: "absolute",
-    top: 15, right: 15,
+    top: 15,
+    right: 15,
     fontSize: 30,
     background: "none",
     border: "none",
@@ -150,7 +145,7 @@ const styles = {
     cursor: "pointer",
     fontWeight: 800,
     transition: "color .18s",
-    zIndex: 10
+    zIndex: 10,
   },
   summaryDetailRow: {
     display: "flex",
@@ -159,13 +154,13 @@ const styles = {
     padding: "10px 0",
     borderBottom: `1px solid ${colors.border}`,
     fontWeight: 500,
-    color: colors.text
+    color: colors.text,
   },
   summaryNumber: (color = colors.secondary, weight = 700) => ({
     fontFamily: "Arial, sans-serif",
     fontWeight: weight,
     color: color,
-    fontSize: 16
+    fontSize: 16,
   }),
 };
 
@@ -173,19 +168,18 @@ const styles = {
 // 2. UTILITY FUNCTIONS
 // =================================================================
 
-// Dynamically set baseUrl
-const baseUrl = window.location.hostname === "localhost"
-  ? "http://localhost:5000"
-  : "https://backend.vjcoverseas.com";
+const baseUrl =
+  window.location.hostname === "localhost"
+    ? "http://localhost:5000"
+    : "https://backend.vjcoverseas.com";
 
-// Helper: days in month from "YYYY-MM"
 function daysInMonth(month) {
   const [year, mon] = month.split("-");
   return new Date(parseInt(year), parseInt(mon), 0).getDate();
 }
 
 // =================================================================
-// 3. MODAL COMPONENT (Extracted for cleaner main component)
+// 3. MODAL COMPONENT
 // =================================================================
 
 function AttendanceSummaryModal({
@@ -196,7 +190,7 @@ function AttendanceSummaryModal({
   userSalary,
   netSalary,
   calculatedAbsentDays,
-  closeModal
+  closeModal,
 }) {
   if (!attendanceSummary || !selectedUser) return null;
 
@@ -204,20 +198,36 @@ function AttendanceSummaryModal({
     <div style={styles.overlayStyles} onClick={closeModal}>
       <div
         style={styles.modalStyles}
-        onClick={e => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
         tabIndex={-1}
       >
-        <button style={styles.closeXStyles} onClick={closeModal} title="Close Modal">×</button>
-        <h2 style={{
-          fontWeight: 700, fontSize: 24, color: colors.primary,
-          marginBottom: 5
-        }}>
+        <button
+          style={styles.closeXStyles}
+          onClick={closeModal}
+          title="Close Modal"
+        >
+          ×
+        </button>
+        <h2
+          style={{
+            fontWeight: 700,
+            fontSize: 24,
+            color: colors.primary,
+            marginBottom: 5,
+          }}
+        >
           Payroll Summary - {selectedMonth}
         </h2>
-        <p style={{
-          fontWeight: 600, color: colors.text, marginBottom: 20, fontSize: 16
-        }}>
-          Employee: {selectedUser.name} <span style={{ color: colors.secondary }}>({selectedUser.email})</span>
+        <p
+          style={{
+            fontWeight: 600,
+            color: colors.text,
+            marginBottom: 20,
+            fontSize: 16,
+          }}
+        >
+          Employee: {selectedUser.name}{" "}
+          <span style={{ color: colors.secondary }}>({selectedUser.email})</span>
         </p>
 
         <div style={{ padding: "0 0 10px 0" }}>
@@ -231,53 +241,71 @@ function AttendanceSummaryModal({
           </div>
           <div style={styles.summaryDetailRow}>
             <span>Company Holidays:</span>
-            <span style={styles.summaryNumber()}>{holidaysCount}</span>
+            <span style={styles.summaryNumber(colors.danger)}>{holidaysCount}</span>
           </div>
           <div style={styles.summaryDetailRow}>
             <span>Full Attendance Days:</span>
-            <span style={styles.summaryNumber(colors.secondary)}>{attendanceSummary.fullDays ?? 0}</span>
+            <span style={styles.summaryNumber(colors.secondary)}>
+              {attendanceSummary.fullDays ?? 0}
+            </span>
           </div>
           <div style={styles.summaryDetailRow}>
             <span>Half Days :</span>
-            <span style={styles.summaryNumber(colors.secondary)}>{attendanceSummary.halfDays ?? 0}</span>
+            <span style={styles.summaryNumber(colors.secondary)}>
+              {attendanceSummary.halfDays ?? 0}
+            </span>
           </div>
           <div style={styles.summaryDetailRow}>
             <span>Paid Leaves Applied:</span>
-            <span style={styles.summaryNumber(colors.success)}>{attendanceSummary.paidLeaves ?? 0}</span>
+            <span style={styles.summaryNumber(colors.success)}>
+              {attendanceSummary.paidLeaves ?? 0}
+            </span>
           </div>
         </div>
-        
+
         <div style={{ padding: "15px 0", borderTop: `2px solid ${colors.border}` }}>
           <div style={styles.summaryDetailRow}>
             <span style={{ fontWeight: 700 }}>Total Working Days:</span>
-            <span style={styles.summaryNumber(colors.success, 700)}>{attendanceSummary.workDays ?? 0}</span>
+            <span style={styles.summaryNumber(colors.success, 700)}>
+              {attendanceSummary.workDays ?? 0}
+            </span>
           </div>
-          <div style={{ ...styles.summaryDetailRow, borderBottom: `2px solid ${colors.border}` }}>
+          <div
+            style={{ ...styles.summaryDetailRow, borderBottom: `2px solid ${colors.border}` }}
+          >
             <span style={{ fontWeight: 700 }}>Total Absent Days:</span>
             <span style={styles.summaryNumber(colors.danger, 700)}>{calculatedAbsentDays}</span>
           </div>
 
           <div style={{ ...styles.summaryDetailRow, marginTop: 15 }}>
             <span style={{ fontWeight: 800, fontSize: 18 }}>Gross Monthly Salary:</span>
-            <span style={{ ...styles.summaryNumber(colors.primary, 800), fontSize: 18 }}>
+            <span
+              style={{ ...styles.summaryNumber(colors.primary, 800), fontSize: 18 }}
+            >
               ₹ {userSalary.toLocaleString()}
             </span>
           </div>
           <div style={styles.summaryDetailRow}>
             <span style={{ fontWeight: 800, fontSize: 18 }}>Net Salary Payable:</span>
-            <span style={{ ...styles.summaryNumber("#d9534f", 800), fontSize: 18 }}>
-              ₹ {netSalary.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            <span
+              style={{ ...styles.summaryNumber("#d9534f", 800), fontSize: 18 }}
+            >
+              ₹{" "}
+              {netSalary.toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
             </span>
           </div>
         </div>
-        
+
         <button
           style={{
             ...styles.effectButton,
             marginTop: 25,
-            float: 'right',
+            float: "right",
             background: colors.danger,
-            boxShadow: "0 2px 6px rgba(220, 53, 69, 0.4)"
+            boxShadow: "0 2px 6px rgba(220, 53, 69, 0.4)",
           }}
           onClick={closeModal}
         >
@@ -298,7 +326,9 @@ export default function ChairmanDashboard() {
   const [loading, setLoading] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [attendanceSummary, setAttendanceSummary] = useState(null);
-  const [selectedMonth, setSelectedMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [selectedMonth, setSelectedMonth] = useState(() =>
+    new Date().toISOString().slice(0, 7)
+  );
   const [searchTerm, setSearchTerm] = useState("");
   const [holidaysCount, setHolidaysCount] = useState(0);
   const [userSalary, setUserSalary] = useState(0);
@@ -306,10 +336,30 @@ export default function ChairmanDashboard() {
   const [calculatedAbsentDays, setCalculatedAbsentDays] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
 
+  // Current logged-in user info for filtering
+  const [userRole, setUserRole] = useState("");
+  const [userLocation, setUserLocation] = useState("");
+
+  // Fetch current logged-in user info (role + location)
+  useEffect(() => {
+    async function fetchUserRoleAndLocation() {
+      try {
+        const res = await axios.get(`${baseUrl}/me`, { withCredentials: true });
+        setUserRole(res.data.role || "");
+        setUserLocation(res.data.location || "");
+      } catch (error) {
+        console.error("Failed to fetch current user role/location", error);
+      }
+    }
+    fetchUserRoleAndLocation();
+  }, []);
+
   // Helper Functions for API calls
   const fetchHolidays = useCallback(async (month) => {
     try {
-      const res = await axios.get(`${baseUrl}/holidays-count?month=${month}`, { withCredentials: true });
+      const res = await axios.get(`${baseUrl}/holidays-count?month=${month}`, {
+        withCredentials: true,
+      });
       const count = res.data.count ?? 0;
       setHolidaysCount(count);
       return count;
@@ -320,53 +370,59 @@ export default function ChairmanDashboard() {
     }
   }, []);
 
-  const fetchAttendanceSummary = useCallback(async (user, month) => {
-    if (!user || !month) return;
+  const fetchAttendanceSummary = useCallback(
+    async (user, month) => {
+      if (!user || !month) return;
 
-    try {
-      const attendanceRes = await axios.post(
-        `${baseUrl}/get-attendance-summary`,
-        { email: user.email, month },
-        { withCredentials: true }
-      );
+      try {
+        const attendanceRes = await axios.post(
+          `${baseUrl}/get-attendance-summary`,
+          { email: user.email, month },
+          { withCredentials: true }
+        );
 
-      const summary = attendanceRes.data;
-      const salary = user.salary ?? 0;
-      const holidayCount = await fetchHolidays(month); 
+        const summary = attendanceRes.data;
+        const salary = user.salary ?? 0;
+        const holidayCount = await fetchHolidays(month);
 
-      const totalDays = daysInMonth(month);
-      const workDays = summary?.workDays ?? 0;
-      
-      // Calculate absent days (Total days - Paid days)
-      const absentsCalc = totalDays - workDays;
-      const finalAbsentDays = absentsCalc > 0 ? absentsCalc : 0;
-      
-      const perDaySalary = salary / totalDays;
-      const net = salary - finalAbsentDays * perDaySalary;
+        const totalDays = daysInMonth(month);
+        const workDays = summary?.workDays ?? 0;
 
-      setAttendanceSummary(summary);
-      setSelectedUser(user);
-      setUserSalary(salary);
-      setNetSalary(net >= 0 ? net : 0);
-      setCalculatedAbsentDays(finalAbsentDays);
-      setModalOpen(true);
-    } catch (error) {
-      console.error("Failed to fetch attendance summary", error);
-      alert("Error fetching attendance summary.");
-    }
-  }, [fetchHolidays]);
+        // Calculate absent days (Total days - Paid days)
+        const absentsCalc = totalDays - workDays;
+        const finalAbsentDays = absentsCalc > 0 ? absentsCalc : 0;
+
+        const perDaySalary = salary / totalDays;
+        const net = salary - finalAbsentDays * perDaySalary;
+
+        setAttendanceSummary(summary);
+        setSelectedUser(user);
+        setUserSalary(salary);
+        setNetSalary(net >= 0 ? net : 0);
+        setCalculatedAbsentDays(finalAbsentDays);
+        setModalOpen(true);
+      } catch (error) {
+        console.error("Failed to fetch attendance summary", error);
+        alert("Error fetching attendance summary.");
+      }
+    },
+    [fetchHolidays]
+  );
 
   // Effect to fetch initial user list
   useEffect(() => {
     async function fetchUsers() {
       setLoading(true);
       try {
-        const res = await axios.get(`${baseUrl}/all-attendance`, { withCredentials: true });
+        const res = await axios.get(`${baseUrl}/all-attendance`, {
+          withCredentials: true,
+        });
         const data = res.data;
         const usersList = Object.entries(data).map(([email, info]) => ({
           email,
           name: info.name,
           role: info.role,
+          location: info.location || "", // Ensure location is included
           salary: info.salary ?? 0,
         }));
         setUsers(usersList);
@@ -382,25 +438,35 @@ export default function ChairmanDashboard() {
   // Effect to refetch summary when the month changes, if a user is already selected
   useEffect(() => {
     if (selectedUser && selectedMonth) {
-      // Re-fetch the summary for the already selected user when month changes
       fetchAttendanceSummary(selectedUser, selectedMonth);
     } else {
-      // Just fetch holidays if no user is selected
       fetchHolidays(selectedMonth);
     }
     // eslint-disable-next-line
-  }, [selectedMonth]); 
+  }, [selectedMonth]);
 
-  // Memoized function for filtered users
+  // Memoized function for filtered users with role & location check
   const filteredUsers = useMemo(() => {
     const term = searchTerm.toLowerCase();
-    return users.filter(({ email, name }) => {
+    let filtered = users.filter(({ email, name }) => {
       return (
         email.toLowerCase().includes(term) ||
         (name && name.toLowerCase().includes(term))
       );
     });
-  }, [users, searchTerm]);
+
+    // Role/location-based filtering
+    if (userRole.toLowerCase() === "manager" && userLocation) {
+      filtered = filtered.filter(
+        (user) =>
+          user.location &&
+          user.location.toLowerCase() === userLocation.toLowerCase()
+      );
+    }
+    // Chairman sees all: no filtering here
+
+    return filtered;
+  }, [users, searchTerm, userRole, userLocation]);
 
   // Handler to open the summary modal
   function openSummaryPopup(user) {
@@ -409,22 +475,19 @@ export default function ChairmanDashboard() {
 
   return (
     <section style={styles.mainSection}>
-      {/* Header Section */}
-      <h2 style={styles.header}>
-        📊 Payroll & Attendance Summary
-      </h2>
-      
-      {/* Controls Section */}
+      <h2 style={styles.header}>📊 Payroll & Attendance Summary</h2>
+
       <div style={styles.flexRow}>
         <span style={styles.label}>Select Month:</span>
         <input
           type="month"
           value={selectedMonth}
-          onChange={e => setSelectedMonth(e.target.value)}
+          onChange={(e) => setSelectedMonth(e.target.value)}
           style={styles.monthInput}
         />
         <span style={styles.holidayCount}>
-          Public Holidays: <span style={styles.summaryNumber(colors.danger)}>{holidaysCount}</span>
+          Public Holidays:{" "}
+          <span style={styles.summaryNumber(colors.danger)}>{holidaysCount}</span>
         </span>
       </div>
 
@@ -432,17 +495,19 @@ export default function ChairmanDashboard() {
         type="text"
         placeholder="🔍 Search Employee by Email or Name..."
         value={searchTerm}
-        onChange={e => setSearchTerm(e.target.value)}
+        onChange={(e) => setSearchTerm(e.target.value)}
         style={styles.searchInput}
       />
-      
+
       <p style={{ color: colors.text, fontSize: 15, marginTop: -15, marginBottom: 30 }}>
-        Select an employee to view their detailed attendance and payroll calculation for **{selectedMonth}**.
+        Select an employee to view their detailed attendance and payroll calculation for{" "}
+        <b>{selectedMonth}</b>.
       </p>
 
-      {/* Employee Table Section */}
       {loading ? (
-        <p style={{ padding: 30, textAlign: "center", fontSize: 18, color: "#555" }}>Loading employee data...</p>
+        <p style={{ padding: 30, textAlign: "center", fontSize: 18, color: "#555" }}>
+          Loading employee data...
+        </p>
       ) : (
         <table style={styles.premiumTable}>
           <thead>
@@ -450,13 +515,15 @@ export default function ChairmanDashboard() {
               <th style={{ ...styles.th, borderTopLeftRadius: 8 }}>Email</th>
               <th style={styles.th}>Name</th>
               <th style={styles.th}>Role</th>
-              <th style={{ ...styles.th, textAlign: "center", borderTopRightRadius: 8 }}>Action</th>
+              <th style={{ ...styles.th, textAlign: "center", borderTopRightRadius: 8 }}>
+                Action
+              </th>
             </tr>
           </thead>
           <tbody>
             {filteredUsers.length ? (
               filteredUsers.map((user) => (
-                <tr key={user.email} style={{ transition: 'background-color 0.15s' }}>
+                <tr key={user.email} style={{ transition: "background-color 0.15s" }}>
                   <td style={styles.td}>{user.email}</td>
                   <td style={styles.td}>{user.name}</td>
                   <td style={styles.td}>{user.role}</td>
@@ -481,7 +548,6 @@ export default function ChairmanDashboard() {
         </table>
       )}
 
-      {/* Pop-up Modal Component */}
       {modalOpen && (
         <AttendanceSummaryModal
           attendanceSummary={attendanceSummary}

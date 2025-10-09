@@ -11,7 +11,25 @@ export default function AttendanceChatLogs() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [expandedUserEmail, setExpandedUserEmail] = useState(null);
-  const [showCards, setShowCards] = useState(false); 
+  const [showCards, setShowCards] = useState(false);
+  const [currentUserRole, setCurrentUserRole] = useState(null);
+  const [currentUserLocation, setCurrentUserLocation] = useState(null);
+
+  // Fetch logged in user's role and location
+  useEffect(() => {
+    async function fetchUserInfo() {
+      try {
+        const res = await axios.get(`${baseUrl}/me`, {
+          withCredentials: true,
+        });
+        setCurrentUserRole(res.data.role);
+        setCurrentUserLocation(res.data.location);
+      } catch (err) {
+        console.error("Failed to fetch user info", err);
+      }
+    }
+    fetchUserInfo();
+  }, []);
 
   const fetchAttendanceLogs = async () => {
     setLoading(true);
@@ -41,40 +59,58 @@ export default function AttendanceChatLogs() {
 
   const todayDate = new Date();
   const todayStr = todayDate.toISOString().slice(0, 10);
-  const formattedToday = todayDate.toLocaleDateString('en-US', {
-    weekday: 'long', 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric' 
+  const formattedToday = todayDate.toLocaleDateString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
   });
 
   const formatTime = (t) => (t ? t.slice(0, 5) : "-");
 
-  const userLogs = attendanceData
+  // Filter attendance data based on role and location
+  const filteredAttendanceData = attendanceData.filter((user) => {
+    if (currentUserRole === "chairman") {
+      return true; // Show all users
+    } else if (currentUserRole === "manager") {
+      // Show users only from manager's location
+      return user.location === currentUserLocation;
+    }
+    // Other roles show none in this UI
+    return false;
+  });
+
+  const userLogs = filteredAttendanceData
     .map((user) => {
-      const todayAttendance =
-        (user.attendance || []).find((a) => a.date === todayStr) || {};
+      const todayAttendance = (user.attendance || []).find(
+        (a) => a.date === todayStr
+      ) || {};
       return { ...user, todayAttendance };
     })
     .sort((a, b) => {
-      if (a.todayAttendance.office_in && !b.todayAttendance.office_in) return -1;
-      if (!a.todayAttendance.office_in && b.todayAttendance.office_in) return 1;
+      if (a.todayAttendance.office_in && !b.todayAttendance.office_in)
+        return -1;
+      if (!a.todayAttendance.office_in && b.todayAttendance.office_in)
+        return 1;
       const nameA = a.name || a.email;
       const nameB = b.name || b.email;
       return nameA.localeCompare(nameB);
     });
 
   const totalUsers = userLogs.length;
-  const presentUsers = userLogs.filter((u) => u.todayAttendance.office_in).length;
+  const presentUsers = userLogs.filter((u) => u.todayAttendance.office_in)
+    .length;
   const absentUsers = totalUsers - presentUsers;
 
-  // --- Expanded Log Section Component (Modal) ---
   const ExpandedLogSection = ({ user }) => (
     <div style={premiumStyles.expandedModalBackdrop}>
       <div style={premiumStyles.expandedModalContent}>
         <div style={premiumStyles.modalHeader}>
           <h2>
-            Monthly Attendance Log for <span style={{color: premiumStyles.viewLogButton.backgroundColor}}>{user.name || user.email}</span>
+            Monthly Attendance Log for{" "}
+            <span style={{ color: premiumStyles.viewLogButton.backgroundColor }}>
+              {user.name || user.email}
+            </span>
           </h2>
           <button
             style={premiumStyles.modalCloseButton}
@@ -83,23 +119,23 @@ export default function AttendanceChatLogs() {
             &times;
           </button>
         </div>
-        
-        <div style={premiumStyles.tableWrapper}> 
+
+        <div style={premiumStyles.tableWrapper}>
           <table style={premiumStyles.table}>
             <thead>
               <tr style={premiumStyles.tableHeaderRow}>
-                 <th style={premiumStyles.tableTh}>DATE</th>
-                    <th style={premiumStyles.tableTh}>LOGIN</th>
-                    <th style={premiumStyles.tableTh}>B.IN</th>
-                    <th style={premiumStyles.tableTh}>B.OUT</th>
-                    <th style={premiumStyles.tableTh}>L.IN</th>
-                    <th style={premiumStyles.tableTh}>L.OUT</th>
-                    <th style={premiumStyles.tableTh}>B2.IN</th>
-                    <th style={premiumStyles.tableTh}>B2.OUT</th>
-                    <th style={premiumStyles.tableTh}>EXTRA BREAK INS</th>
-                    <th style={premiumStyles.tableTh}>EXTRA BREAK OUTS</th>
-                    <th style={premiumStyles.tableTh}>LOGOUT</th>
-                    <th style={premiumStyles.tableTh}>REMARKS</th>
+                <th style={premiumStyles.tableTh}>DATE</th>
+                <th style={premiumStyles.tableTh}>LOGIN</th>
+                <th style={premiumStyles.tableTh}>B.IN</th>
+                <th style={premiumStyles.tableTh}>B.OUT</th>
+                <th style={premiumStyles.tableTh}>L.IN</th>
+                <th style={premiumStyles.tableTh}>L.OUT</th>
+                <th style={premiumStyles.tableTh}>B2.IN</th>
+                <th style={premiumStyles.tableTh}>B2.OUT</th>
+                <th style={premiumStyles.tableTh}>EXTRA BREAK INS</th>
+                <th style={premiumStyles.tableTh}>EXTRA BREAK OUTS</th>
+                <th style={premiumStyles.tableTh}>LOGOUT</th>
+                <th style={premiumStyles.tableTh}>REMARKS</th>
               </tr>
             </thead>
             <tbody>
@@ -111,105 +147,76 @@ export default function AttendanceChatLogs() {
                     ...(log.date === todayStr ? premiumStyles.highlightRow : {}),
                   }}
                 >
-                   <td style={premiumStyles.tableTd}>{log.date}</td>
-                      <td style={premiumStyles.tableTd}>
-                        {formatTime(log.office_in)}
-                      </td>
-                      <td style={premiumStyles.tableTd}>
-                        {formatTime(log.break_in)}
-                      </td>
-                      <td style={premiumStyles.tableTd}>
-                        {formatTime(log.break_out)}
-                      </td>
-                      <td style={premiumStyles.tableTd}>
-                        {formatTime(log.lunch_in)}
-                      </td>
-                      <td style={premiumStyles.tableTd}>
-                        {formatTime(log.lunch_out)}
-                      </td>
-                      <td style={premiumStyles.tableTd}>
-                        {formatTime(log.break_in_2)}
-                      </td>
-                      <td style={premiumStyles.tableTd}>
-                        {formatTime(log.break_out_2)}
-                      </td>
-                      <td
-                        style={{
-                          ...premiumStyles.tableTd,
-                          whiteSpace: "pre-wrap",
-                          textAlign: "center",
-                          fontSize: 12,
-                        }}
-                      >
-                        {log.extra_break_ins && log.extra_break_ins.length > 0
-                          ? log.extra_break_ins
-                              .map((t) => (t ? t : "-"))
-                              .join("\n")
-                          : "-"}
-                      </td>
-                      <td
-                        style={{
-                          ...premiumStyles.tableTd,
-                          whiteSpace: "pre-wrap",
-                          textAlign: "center",
-                          fontSize: 12,
-                        }}
-                      >
-                        {log.extra_break_outs && log.extra_break_outs.length > 0
-                          ? log.extra_break_outs
-                              .map((t) => (t ? t : "-"))
-                              .join("\n")
-                          : "-"}
-                      </td>
-                      <td style={premiumStyles.tableTd}>
-                        {formatTime(log.office_out)}
-                      </td>
-                    
-                      <td style={premiumStyles.tableTd}>
-                        {log.paid_leave_reason || log.reason || "-"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
+                  <td style={premiumStyles.tableTd}>{log.date}</td>
+                  <td style={premiumStyles.tableTd}>{formatTime(log.office_in)}</td>
+                  <td style={premiumStyles.tableTd}>{formatTime(log.break_in)}</td>
+                  <td style={premiumStyles.tableTd}>{formatTime(log.break_out)}</td>
+                  <td style={premiumStyles.tableTd}>{formatTime(log.lunch_in)}</td>
+                  <td style={premiumStyles.tableTd}>{formatTime(log.lunch_out)}</td>
+                  <td style={premiumStyles.tableTd}>{formatTime(log.break_in_2)}</td>
+                  <td style={premiumStyles.tableTd}>{formatTime(log.break_out_2)}</td>
+                  <td
+                    style={{
+                      ...premiumStyles.tableTd,
+                      whiteSpace: "pre-wrap",
+                      textAlign: "center",
+                      fontSize: 12,
+                    }}
+                  >
+                    {log.extra_break_ins && log.extra_break_ins.length > 0
+                      ? log.extra_break_ins.map((t) => (t ? t : "-")).join("\n")
+                      : "-"}
+                  </td>
+                  <td
+                    style={{
+                      ...premiumStyles.tableTd,
+                      whiteSpace: "pre-wrap",
+                      textAlign: "center",
+                      fontSize: 12,
+                    }}
+                  >
+                    {log.extra_break_outs && log.extra_break_outs.length > 0
+                      ? log.extra_break_outs.map((t) => (t ? t : "-")).join("\n")
+                      : "-"}
+                  </td>
+                  <td style={premiumStyles.tableTd}>{formatTime(log.office_out)}</td>
+                  <td style={premiumStyles.tableTd}>
+                    {log.paid_leave_reason || log.reason || "-"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
           </table>
         </div>
       </div>
     </div>
   );
-  // --- End Expanded Log Section Component ---
 
-  const expandedUser = userLogs.find(u => u.email === expandedUserEmail);
+  const expandedUser = userLogs.find((u) => u.email === expandedUserEmail);
 
   return (
     <div style={premiumStyles.container}>
-      {/* Premium Summary Bar with Current Date (Professional Formatting) */}
       <div style={premiumStyles.summaryBar}>
-        {/* Current Date Display */}
         <div style={premiumStyles.dateDisplay}>
-            <span style={{ fontSize: '1.2rem', marginRight: 10 }}>📅</span>
-            <strong>{formattedToday}</strong> 
+          <span style={{ fontSize: "1.2rem", marginRight: 10 }}>📅</span>
+          <strong>{formattedToday}</strong>
         </div>
 
-        {/* Attendance Summary Stats */}
         <div style={premiumStyles.statsGroup}>
-            <div style={premiumStyles.summaryItem}>
-              {/* Refined label style */}
-              <span style={premiumStyles.statLabel}>Total Employees:</span> 
-              <span style={premiumStyles.statValue}>{totalUsers}</span>
-            </div>
-            <div style={{ ...premiumStyles.summaryItem, color: "#10b981" }}>
-              {/* Refined label style */}
-              <span style={premiumStyles.statLabel}>Present Today:</span> 
-              <span style={premiumStyles.statValue}>{presentUsers}</span>
-            </div>
-            <div style={{ ...premiumStyles.summaryItem, color: "#ef4444" }}>
-              {/* Refined label style */}
-              <span style={premiumStyles.statLabel}>Absent Today:</span> 
-              <span style={premiumStyles.statValue}>{absentUsers}</span>
-            </div>
+          <div style={premiumStyles.summaryItem}>
+            <span style={premiumStyles.statLabel}>Total Employees:</span>
+            <span style={premiumStyles.statValue}>{totalUsers}</span>
+          </div>
+          <div style={{ ...premiumStyles.summaryItem, color: "#10b981" }}>
+            <span style={premiumStyles.statLabel}>Present Today:</span>
+            <span style={premiumStyles.statValue}>{presentUsers}</span>
+          </div>
+          <div style={{ ...premiumStyles.summaryItem, color: "#ef4444" }}>
+            <span style={premiumStyles.statLabel}>Absent Today:</span>
+            <span style={premiumStyles.statValue}>{absentUsers}</span>
+          </div>
         </div>
-        
-        {/* Toggle Button for Cards */}
+
         <button
           style={premiumStyles.showUsersButton}
           onClick={() => setShowCards(!showCards)}
@@ -273,7 +280,9 @@ export default function AttendanceChatLogs() {
                       <div style={premiumStyles.logLine}>
                         <span style={premiumStyles.logLabel}>Status:</span>
                         <span style={premiumStyles.logTime}>
-                          {user.todayAttendance.paid_leave_reason || user.todayAttendance.reason || "Not Logged In"}
+                          {user.todayAttendance.paid_leave_reason ||
+                            user.todayAttendance.reason ||
+                            "Not Logged In"}
                         </span>
                       </div>
                     )}
@@ -293,74 +302,73 @@ export default function AttendanceChatLogs() {
         )
       )}
 
-      {/* Render the modal log view if a user is expanded */}
       {expandedUser && <ExpandedLogSection user={expandedUser} />}
     </div>
   );
 }
+
 const premiumStyles = {
   container: {
     width: "100%",
     fontFamily: "'Inter', sans-serif",
-    minHeight: 'auto',
-    height: 'auto',
-   
-    padding: '30px 20px',
+    minHeight: "auto",
+    height: "auto",
+    padding: "30px 20px",
   },
   summaryBar: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     padding: "18px 25px",
-    backgroundColor: "#1e40af",  // stylish deep blue
+    backgroundColor: "#1e40af",
     borderRadius: 12,
-    color: "#f9fafb",  // light text on dark bg
+    color: "#f9fafb",
     marginBottom: 30,
-    boxShadow: "0 4px 20px rgb(30 64 175 / 0.3)", // subtle glowing shadow
+    boxShadow: "0 4px 20px rgb(30 64 175 / 0.3)",
     flexWrap: "wrap",
-    border: 'none',
-    boxSizing: 'border-box',
-    fontSize: '1.1rem',
-    fontWeight: '700',
-    letterSpacing: '0.04em',
+    border: "none",
+    boxSizing: "border-box",
+    fontSize: "1.1rem",
+    fontWeight: "700",
+    letterSpacing: "0.04em",
   },
   dateDisplay: {
-    display: 'flex',
-    alignItems: 'center',
+    display: "flex",
+    alignItems: "center",
     fontWeight: 600,
-    color: "#e0e7ff", // gentle lavender tint
+    color: "#e0e7ff",
     paddingRight: 30,
     marginRight: 20,
-    borderRight: '2px solid #3b82f6',  // vibrant blue separator
-    letterSpacing: '0.05em',
+    borderRight: "2px solid #3b82f6",
+    letterSpacing: "0.05em",
   },
   statsGroup: {
-    display: 'flex',
+    display: "flex",
     gap: 60,
-    justifyContent: 'flex-start',
-    alignItems: 'center',
+    justifyContent: "flex-start",
+    alignItems: "center",
     paddingLeft: 20,
     flexGrow: 1,
   },
   summaryItem: {
-    display: 'flex',
+    display: "flex",
     gap: 10,
-    alignItems: 'baseline',
+    alignItems: "baseline",
   },
   statLabel: {
     fontSize: 17,
     fontWeight: 600,
-    color: 'rgba(255, 255, 255, 0.8)',
-    whiteSpace: 'nowrap',
+    color: "rgba(255, 255, 255, 0.8)",
+    whiteSpace: "nowrap",
   },
   statValue: {
     fontSize: 25,
     fontWeight: 900,
-    color: '#fbbf24', // amber highlight
-    textShadow: '1px 1px 2px #444',
+    color: "#fbbf24",
+    textShadow: "1px 1px 2px #444",
   },
   showUsersButton: {
-    backgroundColor: "#fbbf24",  // warm accent button
+    backgroundColor: "#fbbf24",
     color: "#1e40af",
     fontWeight: 700,
     border: "none",
@@ -368,7 +376,7 @@ const premiumStyles = {
     padding: "12px 28px",
     fontSize: 15,
     cursor: "pointer",
-    transition: 'background-color 0.3s ease',
+    transition: "background-color 0.3s ease",
     boxShadow: "0 5px 10px rgb(251 191 36 / 0.4)",
     userSelect: "none",
   },
@@ -404,10 +412,6 @@ const premiumStyles = {
     boxSizing: "border-box",
     transition: "transform 0.25s ease, box-shadow 0.25s ease",
     cursor: "default",
-    "&:hover": {
-      transform: "translateY(-4px)",
-      boxShadow: "0 14px 38px rgb(0 0 0 / 0.2)",
-    },
   },
   cardContent: {
     display: "flex",
@@ -418,7 +422,7 @@ const premiumStyles = {
   cardName: {
     fontWeight: 800,
     fontSize: 20,
-    color: "#1e3a8a", // rich blue
+    color: "#1e3a8a",
     userSelect: "text",
   },
   cardEmail: {
@@ -445,59 +449,54 @@ const premiumStyles = {
     color: "#334155",
     marginTop: 10,
   },
-  absent: {
-    color: "#f50808ff",
-    fontWeight: 700,
-    marginTop: 10,
-  },
   expandedModalBackdrop: {
-    position: 'fixed',
+    position: "fixed",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(30, 64, 175, 0.85)',
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(30, 64, 175, 0.85)",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
     zIndex: 1100,
     padding: 20,
   },
   expandedModalContent: {
-    backgroundColor: '#ffffff',
+    backgroundColor: "#ffffff",
     borderRadius: 16,
-    boxShadow: '0 20px 40px rgba(30,64,175,0.7)',
-    width: '95%',
-    maxWidth: '1200px',
-    maxHeight: '90vh',
-    overflowY: 'auto',
-    display: 'flex',
-    flexDirection: 'column',
-    position: 'relative',
+    boxShadow: "0 20px 40px rgba(30,64,175,0.7)",
+    width: "95%",
+    maxWidth: "1200px",
+    maxHeight: "90vh",
+    overflowY: "auto",
+    display: "flex",
+    flexDirection: "column",
+    position: "relative",
   },
   modalHeader: {
     padding: "20px 30px",
-    borderBottom: '2px solid #2563eb',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#dbeafe',
-    fontWeight: '700',
+    borderBottom: "2px solid #2563eb",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#dbeafe",
+    fontWeight: "700",
     fontSize: 22,
     color: "#1e40af",
   },
   modalCloseButton: {
-    background: '#ef4444',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '50%',
+    background: "#ef4444",
+    color: "#fff",
+    border: "none",
+    borderRadius: "50%",
     width: 36,
     height: 36,
     fontSize: 26,
-    cursor: 'pointer',
-    lineHeight: '28px',
+    cursor: "pointer",
+    lineHeight: "28px",
     padding: 0,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   tableWrapper: {
     overflowX: "auto",
@@ -515,31 +514,24 @@ const premiumStyles = {
     backgroundColor: "#2563eb",
     color: "#ffffff",
     fontWeight: 700,
-    position: 'sticky',
+    position: "sticky",
     top: 0,
     zIndex: 100,
-    borderRight: '1px solid rgba(255, 255, 255, 0.15)',
-    borderBottom: '2px solid #1e3a8a',
+    borderRight: "1px solid rgba(255, 255, 255, 0.15)",
+    borderBottom: "2px solid #1e3a8a",
   },
   tableTd: {
     padding: 10,
     textAlign: "center",
     borderRight: "1px solid #f3f4f6",
     borderBottom: "1px solid #e0e7ff",
-    color: '#334155',
+    color: "#334155",
     fontSize: 14,
     lineHeight: 1.5,
   },
   highlightRow: {
-    backgroundColor: '#bfdbfe',
-    fontWeight: 'bold',
-    color: '#1e40af',
+    backgroundColor: "#bfdbfe",
+    fontWeight: "bold",
+    color: "#1e40af",
   },
-  notesCell: {
-    whiteSpace: 'normal',
-    maxWidth: '220px',
-    textAlign: 'left',
-    color: '#475569',
-    fontSize: 13,
-  }
 };

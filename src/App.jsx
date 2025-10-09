@@ -4,6 +4,7 @@ import Login from './pages/Login';
 import EmployeeDashboard from './pages/EmployeeDashboard';
 import ChairmanDashboard from './pages/ChairmanDashboard';
 import PrivateRoute from './pages/PrivateRoute'; // <-- import this
+import ManagerDashboard from './pages/ManagerDashboard';
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
         <Route element={<PrivateRoute />}>
           <Route path="/employee" element={<EmployeeDashboard />} />
           <Route path="/chairman" element={<ChairmanDashboard />} />
+          <Route path="/manager-dashboard" element={<ManagerDashboard />} />
         </Route>
       </Routes>
     </Router>
