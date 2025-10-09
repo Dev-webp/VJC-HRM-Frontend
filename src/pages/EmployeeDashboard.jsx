@@ -4,6 +4,8 @@ import LeaveApplication from "./LeaveApplication";
 import AttendanceDashboard from "./AttendanceDashboard";
 import SalarySlips from "./SalarySlips";
 import PayrollSlip from "./PayrollSlip";
+// 👇 IMPORT THE NEW COMPONENT
+import AttendanceChatLogs from "./AttendanceChatLogs"; // Assume this file is created
 
 // Dynamic backend baseUrl logic
 const baseUrl =
@@ -124,6 +126,9 @@ function EmployeeDashboard() {
 
     // Show instructions
     const [showInstructions, setShowInstructions] = useState(false);
+    
+    // 👇 NEW STATE FOR ATTENDANCE CHAT LOGS
+    const [showChatLogs, setShowChatLogs] = useState(false); 
 
     // Images from localStorage
     const [localProfileImage, setLocalProfileImage] = useState(null);
@@ -443,10 +448,36 @@ function EmployeeDashboard() {
 
             {/* ----- Rest of dashboard (Attendance, Leave, Slips) - Width: 1400px ------ */}
             <div style={styles.mainLayout}>
+                {/* 👇 CONDITIONAL CHAT LOGS SECTION */}
+                {profile?.role === 'front-desk' && (
+                    <div style={styles.sectionCard}>
+                         <div style={{display: 'flex', justifyContent: 'flex-end', marginBottom: '15px'}}>
+                            <button 
+                                onClick={() => setShowChatLogs(o => !o)}
+                                style={{
+                                    ...styles.chatLogButton, // A new style is recommended here
+                                    backgroundColor: showChatLogs ? '#dc3545' : '#8e44ad',
+                                    color: 'white',
+                                    padding: '10px 20px',
+                                    borderRadius: '8px',
+                                    fontWeight: '600',
+                                    cursor: 'pointer',
+                                    border: 'none',
+                                    transition: 'background-color 0.2s',
+                                }}
+                            >
+                                {showChatLogs ? '❌ Hide Chat Logs' : '💬 View Attendance Chat Logs'}
+                            </button>
+                        </div>
+                        {showChatLogs && <AttendanceChatLogs />}
+                    </div>
+                )}
+                {/* 👆 END CONDITIONAL CHAT LOGS SECTION */}
+
                 <div style={styles.sectionCard}>
                     <AttendanceDashboard />
                 </div>
-                <div style={styles.sectionCard}>
+                              <div style={styles.sectionCard}>
                     <LeaveApplication onMessage={(msg) => showToast(msg, "info")} />
                 </div>
                 <div style={styles.sectionCard}>
@@ -482,7 +513,7 @@ function EmployeeDashboard() {
                                 <li style={styles.instructionsListItem}>**Grace:** 6 late logins/month before penalties.</li>
                                 <li style={styles.instructionsListItem}>Late arrivals or after 10:15: half-day or absent.</li>
                                 <li style={styles.instructionsListItem}>Minimum work for full day is **8 hours**.</li>
-                                <li style={styles.instructionsListItem}>Lunch log must be **before 2:00 PM**.</li>
+                                <li style={styles.instructionsListItem}>*User has no log on saturday or monday then Sunday is also marked as Absent /and make your logs on Saturday logout:7:00pm and on Monday Login before 10:15am if not these two marked as Absent on Sunday**.</li>
                                 <li style={styles.instructionsListItem}>Unapproved leave = Full-day absence.</li>
                                 <li style={styles.instructionsListItem}>**If you forget to logout, marked absent.**</li>
                                 <li style={styles.instructionsListItem}>Partial attendance in slots = half-day.</li>
@@ -593,7 +624,7 @@ const styles = {
     profileTopWrap: {
         maxWidth: 1400,
         width: '100%',
-        position: "relative",
+        position: 'relative',
         boxSizing: 'border-box',
     },
     profileBg: {
@@ -862,36 +893,27 @@ const styles = {
         position: "relative",
     },
     instructionsHeader: {
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        padding: "19px 33px",
-        background: "linear-gradient(45deg, #7a56fa, #ff976f 54%)",
-        color: "#fff",
-        borderTopLeftRadius: "16px",
-        borderTopRightRadius: "16px",
+        padding: '20px 30px',
+        borderBottom: '1px solid #eee',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
     },
     instructionsCloseButton: {
-        fontSize: 29,
-        background: "transparent",
-        border: "none",
-        cursor: "pointer",
-        lineHeight: 1,
-        color: "#fff",
-        fontWeight: "bold",
-        padding: "0 10px",
+        background: 'none',
+        border: 'none',
+        fontSize: '2rem',
+        cursor: 'pointer',
+        color: '#666',
     },
     instructionsContent: {
-        fontSize: 17,
-        color: "#333",
-        padding: "30px",
+        padding: '10px 30px 30px 30px',
+        fontSize: '1rem',
+        lineHeight: 1.6,
+        color: '#444',
     },
     instructionsListItem: {
-        marginBottom: "14px",
-        padding: "7px 0",
-        borderBottom: "1px dotted #dda",
-        fontWeight: 500,
-        color: "#572600"
+        marginBottom: '8px',
     }
 };
 

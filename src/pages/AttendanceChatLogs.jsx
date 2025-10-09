@@ -70,8 +70,8 @@ export default function AttendanceChatLogs() {
 
   // Filter attendance data based on role and location
   const filteredAttendanceData = attendanceData.filter((user) => {
-    if (currentUserRole === "chairman") {
-      return true; // Show all users
+    if (currentUserRole === "chairman" || currentUserRole === "front-desk") {
+      return true; // Show all users for chairman and front-desk
     } else if (currentUserRole === "manager") {
       // Show users only from manager's location
       return user.location === currentUserLocation;
