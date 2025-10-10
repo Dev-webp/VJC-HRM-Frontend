@@ -21,15 +21,15 @@ function playClickSound() {
 }    
 
 // --- Utility functions ---
+
 function parseTime(timeStr) {
     if (!timeStr) return null;
     const cleaned = timeStr.split('.')[0];
     const parts = cleaned.split(':');
     const h = parseInt(parts[0] || '0', 10);
     const m = parseInt(parts[1] || '0', 10);
-    const s = parseInt(parts[2] || '0', 10);
-    if (isNaN(h) || isNaN(m) || isNaN(s)) return null;
-    return new Date(Date.UTC(1970, 0, 1, h, m, s));
+    // Always set seconds to zero
+    return new Date(Date.UTC(1970, 0, 1, h, m, 0));
 }
 
 function toIndianTime(isoTimeStr) {
