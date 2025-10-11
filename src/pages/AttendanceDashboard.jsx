@@ -208,6 +208,7 @@ function classifyDayPolicy({ isoDate, weekday, log, holidaysMap, monthlyLateStat
   const netHours = millisToDecimalHours(netMillis);
   const netHHMM = fmtHrsMinFromMillis(netMillis);
   const lateInfo = evaluateLateLogin(log);
+  
   const isExceededLate = monthlyLateStats.exceededDates?.includes(isoDate);
   if (weekday === 1) {
     const officeInTime = parseTime(log?.office_in);
@@ -245,7 +246,7 @@ function classifyDayPolicy({ isoDate, weekday, log, holidaysMap, monthlyLateStat
     // Monday login before 10:15 AM (grace)
     const loginMondayTime = parseTime(mondayLog.office_in);
     const lateGraceTime = parseTime(LATE_GRACE_LIMIT);
-
+    
     // Conditions for Sunday as holiday
     if (
       (logoutSatTime && cutoffLogoutTime && logoutSatTime >= cutoffLogoutTime) || (saturdayLog.leave_type && (saturdayLog.leave_type.toLowerCase().includes('paid') || saturdayLog.leave_type.toLowerCase().includes('half'))) &&

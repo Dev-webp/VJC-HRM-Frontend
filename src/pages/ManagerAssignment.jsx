@@ -8,7 +8,7 @@ function ManagerAssignment({ baseUrl, premiumStyles }) {
   const [location, setLocation] = useState(""); 
   const [message, setMessage] = useState("");
   // Change: Locations list
-  const locations = ["Banglore", "Hyderabad", "Mumbai", "Delhi", "Kolkata", "Chennai"]; 
+  const locations = ["Bangalore", "Hyderabad", "Mumbai", "Delhi", "Kolkata", "Chennai"]; 
 
   // Ensure styles are available
   if (!premiumStyles) {
