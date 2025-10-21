@@ -979,8 +979,8 @@ export default function UserManagement() {
                                   aria-label={`Assign location to manager ${user.email}`}
                                 >
                                   <option value="">Select Location</option>
-                                  <option value="bangalore">Bangalore</option>
-                                  <option value="hyderabad">Hyderabad</option>
+                                  <option value="Bangalore">Bangalore</option>
+                                  <option value="Hyderabad">Hyderabad</option>
                                 </select>
                               )}
                               <button
