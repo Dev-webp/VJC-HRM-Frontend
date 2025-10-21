@@ -8,8 +8,8 @@ const baseUrl =
     : "https://backend.vjcoverseas.com";
 
 const colors = {
-  orange500: "#f97316", // Tailwind orange-500 approx
-  blue400: "#60a5fa", // Tailwind blue-400 approx
+  orange500: "#f97316",
+  blue400: "#60a5fa",
   white: "#ffffff",
   gray100: "#f3f4f6",
   gray300: "#d1d5db",
@@ -25,42 +25,6 @@ const styles = {
     color: colors.gray700,
     backgroundColor: colors.gray100,
     minHeight: "100vh",
-  },
-  header: {
-    display: "flex",
-    alignItems: "center",
-    gap: 16,
-    marginBottom: 24,
-    flexWrap: "wrap",
-  },
-  logo: {
-    width: 48,
-    height: 48,
-    backgroundColor: colors.orange500,
-    borderRadius: "50%",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontWeight: "700",
-    fontSize: 24,
-    color: colors.white,
-    userSelect: "none",
-  },
-  titleSection: {
-    flex: 1,
-    minWidth: 220,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "700",
-    margin: 0,
-    color: colors.orange500,
-    userSelect: "none",
-  },
-  subtitle: {
-    fontSize: 16,
-    color: colors.gray700,
-    marginTop: 4,
   },
   section: {
     backgroundColor: colors.white,
@@ -103,21 +67,21 @@ const styles = {
     color: colors.white,
   },
   btnPrimaryHover: {
-    backgroundColor: "#ea580c", // darker orange
+    backgroundColor: "#ea580c",
   },
   btnSecondary: {
     backgroundColor: colors.blue400,
     color: colors.white,
   },
   btnSecondaryHover: {
-    backgroundColor: "#3b82f6", // darker blue
+    backgroundColor: "#3b82f6",
   },
   btnDanger: {
-    backgroundColor: "#ef4444", // red-500
+    backgroundColor: "#ef4444",
     color: colors.white,
   },
   btnDangerHover: {
-    backgroundColor: "#dc2626", // red-600
+    backgroundColor: "#dc2626",
   },
   table: {
     width: "100%",
@@ -167,32 +131,47 @@ const styles = {
   toggleBtnHover: {
     backgroundColor: "#ea580c",
   },
-  labelWithWarning: {
-    display: "flex",
-    alignItems: "center",
-    gap: 6,
-    fontWeight: "700",
-    color: colors.gray700,
-  },
-  warningSymbol: {
-    color: colors.orange500,
-    fontWeight: "900",
-    fontSize: 20,
-    lineHeight: 1,
-    userSelect: "none",
-  },
-  msgSuccess: {
-    marginTop: 12,
-    color: "#22c55e", // green-500
-    fontWeight: "600",
-  },
-  msgError: {
-    marginTop: 12,
-    color: "#ef4444", // red-500
-    fontWeight: "600",
-  },
   responsiveTableWrapper: {
     overflowX: "auto",
+  },
+  assignContainer: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 8,
+    alignItems: "center",
+  },
+  assignSelect: {
+    minWidth: 120,
+    flexGrow: 1,
+    padding: 6,
+    borderRadius: 6,
+    border: `1px solid ${colors.gray300}`,
+  },
+  assignButton: {
+    minWidth: 60,
+    padding: "6px 12px",
+    borderRadius: 6,
+    cursor: "pointer",
+    border: "none",
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  removeRoleBtn: {
+    backgroundColor: "#dc2626",
+    color: colors.white,
+    padding: "6px 10px",
+    borderRadius: 6,
+    cursor: "pointer",
+    fontWeight: "700",
+    fontSize: 14,
+    border: "none",
+  },
+  assignedRoleDisplay: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+    fontSize: 14,
+    color: colors.gray700,
   },
 };
 
@@ -223,39 +202,40 @@ export default function UserManagement() {
   const [showAllUsers, setShowAllUsers] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [missingFields, setMissingFields] = useState([]);
-  
-  // 🆕 State for the logged-in user's data
+
+  // Assign states to track role/location assignments
+  const [assigningEmail, setAssigningEmail] = useState(null);
+  const [assignRole, setAssignRole] = useState("");
+  const [assignLocation, setAssignLocation] = useState("");
+
+  // Current logged-in user & loading info
   const [currentUser, setCurrentUser] = useState(null);
   const [currentUserLoading, setCurrentUserLoading] = useState(true);
 
-  // 🆕 Function to fetch the logged-in user's details
+  // Check if current user is Chairman
+  const isChairman = currentUser?.role?.toLowerCase() === "chairman";
+
+  // Fetch current logged-in user
   const fetchCurrentUser = async () => {
     try {
       const res = await axios.get(`${baseUrl}/me`, { withCredentials: true });
       setCurrentUser(res.data);
     } catch (err) {
       console.error("❌ Failed to fetch current user:", err);
-      // Handle scenario where user is not logged in or token is expired
     } finally {
       setCurrentUserLoading(false);
     }
   };
 
-  // 🆕 Call fetchCurrentUser once on component mount
-  useEffect(() => {
-    fetchCurrentUser();
-  }, []);
-
+  // Fetch all users with filtering per current user's role/location
   const fetchUsers = async () => {
-    // ⚠️ Only fetch if current user data is available
     if (!currentUser) return;
-
     setLoading(true);
     try {
       const url = `${baseUrl}/all-attendance`;
       const res = await axios.get(url, { withCredentials: true });
       const data = res.data;
-      
+
       const formatted = Object.entries(data).map(([email, info]) => ({
         email,
         name: info.name || "",
@@ -274,23 +254,19 @@ export default function UserManagement() {
         department: info.department || "",
       }));
 
-      // 🆕 Logic to filter users based on role and location
       let filteredData = formatted;
       const userRole = currentUser.role?.toLowerCase();
       const userLocation = currentUser.location?.toLowerCase();
 
       if (userRole !== "chairman") {
-        // If not 'chairman', filter by location
         if (userRole === "manager" && userLocation) {
           filteredData = formatted.filter(
             (user) => user.location?.toLowerCase() === userLocation
           );
         } else {
-          // Fallback for other roles, perhaps show no one or just themselves (though the backend should handle this if needed)
           filteredData = [];
         }
-      } 
-      // If role IS 'chairman', the list remains 'formatted' (all users)
+      }
 
       setUsers(filteredData);
     } catch (err) {
@@ -299,11 +275,17 @@ export default function UserManagement() {
     setLoading(false);
   };
 
-  // ⚠️ Dependency array now includes currentUser
+  // Fetch current user on mount
+  useEffect(() => {
+    fetchCurrentUser();
+  }, []);
+
+  // Fetch users when toggling showAllUsers or currentUser changes
   useEffect(() => {
     if (showAllUsers && currentUser) fetchUsers();
   }, [showAllUsers, currentUser]);
 
+  // Validation for new user mandatory fields
   const validateNewUser = () => {
     const requiredFields = [
       "email",
@@ -318,6 +300,7 @@ export default function UserManagement() {
     return missing.length === 0;
   };
 
+  // Create new user handler
   const handleCreateUser = async () => {
     setUserCreationMsg("");
     if (!validateNewUser()) {
@@ -372,6 +355,7 @@ export default function UserManagement() {
     }
   };
 
+  // Upload offer letter handler
   const handleOfferLetterUpload = async () => {
     setOfferLetterMsg("");
     if (!offerLetterEmail.trim() || !offerLetterFile) {
@@ -394,6 +378,7 @@ export default function UserManagement() {
     }
   };
 
+  // Start editing an existing user
   const startEditingUser = (email, user) => {
     setEditingEmail(email);
     setEditedUser({
@@ -412,11 +397,13 @@ export default function UserManagement() {
     });
   };
 
+  // Cancel editing mode
   const cancelEditing = () => {
     setEditingEmail(null);
     setEditedUser({});
   };
 
+  // Change input value for editing user
   const handleChangeUserField = (field, value) => {
     setEditedUser((prev) => ({
       ...prev,
@@ -424,6 +411,7 @@ export default function UserManagement() {
     }));
   };
 
+  // Save edits for an existing user
   const saveUserEdits = async () => {
     try {
       const payload = {
@@ -457,18 +445,66 @@ export default function UserManagement() {
     }
   };
 
+  // Save role/location assignment for a user
+  const saveAssignment = async () => {
+    if (!assignRole) {
+      alert("Please select a role to assign");
+      return;
+    }
+    if (assignRole === "manager" && !assignLocation) {
+      alert("Please select a location for Manager role");
+      return;
+    }
+    try {
+      const payload = {
+        role: assignRole,
+      };
+      if (assignRole === "manager") {
+        payload.location = assignLocation;
+      }
+      await axios.put(
+        `${baseUrl}/update-user/${encodeURIComponent(assigningEmail)}`,
+        payload,
+        { withCredentials: true }
+      );
+      alert(`✅ Assigned ${assignRole}${assignRole === "manager" ? ` at ${assignLocation}` : ""} to ${assigningEmail}`);
+      setAssigningEmail(null);
+      setAssignRole("");
+      setAssignLocation("");
+      if (showAllUsers) fetchUsers();
+    } catch (err) {
+      console.error("❌ Failed to assign role/location:", err);
+      alert("❌ Failed to assign role/location. Check console for details.");
+    }
+  };
+
+  // Remove role (and location) from a user (chairman only)
+  const removeUserRole = async (email) => {
+    if (!window.confirm(`Remove role for ${email}? This action cannot be undone.`)) return;
+    try {
+      await axios.put(
+        `${baseUrl}/update-user/${encodeURIComponent(email)}`,
+        { role: "", location: "" },
+        { withCredentials: true }
+      );
+      alert(`✅ Role removed for ${email}`);
+      if (showAllUsers) fetchUsers();
+    } catch (err) {
+      console.error("❌ Failed to remove user role:", err);
+      alert("❌ Failed to remove user role. Check console for details.");
+    }
+  };
+
   // Filter users by search term
   const filteredUsers = users.filter(({ email, name }) => {
     const term = searchTerm.toLowerCase();
-    return (
-      email.toLowerCase().includes(term) || (name && name.toLowerCase().includes(term))
-    );
+    return email.toLowerCase().includes(term) || (name && name.toLowerCase().includes(term));
   });
 
-  // Helper to check if field is missing for new user validation
+  // Helper to check if any required field is missing for new user
   const isMissing = (field) => missingFields.includes(field);
 
-  // 🆕 Render a loading message while fetching current user data
+  // Loading message while fetching current user
   if (currentUserLoading) {
     return <div style={styles.container}><p>Authenticating user role...</p></div>;
   }
@@ -619,7 +655,7 @@ export default function UserManagement() {
         {userCreationMsg && (
           <p
             style={
-              userCreationMsg.startsWith("✅") ? styles.msgSuccess : styles.msgError
+              userCreationMsg.startsWith("✅") ? { color: "#22c55e", fontWeight: "600", marginTop: 12 } : { color: "#ef4444", fontWeight: "600", marginTop: 12 }
             }
             role="alert"
           >
@@ -679,11 +715,13 @@ export default function UserManagement() {
                     <th style={styles.th}>Department</th>
                     <th style={styles.th}>Password (Reset)</th>
                     <th style={styles.th}>Actions</th>
+                    <th style={styles.th}>Assign / Manage Role</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredUsers.map((user) => {
                     const isEditing = editingEmail === user.email;
+                    const isAssigning = assigningEmail === user.email;
                     return (
                       <tr key={user.email}>
                         <td style={styles.td}>{user.email}</td>
@@ -701,7 +739,9 @@ export default function UserManagement() {
                           )}
                         </td>
                         <td style={styles.td}>
-                          {isEditing ? (
+                          {isChairman && !isAssigning && !isEditing ? (
+                            user.role || <em>-</em>
+                          ) : isEditing ? (
                             <input
                               type="text"
                               value={editedUser.role || ""}
@@ -714,7 +754,9 @@ export default function UserManagement() {
                           )}
                         </td>
                         <td style={styles.td}>
-                          {isEditing ? (
+                          {isChairman && !isAssigning && !isEditing ? (
+                            user.location || <em>-</em>
+                          ) : isEditing ? (
                             <input
                               type="text"
                               value={editedUser.location || ""}
@@ -893,6 +935,90 @@ export default function UserManagement() {
                             </button>
                           )}
                         </td>
+                        <td style={{ ...styles.td, minWidth: 180 }}>
+                          {isChairman && !isAssigning && user.role ? (
+                            // Show assigned role & location and allow role removal
+                            <div style={styles.assignedRoleDisplay}>
+                              <div>
+                                <strong>Role:</strong> {user.role || "None"}
+                              </div>
+                              {user.role === "manager" && user.location && (
+                                <div>
+                                  <strong>Location:</strong> {user.location}
+                                </div>
+                              )}
+                              <button
+                                style={styles.removeRoleBtn}
+                                onClick={() => removeUserRole(user.email)}
+                                aria-label={`Remove role for ${user.email}`}
+                              >
+                                Remove Role
+                              </button>
+                            </div>
+                          ) : isAssigning ? (
+                            // Assign role + location controls
+                            <div style={styles.assignContainer}>
+                              <select
+                                style={styles.assignSelect}
+                                value={assignRole}
+                                onChange={(e) => {
+                                  setAssignRole(e.target.value);
+                                  if (e.target.value !== "manager") setAssignLocation("");
+                                }}
+                                aria-label={`Assign role to ${user.email}`}
+                              >
+                                <option value="">Select Role</option>
+                                <option value="manager">Manager</option>
+                                <option value="frontdesk">Frontdesk</option>
+                              </select>
+                              {assignRole === "manager" && (
+                                <select
+                                  style={styles.assignSelect}
+                                  value={assignLocation}
+                                  onChange={(e) => setAssignLocation(e.target.value)}
+                                  aria-label={`Assign location to manager ${user.email}`}
+                                >
+                                  <option value="">Select Location</option>
+                                  <option value="bangalore">Bangalore</option>
+                                  <option value="hyderabad">Hyderabad</option>
+                                </select>
+                              )}
+                              <button
+                                style={{ ...styles.btn, ...styles.btnPrimary, minWidth: 70 }}
+                                onClick={saveAssignment}
+                                type="button"
+                              >
+                                Save
+                              </button>
+                              <button
+                                style={{ ...styles.btn, ...styles.btnDanger, minWidth: 70 }}
+                                onClick={() => {
+                                  setAssigningEmail(null);
+                                  setAssignRole("");
+                                  setAssignLocation("");
+                                }}
+                                type="button"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            !isEditing && (
+                              <button
+                                style={{ ...styles.btn, ...styles.btnSecondary, minWidth: 80 }}
+                                onClick={() => {
+                                  setAssigningEmail(user.email);
+                                  setAssignRole("");
+                                  setAssignLocation("");
+                                }}
+                                type="button"
+                                aria-label={`Assign role to ${user.email}`}
+                              >
+                                Assign
+                              </button>
+                            )
+                          )}
+                        </td>
                       </tr>
                     );
                   })}
@@ -907,7 +1033,10 @@ export default function UserManagement() {
 
       {/* Offer Letter Upload Section */}
       <section style={styles.section} aria-labelledby="offer-letter-heading">
-        <h2 id="offer-letter-heading" style={{ color: colors.blue400, fontWeight: "700", marginBottom: 18 }}>
+        <h2
+          id="offer-letter-heading"
+          style={{ color: colors.blue400, fontWeight: "700", marginBottom: 18 }}
+        >
           📄 Upload Offer Letter
         </h2>
         <p>You can upload an offer letter for any existing user by their email.</p>
@@ -949,7 +1078,7 @@ export default function UserManagement() {
         {offerLetterMsg && (
           <p
             style={
-              offerLetterMsg.startsWith("✅") ? styles.msgSuccess : styles.msgError
+              offerLetterMsg.startsWith("✅") ? { color: "#22c55e", fontWeight: "600", marginTop: 12 } : { color: "#ef4444", fontWeight: "600", marginTop: 12 }
             }
             role="alert"
           >

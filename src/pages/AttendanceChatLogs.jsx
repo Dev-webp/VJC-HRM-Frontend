@@ -15,6 +15,11 @@ export default function AttendanceChatLogs() {
   const [currentUserRole, setCurrentUserRole] = useState(null);
   const [currentUserLocation, setCurrentUserLocation] = useState(null);
 
+  // Edit states
+  const [editLogUserEmail, setEditLogUserEmail] = useState(null);
+  const [editLogData, setEditLogData] = useState({});
+  const [editSaving, setEditSaving] = useState(false);
+
   // Fetch logged in user's role and location
   useEffect(() => {
     async function fetchUserInfo() {
@@ -71,12 +76,10 @@ export default function AttendanceChatLogs() {
   // Filter attendance data based on role and location
   const filteredAttendanceData = attendanceData.filter((user) => {
     if (currentUserRole === "chairman" || currentUserRole === "front-desk") {
-      return true; // Show all users for chairman and front-desk
+      return true;
     } else if (currentUserRole === "manager") {
-      // Show users only from manager's location
       return user.location === currentUserLocation;
     }
-    // Other roles show none in this UI
     return false;
   });
 
@@ -97,100 +100,248 @@ export default function AttendanceChatLogs() {
       return nameA.localeCompare(nameB);
     });
 
-  const totalUsers = userLogs.length;
-  const presentUsers = userLogs.filter((u) => u.todayAttendance.office_in)
-    .length;
-  const absentUsers = totalUsers - presentUsers;
+const userLogsNoChairman = userLogs.filter(user => user.role !== "chairman");
+const totalUsers = userLogsNoChairman.length;
+const presentUsers = userLogsNoChairman.filter(u => u.todayAttendance.office_in).length;
+const absentUsers = totalUsers - presentUsers;
 
-  const ExpandedLogSection = ({ user }) => (
-    <div style={premiumStyles.expandedModalBackdrop}>
-      <div style={premiumStyles.expandedModalContent}>
-        <div style={premiumStyles.modalHeader}>
-          <h2>
-            Monthly Attendance Log for{" "}
-            <span style={{ color: premiumStyles.viewLogButton.backgroundColor }}>
-              {user.name || user.email}
-            </span>
-          </h2>
-          <button
-            style={premiumStyles.modalCloseButton}
-            onClick={() => setExpandedUserEmail(null)}
-          >
-            &times;
-          </button>
-        </div>
 
-        <div style={premiumStyles.tableWrapper}>
-          <table style={premiumStyles.table}>
-            <thead>
-              <tr style={premiumStyles.tableHeaderRow}>
-                <th style={premiumStyles.tableTh}>DATE</th>
-                <th style={premiumStyles.tableTh}>LOGIN</th>
-                <th style={premiumStyles.tableTh}>B.IN</th>
-                <th style={premiumStyles.tableTh}>B.OUT</th>
-                <th style={premiumStyles.tableTh}>L.IN</th>
-                <th style={premiumStyles.tableTh}>L.OUT</th>
-                <th style={premiumStyles.tableTh}>B2.IN</th>
-                <th style={premiumStyles.tableTh}>B2.OUT</th>
-                <th style={premiumStyles.tableTh}>EXTRA BREAK INS</th>
-                <th style={premiumStyles.tableTh}>EXTRA BREAK OUTS</th>
-                <th style={premiumStyles.tableTh}>LOGOUT</th>
-                <th style={premiumStyles.tableTh}>REMARKS</th>
-              </tr>
-            </thead>
-            <tbody>
-              {user.attendance.map((log) => (
-                <tr
-                  key={log.date}
-                  style={{
-                    ...premiumStyles.tableBodyRow,
-                    ...(log.date === todayStr ? premiumStyles.highlightRow : {}),
-                  }}
+  // Edit logic
+  const startEditLogs = (user) => {
+    setEditLogUserEmail(user.email);
+    const editObj = {};
+    (user.attendance || []).forEach((log) => {
+      editObj[log.date] = { ...log };
+    });
+    setEditLogData(editObj);
+  };
+
+  const handleLogFieldChange = (date, field, value) => {
+    setEditLogData((prev) => ({
+      ...prev,
+      [date]: {
+        ...prev[date],
+        [field]: value,
+      },
+    }));
+  };
+
+  // Save attendance edits
+  const saveEditedLogs = async (userEmail) => {
+    setEditSaving(true);
+    try {
+      await axios.put(
+        `${baseUrl}/edit-attendance/${encodeURIComponent(userEmail)}`,
+        { logs: Object.values(editLogData) },
+        { withCredentials: true }
+      );
+      setEditLogUserEmail(null);
+      setEditLogData({});
+      fetchAttendanceLogs();
+    } catch (e) {
+      alert("Failed to save edits.");
+    }
+    setEditSaving(false);
+  };
+
+  const ExpandedLogSection = ({ user }) => {
+    const isEditing = editLogUserEmail === user.email;
+    return (
+      <div style={premiumStyles.expandedModalBackdrop}>
+        <div style={premiumStyles.expandedModalContent}>
+          <div style={premiumStyles.modalHeader}>
+            <h2>
+              Monthly Attendance Log for{" "}
+              <span style={{ color: premiumStyles.viewLogButton.backgroundColor }}>
+                {user.name || user.email}
+              </span>
+            </h2>
+            <div>
+              {!isEditing && (
+                <button
+                  style={{ ...premiumStyles.viewLogButton, marginRight: 10 }}
+                  onClick={() => startEditLogs(user)}
                 >
-                  <td style={premiumStyles.tableTd}>{log.date}</td>
-                  <td style={premiumStyles.tableTd}>{formatTime(log.office_in)}</td>
-                  <td style={premiumStyles.tableTd}>{formatTime(log.break_in)}</td>
-                  <td style={premiumStyles.tableTd}>{formatTime(log.break_out)}</td>
-                  <td style={premiumStyles.tableTd}>{formatTime(log.lunch_in)}</td>
-                  <td style={premiumStyles.tableTd}>{formatTime(log.lunch_out)}</td>
-                  <td style={premiumStyles.tableTd}>{formatTime(log.break_in_2)}</td>
-                  <td style={premiumStyles.tableTd}>{formatTime(log.break_out_2)}</td>
-                  <td
-                    style={{
-                      ...premiumStyles.tableTd,
-                      whiteSpace: "pre-wrap",
-                      textAlign: "center",
-                      fontSize: 12,
-                    }}
-                  >
-                    {log.extra_break_ins && log.extra_break_ins.length > 0
-                      ? log.extra_break_ins.map((t) => (t ? t : "-")).join("\n")
-                      : "-"}
-                  </td>
-                  <td
-                    style={{
-                      ...premiumStyles.tableTd,
-                      whiteSpace: "pre-wrap",
-                      textAlign: "center",
-                      fontSize: 12,
-                    }}
-                  >
-                    {log.extra_break_outs && log.extra_break_outs.length > 0
-                      ? log.extra_break_outs.map((t) => (t ? t : "-")).join("\n")
-                      : "-"}
-                  </td>
-                  <td style={premiumStyles.tableTd}>{formatTime(log.office_out)}</td>
-                  <td style={premiumStyles.tableTd}>
-                    {log.paid_leave_reason || log.reason || "-"}
-                  </td>
+                  Edit
+                </button>
+              )}
+              {isEditing && (
+                <button
+                  style={{ ...premiumStyles.viewLogButton, marginRight: 10, background: "#10b981" }}
+                  disabled={editSaving}
+                  onClick={() => saveEditedLogs(user.email)}
+                >
+                  {editSaving ? "Saving..." : "Save"}
+                </button>
+              )}
+              <button
+                style={premiumStyles.modalCloseButton}
+                onClick={() => {
+                  setExpandedUserEmail(null);
+                  setEditLogUserEmail(null);
+                  setEditLogData({});
+                }}
+              >
+                &times;
+              </button>
+            </div>
+          </div>
+          <div style={premiumStyles.tableWrapper}>
+            <table style={premiumStyles.table}>
+              <thead>
+                <tr style={premiumStyles.tableHeaderRow}>
+                  <th style={premiumStyles.tableTh}>DATE</th>
+                  <th style={premiumStyles.tableTh}>LOGIN</th>
+                  <th style={premiumStyles.tableTh}>B.IN</th>
+                  <th style={premiumStyles.tableTh}>B.OUT</th>
+                  <th style={premiumStyles.tableTh}>L.IN</th>
+                  <th style={premiumStyles.tableTh}>L.OUT</th>
+                  <th style={premiumStyles.tableTh}>B2.IN</th>
+                  <th style={premiumStyles.tableTh}>B2.OUT</th>
+                   <th style={premiumStyles.tableTh}>LOGOUT</th>
+                  <th style={premiumStyles.tableTh}>EXTRA BREAK INS</th>
+                  <th style={premiumStyles.tableTh}>EXTRA BREAK OUTS</th>
+                 
+                  <th style={premiumStyles.tableTh}>REMARKS</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {(user.attendance || []).map((log) => {
+                  const rowIsToday = log.date === todayStr;
+                  const rowData =
+                    isEditing && editLogData[log.date]
+                      ? editLogData[log.date]
+                      : log;
+                  return (
+                    <tr
+                      key={log.date}
+                      style={{
+                        ...premiumStyles.tableBodyRow,
+                        ...(rowIsToday ? premiumStyles.highlightRow : {}),
+                      }}
+                    >
+                      <td style={premiumStyles.tableTd}>{log.date}</td>
+                      {[
+                        "office_in",
+                        "break_in",
+                        "break_out",
+                        "lunch_in",
+                        "lunch_out",
+                        "break_in_2",
+                        "break_out_2",
+                        "office_out",
+                      ].map((field) => (
+                        <td style={premiumStyles.tableTd} key={field}>
+                          {isEditing ? (
+                            <input
+                              type="time"
+                              value={
+                                rowData[field] ? rowData[field].slice(0, 5) : ""
+                              }
+                              onChange={(e) =>
+                                handleLogFieldChange(
+                                  log.date,
+                                  field,
+                                  e.target.value
+                                )
+                              }
+                              style={{ width: 86 }}
+                            />
+                          ) : (
+                            formatTime(log[field])
+                          )}
+                        </td>
+                      ))}
+                      <td
+                        style={{
+                          ...premiumStyles.tableTd,
+                          whiteSpace: "pre-wrap",
+                          textAlign: "center",
+                          fontSize: 12,
+                        }}
+                      >
+                        {isEditing ? (
+                          <input
+                            style={{ width: "100px" }}
+                            value={(rowData.extra_break_ins || []).join(",")}
+                            placeholder="09:00,16:24"
+                            onChange={(e) =>
+                              handleLogFieldChange(
+                                log.date,
+                                "extra_break_ins",
+                                e.target.value
+                                  .split(",")
+                                  .map((v) => v.trim())
+                                  .filter(Boolean)
+                              )
+                            }
+                          />
+                        ) : log.extra_break_ins && log.extra_break_ins.length > 0 ? (
+                          log.extra_break_ins.map((t) => t || "-").join("\n")
+                        ) : (
+                          "-"
+                        )}
+                      </td>
+                      <td
+                        style={{
+                          ...premiumStyles.tableTd,
+                          whiteSpace: "pre-wrap",
+                          textAlign: "center",
+                          fontSize: 12,
+                        }}
+                      >
+                        {isEditing ? (
+                          <input
+                            style={{ width: "100px" }}
+                            value={(rowData.extra_break_outs || []).join(",")}
+                            placeholder="12:00,18:02"
+                            onChange={(e) =>
+                              handleLogFieldChange(
+                                log.date,
+                                "extra_break_outs",
+                                e.target.value
+                                  .split(",")
+                                  .map((v) => v.trim())
+                                  .filter(Boolean)
+                              )
+                            }
+                          />
+                        ) : log.extra_break_outs && log.extra_break_outs.length > 0 ? (
+                          log.extra_break_outs.map((t) => t || "-").join("\n")
+                        ) : (
+                          "-"
+                        )}
+                      </td>
+                      <td style={premiumStyles.tableTd}>
+                        {isEditing ? (
+                          <input
+                            style={{ width: 140 }}
+                            value={rowData.paid_leave_reason || rowData.reason || ""}
+                            placeholder="Remarks"
+                            onChange={(e) =>
+                              handleLogFieldChange(
+                                log.date,
+                                rowData.paid_leave_reason
+                                  ? "paid_leave_reason"
+                                  : "reason",
+                                e.target.value
+                              )
+                            }
+                          />
+                        ) : (
+                          log.paid_leave_reason || log.reason || "-"
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const expandedUser = userLogs.find((u) => u.email === expandedUserEmail);
 
@@ -232,11 +383,13 @@ export default function AttendanceChatLogs() {
       ) : (
         showCards && (
           <div style={premiumStyles.cardsContainer}>
-            {userLogs.map((user) => {
-              const isPresent = user.todayAttendance.office_in;
-              return (
-                <div
-                  key={user.email}
+          {userLogs
+  .filter(user => user.role !== "chairman") // hide chairman user card ONLY
+  .map((user) => {
+    const isPresent = user.todayAttendance.office_in;
+    return (
+      <div
+        key={user.email}
                   style={{
                     ...premiumStyles.card,
                     borderLeft: isPresent
@@ -535,3 +688,4 @@ const premiumStyles = {
     color: "#1e40af",
   },
 };
+
