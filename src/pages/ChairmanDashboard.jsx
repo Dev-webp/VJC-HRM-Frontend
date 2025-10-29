@@ -93,8 +93,6 @@ const ComponentRenderer = ({
 
   return <ActiveComponent />;
 };
-
-// --- Leave Requests Section ---
 function LeaveRequestsSection({
   leaveRequests,
   message,
@@ -148,6 +146,7 @@ function LeaveRequestsSection({
                   >
                     {req.status}
                   </td>
+                  {/* REMARKS COLUMN - Final Version */}
                   <td style={premiumStyles.table.dataCell}>
                     {req.status.toLowerCase() === "pending" ? (
                       <input
@@ -158,9 +157,24 @@ function LeaveRequestsSection({
                         style={premiumStyles.input}
                       />
                     ) : (
-                      req.chairman_remarks || "-"
+                      <span style={{ fontSize: "0.85em", color: "#333" }}>
+                        {req.chairman_remarks || "-"}
+                        {(req.actioned_by_role || req.actioned_by_name) && (
+                          <>
+                            <br />
+                            <span style={{ color: "#888", fontSize: "0.8em", fontStyle: "italic" }}>
+                              {req.status.toLowerCase() === "approved"
+                                ? `Approved By: ${req.actioned_by_role || ""}${req.actioned_by_name ? " - " + req.actioned_by_name : ""}`
+                                : req.status.toLowerCase() === "rejected"
+                                ? `Rejected By: ${req.actioned_by_role || ""}${req.actioned_by_name ? " - " + req.actioned_by_name : ""}`
+                                : `By: ${req.actioned_by_role || ""}${req.actioned_by_name ? " - " + req.actioned_by_name : ""}`}
+                            </span>
+                          </>
+                        )}
+                      </span>
                     )}
                   </td>
+                  {/* END REMARKS COLUMN */}
                   <td style={{ ...premiumStyles.table.dataCell, whiteSpace: "nowrap" }}>
                     {req.status.toLowerCase() === "pending" && (
                       <>

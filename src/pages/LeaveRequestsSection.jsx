@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 
-// Base URL configuration from the original code
 const baseUrl =
   window.location.hostname === "localhost"
     ? "http://localhost:5000"
@@ -96,8 +95,6 @@ const premiumStyles = {
 export default function LeaveRequestsContainer() {
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [message, setMessage] = useState("");
-
-  // User info states
   const [userRole, setUserRole] = useState("");
   const [userLocation, setUserLocation] = useState("");
 
@@ -152,9 +149,7 @@ export default function LeaveRequestsContainer() {
 
   // delete leave request
   async function deleteLeaveRequest(id) {
-    if (!window.confirm("Are you sure you want to delete this leave request?"))
-      return;
-
+    if (!window.confirm("Are you sure you want to delete this leave request?")) return;
     setMessage("⏳ Deleting request...");
     try {
       await axios.delete(`${baseUrl}/delete-leave-request/${id}`, {
@@ -281,7 +276,27 @@ export default function LeaveRequestsContainer() {
                         style={premiumStyles.input}
                       />
                     ) : (
-                      req.chairman_remarks || "-"
+                      <span style={{ fontSize: "0.85em", color: "#333" }}>
+                        {req.chairman_remarks || "-"}
+                        {(req.actioned_by_role || req.actioned_by_name) && (
+                          <>
+                            <br />
+                            <span
+                              style={{
+                                color: "#888",
+                                fontSize: "0.8em",
+                                fontStyle: "italic",
+                              }}
+                            >
+                              {req.status.toLowerCase() === "approved"
+                                ? `Approved By: ${req.actioned_by_role || ""}${req.actioned_by_name ? " - " + req.actioned_by_name : ""}`
+                                : req.status.toLowerCase() === "rejected"
+                                ? `Rejected By: ${req.actioned_by_role || ""}${req.actioned_by_name ? " - " + req.actioned_by_name : ""}`
+                                : `By: ${req.actioned_by_role || ""}${req.actioned_by_name ? " - " + req.actioned_by_name : ""}`}
+                            </span>
+                          </>
+                        )}
+                      </span>
                     )}
                   </td>
                   <td
