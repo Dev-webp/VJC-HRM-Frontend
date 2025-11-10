@@ -3,7 +3,7 @@ import axios from 'axios';
 
 // Dynamic baseUrl to switch easily between localhost and production backend
 const baseUrl = window.location.hostname === 'localhost'
-  ? 'http://localhost:5000'  // adjust port to your local backend port if different
+  ? 'http://localhost:5000'
   : 'https://backend.vjcoverseas.com';
 
 const styles = {
@@ -26,7 +26,6 @@ const styles = {
   pending: { color: '#ffc107' },
 };
 
-
 export default function LeaveApplication({ onMessage }) {
   const [leaveType, setLeaveType] = useState('Casual Leave');
   const [leaveStart, setLeaveStart] = useState('');
@@ -34,7 +33,6 @@ export default function LeaveApplication({ onMessage }) {
   const [leaveReason, setLeaveReason] = useState('');
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [userRole, setUserRole] = useState('');
-
 
   useEffect(() => {
     async function fetchData() {
@@ -50,7 +48,6 @@ export default function LeaveApplication({ onMessage }) {
     }
     fetchData();
   }, [onMessage]);
-
 
   const applyLeave = async () => {
     if (!leaveStart || !leaveEnd || !leaveReason.trim()) return onMessage('❌ Please fill all fields');
@@ -72,7 +69,6 @@ export default function LeaveApplication({ onMessage }) {
     }
   };
 
-
   const refreshRequests = async () => {
     try {
       const url = userRole === 'chairman' ? '/all-leave-requests' : '/my-leave-requests';
@@ -83,7 +79,6 @@ export default function LeaveApplication({ onMessage }) {
     }
   };
 
-
   const updateRemarks = (idx, val) => {
     setLeaveRequests(prev => {
       const copy = [...prev];
@@ -91,7 +86,6 @@ export default function LeaveApplication({ onMessage }) {
       return copy;
     });
   };
-
 
   const takeAction = async (idx, action) => {
     const req = leaveRequests[idx];
@@ -109,7 +103,6 @@ export default function LeaveApplication({ onMessage }) {
     }
   };
 
-
   const deleteRequest = async (id) => {
     if (!window.confirm('Delete this leave request?')) return;
     try {
@@ -121,7 +114,6 @@ export default function LeaveApplication({ onMessage }) {
     }
   };
 
-
   const getStatusStyle = (status) => {
     switch ((status || '').toLowerCase()) {
       case 'approved': return styles.approved;
@@ -130,7 +122,6 @@ export default function LeaveApplication({ onMessage }) {
       default: return {};
     }
   };
-
 
   return (
     <div style={styles.container}>
@@ -163,11 +154,7 @@ export default function LeaveApplication({ onMessage }) {
           </div>
         </>
       )}
-
-
       <h3 style={{...styles.sectionTitle, marginTop: 40}}>{userRole === 'chairman' ? "All Leave Requests" : "Your Leave Requests"}</h3>
-
-
       {leaveRequests.length ? (
         <div style={styles.tableWrapper}>
           <table style={styles.table}>
@@ -201,7 +188,23 @@ export default function LeaveApplication({ onMessage }) {
                         placeholder="Enter remarks"
                         style={styles.remarksInput}
                       />
-                    ) : req.chairman_remarks || '-'}
+                    ) : (
+                      <span style={{ fontSize: '0.95em', color: '#333' }}>
+                        {req.chairman_remarks || '-'}
+                        {(req.actioned_by_role || req.actioned_by_name) && (
+                          <>
+                            <br />
+                            <span style={{ color: '#777', fontSize: '0.85em', fontStyle: 'italic' }}>
+                              {req.status && req.status.toLowerCase() === 'approved'
+                                ? `Approved By: ${req.actioned_by_role || ''}${req.actioned_by_name ? ' - ' + req.actioned_by_name : ''}`
+                                : req.status && req.status.toLowerCase() === 'rejected'
+                                ? `Rejected By: ${req.actioned_by_role || ''}${req.actioned_by_name ? ' - ' + req.actioned_by_name : ''}`
+                                : `By: ${req.actioned_by_role || ''}${req.actioned_by_name ? ' - ' + req.actioned_by_name : ''}`}
+                            </span>
+                          </>
+                        )}
+                      </span>
+                    )}
                   </td>
                   {userRole === 'chairman' && (
                     <td>

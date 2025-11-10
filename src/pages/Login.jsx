@@ -1,5 +1,5 @@
 /* eslint-disable jsx-a11y/anchor-is-valid */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
@@ -31,6 +31,37 @@ const shinyAnimationStyles = `
 }
 `;
 
+// ----------- 💻 Block Mobile, Landscape, Tablet screens -----------
+function useDesktopOnly() {
+  useEffect(() => {
+    function checkDesktop() {
+      const isMobile = window.innerWidth < 1100 || window.innerHeight < 600 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|Windows Phone/i.test(navigator.userAgent) || (window.innerWidth > window.innerHeight && window.innerWidth < 1000);
+      // Block small screens, landscape, tablets, mobiles
+      if (isMobile) {
+        document.body.innerHTML = `
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#00448d82;">
+            <img src="/logo512.png" alt="Logo" style="width:110px;margin-bottom:22px;" />
+            <h2 style="color:#FF8C1A;font-weight:900;text-align:center;margin-bottom:10px;">Desktop Use Only</h2>
+            <div style="color:#2e2e2e;font-size:17px;text-align:center;font-weight:500;line-height:1.4;margin-bottom:4px;">
+              HRM VJC Overseas is designed for desktop/laptop devices only.<br>
+              <span style="color:#1E40AF;font-weight:bold;">Mobile, tablet, and landscape modes are NOT supported.</span>
+            </div>
+            <div style="color:#FF8C1A;font-size:15px;font-weight:bold;margin-top:10px;">
+              Please access this page from a desktop or laptop browser.
+            </div>
+          </div>
+        `;
+        // Prevent scroll, interaction, focus
+        document.body.style.overflow = "hidden";
+      }
+    }
+    checkDesktop();
+    window.addEventListener('resize', checkDesktop);
+    return () => window.removeEventListener('resize', checkDesktop);
+  }, []);
+}
+// --------------------------------------------------
+
 function injectStyle() {
   if (!document.getElementById('shiny-heading-keyframes')) {
     const styleTag = document.createElement('style');
@@ -42,6 +73,9 @@ function injectStyle() {
 }
 
 function Login() {
+  // Blocks mobile, tablet, landscape completely (shows only desktop page)
+  useDesktopOnly();
+
   // Inject animation styles once
   injectStyle();
 
@@ -186,7 +220,7 @@ function Feature({ label, desc }) {
   );
 }
 
-/// --- Styles Object ---
+// --- Styles Object ---
 
 const styles = {
   root: {
