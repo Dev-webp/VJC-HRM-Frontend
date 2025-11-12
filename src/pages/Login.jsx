@@ -35,26 +35,27 @@ const shinyAnimationStyles = `
 function useDesktopOnly() {
   useEffect(() => {
     function checkDesktop() {
-      const isMobile = window.innerWidth < 1100 || window.innerHeight < 600 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|Windows Phone/i.test(navigator.userAgent) || (window.innerWidth > window.innerHeight && window.innerWidth < 1000);
-      // Block small screens, landscape, tablets, mobiles
-      if (isMobile) {
-        document.body.innerHTML = `
-          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#00448d82;">
-            <img src="/logo512.png" alt="Logo" style="width:110px;margin-bottom:22px;" />
-            <h2 style="color:#FF8C1A;font-weight:900;text-align:center;margin-bottom:10px;">Desktop Use Only</h2>
-            <div style="color:#2e2e2e;font-size:17px;text-align:center;font-weight:500;line-height:1.4;margin-bottom:4px;">
-              HRM VJC Overseas is designed for desktop/laptop devices only.<br>
-              <span style="color:#1E40AF;font-weight:bold;">Mobile, tablet, and landscape modes are NOT supported.</span>
-            </div>
-            <div style="color:#FF8C1A;font-size:15px;font-weight:bold;margin-top:10px;">
-              Please access this page from a desktop or laptop browser.
-            </div>
-          </div>
-        `;
-        // Prevent scroll, interaction, focus
-        document.body.style.overflow = "hidden";
-      }
-    }
+  // Block only if actual mobile or tablet device is detected
+  const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|Windows Phone/i.test(navigator.userAgent);
+  if (isMobileDevice) {
+    // Block UI
+    document.body.innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#00448d82;">
+        <img src="/logo512.png" alt="Logo" style="width:110px;margin-bottom:22px;" />
+        <h2 style="color:#FF8C1A;font-weight:900;text-align:center;margin-bottom:10px;">Desktop Use Only</h2>
+        <div style="color:#2e2e2e;font-size:17px;text-align:center;font-weight:500;line-height:1.4;margin-bottom:4px;">
+          HRM VJC Overseas is designed for desktop/laptop devices only.<br>
+          <span style="color:#1E40AF;font-weight:bold;">Mobile, tablet, and landscape modes are NOT supported.</span>
+        </div>
+        <div style="color:#FF8C1A;font-size:15px;font-weight:bold;margin-top:10px;">
+          Please access this page from a desktop or laptop browser.
+        </div>
+      </div>
+    `;
+    document.body.style.overflow = "hidden";
+  }
+}
+
     checkDesktop();
     window.addEventListener('resize', checkDesktop);
     return () => window.removeEventListener('resize', checkDesktop);
