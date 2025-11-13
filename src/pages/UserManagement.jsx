@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, { useEffect, useState } from "react";
 import axios from "axios";
-
+import Offerletter from "./Offerletter";
 const baseUrl =
   window.location.hostname === "localhost"
     ? "http://localhost:5000"
@@ -190,11 +190,9 @@ export default function UserManagement() {
     panNo: "",
     ifscCode: "",
     department: "",
+    paidLeaves: "", // Added
   });
   const [userCreationMsg, setUserCreationMsg] = useState("");
-  const [offerLetterEmail, setOfferLetterEmail] = useState("");
-  const [offerLetterFile, setOfferLetterFile] = useState(null);
-  const [offerLetterMsg, setOfferLetterMsg] = useState("");
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [editingEmail, setEditingEmail] = useState(null);
@@ -252,6 +250,7 @@ export default function UserManagement() {
         pan_no: info.panNo || info.pan_no || "",
         ifsc_code: info.ifscCode || info.ifsc_code || "",
         department: info.department || "",
+        paidLeaves: info.paidLeaves || "", // Added here
       }));
 
       let filteredData = formatted;
@@ -324,6 +323,7 @@ export default function UserManagement() {
           pan_no: newUser.panNo,
           ifsc_code: newUser.ifscCode,
           department: newUser.department,
+          paidLeaves: newUser.paidLeaves, // Added here
         },
         { withCredentials: true }
       );
@@ -342,6 +342,7 @@ export default function UserManagement() {
         panNo: "",
         ifscCode: "",
         department: "",
+        paidLeaves: "", // Reset here
       });
       setMissingFields([]);
       if (showAllUsers) fetchUsers();
@@ -352,29 +353,6 @@ export default function UserManagement() {
       } else {
         setUserCreationMsg("❌ Failed to create user");
       }
-    }
-  };
-
-  // Upload offer letter handler
-  const handleOfferLetterUpload = async () => {
-    setOfferLetterMsg("");
-    if (!offerLetterEmail.trim() || !offerLetterFile) {
-      setOfferLetterMsg("❌ Please provide both an email and an offer letter file.");
-      return;
-    }
-    const formData = new FormData();
-    formData.append("email", offerLetterEmail);
-    formData.append("offerLetter", offerLetterFile);
-    try {
-      await axios.post(`${baseUrl}/upload-offer-letter`, formData, {
-        withCredentials: true,
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      setOfferLetterMsg("✅ Offer letter uploaded successfully!");
-      setOfferLetterEmail("");
-      setOfferLetterFile(null);
-    } catch (err) {
-      setOfferLetterMsg(`❌ Failed to upload: ${err.response?.data?.message || err.message}`);
     }
   };
 
@@ -394,6 +372,7 @@ export default function UserManagement() {
       ifscCode: user.ifsc_code || "",
       department: user.department || "",
       role: user.role || "",
+      paidLeaves: user.paidLeaves || "", // Added here
     });
   };
 
@@ -426,6 +405,7 @@ export default function UserManagement() {
         pan_no: editedUser.panNo,
         ifsc_code: editedUser.ifscCode,
         department: editedUser.department,
+        paidLeaves: editedUser.paidLeaves, // Added here
       };
       if (editedUser.password && editedUser.password.trim() !== "") {
         payload.password = editedUser.password;
@@ -639,6 +619,16 @@ export default function UserManagement() {
             style={styles.input}
           />
         </div>
+        {/* Paid Leaves input - optional */}
+        <div style={styles.formRow}>
+          <input
+            type="number"
+            placeholder="Paid Leaves"
+            value={newUser.paidLeaves}
+            onChange={(e) => setNewUser({ ...newUser, paidLeaves: e.target.value })}
+            style={styles.input}
+          />
+        </div>
         <button
           style={{ ...styles.btn, ...styles.btnPrimary }}
           onClick={handleCreateUser}
@@ -713,6 +703,7 @@ export default function UserManagement() {
                     <th style={styles.th}>PAN NO</th>
                     <th style={styles.th}>IFSC Code</th>
                     <th style={styles.th}>Department</th>
+                    <th style={styles.th}>Paid Leaves</th> {/* Added column */}
                     <th style={styles.th}>Password (Reset)</th>
                     <th style={styles.th}>Actions</th>
                     <th style={styles.th}>Assign / Manage Role</th>
@@ -875,6 +866,20 @@ export default function UserManagement() {
                         <td style={styles.td}>
                           {isEditing ? (
                             <input
+                              type="number"
+                              value={editedUser.paidLeaves || ""}
+                              onChange={(e) => handleChangeUserField("paidLeaves", e.target.value)}
+                              style={styles.input}
+                              aria-label="Edit paid leaves"
+                              min={0}
+                            />
+                          ) : (
+                            user.paidLeaves || "0"
+                          )}
+                        </td>
+                        <td style={styles.td}>
+                          {isEditing ? (
+                            <input
                               type="password"
                               placeholder="Enter new password"
                               value={editedUser.password || ""}
@@ -1030,62 +1035,7 @@ export default function UserManagement() {
           </div>
         </>
       )}
-
-      {/* Offer Letter Upload Section */}
-      <section style={styles.section} aria-labelledby="offer-letter-heading">
-        <h2
-          id="offer-letter-heading"
-          style={{ color: colors.blue400, fontWeight: "700", marginBottom: 18 }}
-        >
-          📄 Upload Offer Letter
-        </h2>
-        <p>You can upload an offer letter for any existing user by their email.</p>
-        <div style={{ ...styles.formRow, alignItems: "center" }}>
-          <input
-            type="email"
-            placeholder="Employee Email"
-            value={offerLetterEmail}
-            onChange={(e) => setOfferLetterEmail(e.target.value)}
-            style={{ ...styles.input, flex: 2 }}
-            aria-label="Enter employee email to upload offer letter"
-          />
-          <input
-            type="file"
-            accept=".pdf,.doc,.docx"
-            onChange={(e) => setOfferLetterFile(e.target.files[0])}
-            style={{ ...styles.input, flex: 3 }}
-            aria-label="Select offer letter file"
-          />
-        </div>
-        {offerLetterFile && (
-          <p style={{ marginTop: 8, fontWeight: "600", color: colors.gray700 }}>
-            Selected file: {offerLetterFile.name}
-          </p>
-        )}
-        <button
-          style={{ ...styles.btn, ...styles.btnPrimary, marginTop: 12 }}
-          onClick={handleOfferLetterUpload}
-          type="button"
-          onMouseOver={(e) =>
-            (e.currentTarget.style.backgroundColor = styles.btnPrimaryHover.backgroundColor)
-          }
-          onMouseOut={(e) =>
-            (e.currentTarget.style.backgroundColor = styles.btnPrimary.backgroundColor)
-          }
-        >
-          ⬆️ Upload Letter
-        </button>
-        {offerLetterMsg && (
-          <p
-            style={
-              offerLetterMsg.startsWith("✅") ? { color: "#22c55e", fontWeight: "600", marginTop: 12 } : { color: "#ef4444", fontWeight: "600", marginTop: 12 }
-            }
-            role="alert"
-          >
-            {offerLetterMsg}
-          </p>
-        )}
-      </section>
+      <Offerletter />
     </main>
   );
 }

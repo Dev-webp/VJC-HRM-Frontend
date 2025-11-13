@@ -1,30 +1,68 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
-// Dynamic baseUrl to switch easily between localhost and production backend
+// Dynamic baseUrl to switch between localhost and production backend
 const baseUrl = window.location.hostname === 'localhost'
   ? 'http://localhost:5000'
   : 'https://backend.vjcoverseas.com';
 
 const styles = {
-  container: { fontFamily: 'system-ui, sans-serif', backgroundColor: '#f0f2f5', padding: 30, borderRadius: 12, },
-  sectionTitle: { fontSize: '1.75rem', fontWeight: '700', color: '#333', borderBottom: '3px solid #007bff', paddingBottom: 8, marginBottom: 20, },
-  formContainer: { backgroundColor: '#fff', padding: 25, borderRadius: 10, boxShadow: '0 2px 10px rgba(0,0,0,0.05)', },
-  formGroup: { display: 'flex', flexDirection: 'column', marginBottom: 15, },
-  label: { fontWeight: '600', marginBottom: 5, color: '#555', },
-  input: { padding: 12, borderRadius: 6, border: '1px solid #ddd', fontSize: '1rem', },
-  submitBtn: { padding: 12, backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: 6, fontWeight: '600', cursor: 'pointer', },
-  tableWrapper: { overflowX: 'auto', marginTop: 20, },
-  table: { width: '100%', borderCollapse: 'collapse', },
-  tableHeader: { backgroundColor: '#007bff', color: 'white', textAlign: 'left', padding: 12, borderRadius: '8px 8px 0 0', },
-  tableRow: { backgroundColor: '#fff', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', borderRadius: 8, },
-  tableCell: { padding: 15, border: 'none', },
-  remarksInput: { padding: 8, width: '100%', boxSizing: 'border-box', border: '1px solid #ccc', borderRadius: 4, },
-  actionBtn: { padding: '8px 12px', border: 'none', borderRadius: 5, color: 'white', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 'bold', marginRight: 8, },
+  container: { fontFamily: 'system-ui, sans-serif', backgroundColor: '#f0f2f5', padding: 30, borderRadius: 12 },
+  sectionTitle: { fontSize: '1.75rem', fontWeight: '700', color: '#333', borderBottom: '3px solid #007bff', paddingBottom: 8, marginBottom: 20 },
+  formContainer: { backgroundColor: '#fff', padding: 25, borderRadius: 10, boxShadow: '0 2px 10px rgba(0,0,0,0.05)' },
+  formGroup: { display: 'flex', flexDirection: 'column', marginBottom: 15 },
+  label: { fontWeight: '600', marginBottom: 5, color: '#555' },
+  input: { padding: 12, borderRadius: 6, border: '1px solid #ddd', fontSize: '1rem' },
+  submitBtn: { padding: 12, backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: 6, fontWeight: '600', cursor: 'pointer' },
+  tableWrapper: { overflowX: 'auto', marginTop: 20 },
+  table: { width: '100%', borderCollapse: 'collapse' },
+  tableHeader: { backgroundColor: '#007bff', color: 'white', textAlign: 'left', padding: 12, borderRadius: '8px 8px 0 0' },
+  tableRow: { backgroundColor: '#fff', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', borderRadius: 8 },
+  tableCell: { padding: 15, border: 'none' },
+  remarksInput: { padding: 8, width: '100%', boxSizing: 'border-box', border: '1px solid #ccc', borderRadius: 4 },
+  actionBtn: { padding: '8px 12px', border: 'none', borderRadius: 5, color: 'white', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 'bold', marginRight: 8 },
   approved: { color: '#28a745' },
   rejected: { color: '#dc3545' },
   pending: { color: '#ffc107' },
+  halfDayCheckbox: { marginTop: 8 }
 };
+
+// Helper: get days difference (inclusive)
+function diffDays(start, end) {
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  const timeDiff = endDate.getTime() - startDate.getTime();
+  return Math.floor(timeDiff / (1000 * 3600 * 24)) + 1; // inclusive
+}
+
+// Helper: Calculate the sum of approved Earned Leaves for current month (full+half)
+function calculateApprovedEarnedLeaveThisMonth(requests) {
+  const now = new Date();
+  const thisMonth = now.getMonth();
+  const thisYear = now.getFullYear();
+
+  let used = 0;
+
+  for (let req of requests) {
+    if (
+      req.leave_type === 'Earned Leave' &&
+      req.status &&
+      req.status.toLowerCase() === 'approved'
+    ) {
+      const start = new Date(req.start_date);
+      if (start.getMonth() !== thisMonth || start.getFullYear() !== thisYear) continue;
+
+      if (req.half_day) {
+        // Add 0.5 for each half-day leave approved
+        used += 0.5;
+      } else {
+        used += diffDays(req.start_date, req.end_date);
+      }
+    }
+  }
+  return used;
+}
+
 
 export default function LeaveApplication({ onMessage }) {
   const [leaveType, setLeaveType] = useState('Casual Leave');
@@ -33,12 +71,17 @@ export default function LeaveApplication({ onMessage }) {
   const [leaveReason, setLeaveReason] = useState('');
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [userRole, setUserRole] = useState('');
+  const [paidLeaves, setPaidLeaves] = useState(0);
+  const [halfDayLeave, setHalfDayLeave] = useState(false);
 
   useEffect(() => {
     async function fetchData() {
       try {
         const { data: auth } = await axios.get(`${baseUrl}/check-auth`, { withCredentials: true });
         setUserRole(auth.role || '');
+        const { data: meData } = await axios.get(`${baseUrl}/me`, { withCredentials: true });
+        setPaidLeaves(meData.paidLeaves || 0);
+
         const url = auth.role === 'chairman' ? '/all-leave-requests' : '/my-leave-requests';
         const res = await axios.get(`${baseUrl}${url}`, { withCredentials: true });
         setLeaveRequests(res.data.map(r => ({ ...r, remarksInput: '' })));
@@ -49,20 +92,44 @@ export default function LeaveApplication({ onMessage }) {
     fetchData();
   }, [onMessage]);
 
+  // Only count approved earned leaves THIS MONTH
+  const earnedThisMonth = calculateApprovedEarnedLeaveThisMonth(leaveRequests);
+  const remainingPaidLeaves = Math.max(0, parseFloat((paidLeaves - earnedThisMonth).toFixed(2)));
+
   const applyLeave = async () => {
-    if (!leaveStart || !leaveEnd || !leaveReason.trim()) return onMessage('❌ Please fill all fields');
-    if (new Date(leaveEnd) < new Date(leaveStart)) return onMessage('❌ End date cannot be before start date');
+    if (!leaveStart || (!leaveEnd && !halfDayLeave) || !leaveReason.trim())
+      return onMessage('❌ Please fill all fields');
+    if (!halfDayLeave && new Date(leaveEnd) < new Date(leaveStart))
+      return onMessage('❌ End date cannot be before start date');
+
+    // Calculate requested days
+    let totalDays = 0;
+    if (halfDayLeave) {
+      totalDays = 0.5;
+    } else {
+      totalDays = diffDays(leaveStart, leaveEnd);
+    }
+
+    // Block if applying for more than remaining leaves
+    if (leaveType === 'Earned Leave') {
+      if (totalDays > remainingPaidLeaves) {
+        return onMessage(`❌ Only ${remainingPaidLeaves} paid leave day(s) available this month`);
+      }
+    }
+
     try {
       await axios.post(`${baseUrl}/apply-leave`, {
         leave_type: leaveType,
         start_date: leaveStart,
-        end_date: leaveEnd,
+        end_date: halfDayLeave ? leaveStart : leaveEnd,
         reason: leaveReason,
+        half_day: halfDayLeave,
       }, { withCredentials: true });
       onMessage('✅ Leave request submitted');
       setLeaveStart('');
       setLeaveEnd('');
       setLeaveReason('');
+      setHalfDayLeave(false);
       await refreshRequests();
     } catch {
       onMessage('❌ Failed to submit leave request');
@@ -129,6 +196,10 @@ export default function LeaveApplication({ onMessage }) {
         <>
           <h3 style={styles.sectionTitle}>Apply for Leave</h3>
           <div style={styles.formContainer}>
+            <p>
+              <strong>Fixed Paid Leaves (per month):</strong> {paidLeaves} <br />
+              <strong>Remaining Paid Leaves This Month:</strong> {remainingPaidLeaves}
+            </p>
             <div style={styles.formGroup}>
               <label style={styles.label}>Type</label>
               <select value={leaveType} onChange={e => setLeaveType(e.target.value)} style={styles.input}>
@@ -144,8 +215,16 @@ export default function LeaveApplication({ onMessage }) {
             </div>
             <div style={styles.formGroup}>
               <label style={styles.label}>End Date</label>
-              <input type="date" value={leaveEnd} onChange={e => setLeaveEnd(e.target.value)} style={styles.input}/>
+              <input type="date" value={leaveEnd} onChange={e => setLeaveEnd(e.target.value)} style={styles.input} disabled={halfDayLeave}/>
             </div>
+            {(leaveType === 'Earned Leave' || leaveType === 'Casual Leave') && (
+              <div style={styles.halfDayCheckbox}>
+                <label>
+                  <input type="checkbox" checked={halfDayLeave} onChange={e => setHalfDayLeave(e.target.checked)} />
+                  {' '} Apply for Half Day Leave (2 half days = 1 full day)
+                </label>
+              </div>
+            )}
             <div style={styles.formGroup}>
               <label style={styles.label}>Reason</label>
               <textarea value={leaveReason} onChange={e => setLeaveReason(e.target.value)} style={{...styles.input, height: 80}} placeholder="Reason for leave"/>
@@ -198,8 +277,8 @@ export default function LeaveApplication({ onMessage }) {
                               {req.status && req.status.toLowerCase() === 'approved'
                                 ? `Approved By: ${req.actioned_by_role || ''}${req.actioned_by_name ? ' - ' + req.actioned_by_name : ''}`
                                 : req.status && req.status.toLowerCase() === 'rejected'
-                                ? `Rejected By: ${req.actioned_by_role || ''}${req.actioned_by_name ? ' - ' + req.actioned_by_name : ''}`
-                                : `By: ${req.actioned_by_role || ''}${req.actioned_by_name ? ' - ' + req.actioned_by_name : ''}`}
+                                  ? `Rejected By: ${req.actioned_by_role || ''}${req.actioned_by_name ? ' - ' + req.actioned_by_name : ''}`
+                                  : `By: ${req.actioned_by_role || ''}${req.actioned_by_name ? ' - ' + req.actioned_by_name : ''}`}
                             </span>
                           </>
                         )}
