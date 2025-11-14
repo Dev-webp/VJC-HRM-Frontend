@@ -346,7 +346,8 @@ function PayrollSlip() {
               <tbody>
                 <InfoRow label="DOB" value={formatDate(profile?.dob || slip.dob)} />
                 <InfoRow label="DOJ" value={formatDate(profile?.doj || slip.doj)} />
-                <InfoRow label="Work Days" value={slip?.work_days || slip?.workDays || "-"} />
+                <InfoRow label="Work Days" value={slip?.work_days || "-"} />
+
                 <InfoRow label="Days in Month" value={getDaysInMonth(month)} />
                 <InfoRow label="Bank/Pay Mode" value="NEFT" />
               </tbody>
