@@ -520,9 +520,8 @@ function EmployeeDashboard() {
                                 <li style={styles.instructionsListItem}>Attendance excludes holidays, paid leaves, penalties.</li>
                                 <li style={styles.instructionsListItem}>Each attendance action shows only if allowed.</li>
                                 <li style={styles.instructionsListItem}>Filter history by date for records.</li>
-                                <li style={styles.instructionsListItem}>Logs show clock-in/out, breaks, hours in detail.</li>
-                                <li style={styles.instructionsListItem}>Calendar is color-coded: holidays, absences, leaves.</li>
-                                <li style={styles.instructionsListItem}>**Contact HR** for issues or payroll help.</li>
+                                <li style={styles.instructionsListItem}>To calculate paid leave/in the leave request we have an option of earned leave there you use your paid-leaves if not system will not calculate it automatically.</li>
+                                <li style={styles.instructionsListItem}>**Contact Developer (nuthan-full-stack-dev)** for issues or payroll help.</li>
                             </ol>
                         </div>
                     </div>

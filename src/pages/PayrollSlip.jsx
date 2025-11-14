@@ -125,16 +125,17 @@ function PayrollSlip() {
   let earnings = [];
   let deductions = [];
   let payable = 0;
+
   if (slip) {
     const totalSalary = Number(slip.base_salary) || 0;
     const totalDaysInMonth = getDaysInMonth(month) || 30;
+    const actualWorkDays = slip.work_days || slip.workDays || totalDaysInMonth;
 
     // Calculate per day salary and payable based on actual work days
     const salaryPerDay = totalSalary / totalDaysInMonth;
-    const actualWorkDays = slip.work_days || slip.workDays || totalDaysInMonth;
     payable = salaryPerDay * actualWorkDays;
 
-    // Earnings breakdown remains as is for display purpose
+    // Earnings breakdown for display only
     const basic = Math.round(totalSalary * 0.6);
     const hra = Math.round(totalSalary * 0.1);
     const conveyance = Math.round(totalSalary * 0.1);
