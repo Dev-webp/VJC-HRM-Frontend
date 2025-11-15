@@ -92,13 +92,26 @@ const premiumStyles = {
   pendingColor: { color: "#f39c12" },
 };
 
+const filterAndPaginate = (requests, search, fromIndex = 0, pageSize = 10) => {
+  const filtered = requests.filter((req) =>
+    (req.employee_name || "").toLowerCase().includes(search.toLowerCase()) ||
+    (req.employee_email || "").toLowerCase().includes(search.toLowerCase())
+  );
+  return {
+    filtered,
+    paged: filtered.slice(fromIndex, fromIndex + pageSize),
+    total: filtered.length,
+  };
+};
+
 export default function LeaveRequestsContainer() {
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [message, setMessage] = useState("");
   const [userRole, setUserRole] = useState("");
   const [userLocation, setUserLocation] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [pageStart, setPageStart] = useState(0);
 
-  // Get current user info including role and location from /me
   async function fetchCurrentUser() {
     try {
       const res = await axios.get(`${baseUrl}/me`, { withCredentials: true });
@@ -110,7 +123,6 @@ export default function LeaveRequestsContainer() {
     }
   }
 
-  // Fetch leave requests
   async function fetchLeaveRequests() {
     setMessage("⏳ Loading leave requests...");
     try {
@@ -119,13 +131,13 @@ export default function LeaveRequestsContainer() {
       });
       setLeaveRequests(res.data.map((req) => ({ ...req, remarksInput: "" })));
       setMessage("✅ Leave requests loaded");
+      setPageStart(0);
     } catch (error) {
       console.error(error);
       setMessage("❌ Failed to load leave requests. Check backend connection.");
     }
   }
 
-  // approve/reject leave request
   async function handleLeaveAction(id, action, remarks) {
     if (!remarks.trim()) {
       setMessage("❌ Remarks are required");
@@ -147,9 +159,9 @@ export default function LeaveRequestsContainer() {
     }
   }
 
-  // delete leave request
   async function deleteLeaveRequest(id) {
-    if (!window.confirm("Are you sure you want to delete this leave request?")) return;
+    if (!window.confirm("Are you sure you want to delete this leave request?"))
+      return;
     setMessage("⏳ Deleting request...");
     try {
       await axios.delete(`${baseUrl}/delete-leave-request/${id}`, {
@@ -171,7 +183,6 @@ export default function LeaveRequestsContainer() {
     });
   }
 
-  // Load user then leave requests on mount
   useEffect(() => {
     async function init() {
       await fetchCurrentUser();
@@ -180,7 +191,6 @@ export default function LeaveRequestsContainer() {
     init();
   }, []);
 
-  // Filter leave requests: if manager, filter by userLocation match; else all
   const filteredLeaveRequests =
     userRole.toLowerCase() === "manager"
       ? leaveRequests.filter(
@@ -190,6 +200,17 @@ export default function LeaveRequestsContainer() {
             req.location.toLowerCase() === userLocation.toLowerCase()
         )
       : leaveRequests;
+
+  // eslint-disable-next-line no-unused-vars
+  const { filtered, paged, total } = filterAndPaginate(
+    filteredLeaveRequests,
+    searchTerm,
+    pageStart,
+    10
+  );
+
+  const showPrev = pageStart > 0;
+  const showNext = pageStart + 10 < total;
 
   function statusColor(status) {
     const s = (status || "").toLowerCase();
@@ -226,128 +247,189 @@ export default function LeaveRequestsContainer() {
         </p>
       )}
 
-      {filteredLeaveRequests.length === 0 && !message.startsWith("⏳") ? (
+      <input
+        type="search"
+        placeholder="Search by name or mail id"
+        value={searchTerm}
+        onChange={(e) => {
+          setSearchTerm(e.target.value);
+          setPageStart(0);
+        }}
+        style={{
+          ...premiumStyles.input,
+          maxWidth: 320,
+          fontSize: 15,
+          fontWeight: 500,
+          borderColor: "#e67e22",
+          background: "#fff8f1",
+          marginBottom: 20,
+        }}
+      />
+
+      {paged.length === 0 && !message.startsWith("⏳") ? (
         <p style={premiumStyles.emptyText}>No leave requests at the moment.</p>
       ) : (
-        <div style={{ overflowX: "auto" }}>
-          <table style={premiumStyles.table}>
-            <thead>
-              <tr style={premiumStyles.table.headerRow}>
-                <th style={premiumStyles.table.headerCell}>Employee</th>
-                <th style={premiumStyles.table.headerCell}>Type</th>
-                <th style={premiumStyles.table.headerCell}>Start</th>
-                <th style={premiumStyles.table.headerCell}>End</th>
-                <th style={premiumStyles.table.headerCell}>Reason</th>
-                <th style={premiumStyles.table.headerCell}>Status</th>
-                <th style={premiumStyles.table.headerCell}>Remarks</th>
-                <th style={premiumStyles.table.headerCell}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredLeaveRequests.map((req, idx) => (
-                <tr key={req.id} style={premiumStyles.table.dataRow}>
-                  <td style={premiumStyles.table.dataCell}>
-                    <strong>{req.employee_name}</strong>
-                    <br />
-                    {req.employee_email}
-                    <br />
-                    <small>ID: {req.employee_id}</small>
-                  </td>
-                  <td style={premiumStyles.table.dataCell}>{req.leave_type}</td>
-                  <td style={premiumStyles.table.dataCell}>{req.start_date}</td>
-                  <td style={premiumStyles.table.dataCell}>{req.end_date}</td>
-                  <td style={premiumStyles.table.dataCell}>{req.reason || "-"}</td>
-                  <td
-                    style={{
-                      ...premiumStyles.table.dataCell,
-                      ...statusColor(req.status),
-                      fontWeight: "bold",
-                    }}
-                  >
-                    {req.status}
-                  </td>
-                  <td style={premiumStyles.table.dataCell}>
-                    {req.status.toLowerCase() === "pending" ? (
-                      <input
-                        type="text"
-                        value={req.remarksInput}
-                        placeholder="Remarks"
-                        onChange={(e) => updateRemarks(idx, e.target.value)}
-                        style={premiumStyles.input}
-                      />
-                    ) : (
-                      <span style={{ fontSize: "0.85em", color: "#333" }}>
-                        {req.chairman_remarks || "-"}
-                        {(req.actioned_by_role || req.actioned_by_name) && (
-                          <>
-                            <br />
-                            <span
-                              style={{
-                                color: "#888",
-                                fontSize: "0.8em",
-                                fontStyle: "italic",
-                              }}
-                            >
-                              {req.status.toLowerCase() === "approved"
-                                ? `Approved By: ${req.actioned_by_role || ""}${req.actioned_by_name ? " - " + req.actioned_by_name : ""}`
-                                : req.status.toLowerCase() === "rejected"
-                                ? `Rejected By: ${req.actioned_by_role || ""}${req.actioned_by_name ? " - " + req.actioned_by_name : ""}`
-                                : `By: ${req.actioned_by_role || ""}${req.actioned_by_name ? " - " + req.actioned_by_name : ""}`}
-                            </span>
-                          </>
-                        )}
-                      </span>
-                    )}
-                  </td>
-                  <td
-                    style={{
-                      ...premiumStyles.table.dataCell,
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {req.status.toLowerCase() === "pending" && (
-                      <>
-                        <button
-                          style={{
-                            ...premiumStyles.btn,
-                            backgroundColor: "#2ecc71",
-                          }}
-                          onClick={() =>
-                            handleLeaveAction(req.id, "approve", req.remarksInput)
-                          }
-                        >
-                          Approve
-                        </button>
-                        <button
-                          style={{
-                            ...premiumStyles.btn,
-                            backgroundColor: "#e74c3c",
-                            marginLeft: 6,
-                          }}
-                          onClick={() =>
-                            handleLeaveAction(req.id, "reject", req.remarksInput)
-                          }
-                        >
-                          Reject
-                        </button>
-                      </>
-                    )}
-                    <button
-                      style={{
-                        ...premiumStyles.btn,
-                        backgroundColor: "#6c757d",
-                        marginLeft: 6,
-                      }}
-                      onClick={() => deleteLeaveRequest(req.id)}
-                    >
-                      Delete
-                    </button>
-                  </td>
+        <>
+          <div style={{ overflowX: "auto" }}>
+            <table style={premiumStyles.table}>
+              <thead>
+                <tr style={premiumStyles.table.headerRow}>
+                  <th style={premiumStyles.table.headerCell}>Employee</th>
+                  <th style={premiumStyles.table.headerCell}>Type</th>
+                  <th style={premiumStyles.table.headerCell}>Start</th>
+                  <th style={premiumStyles.table.headerCell}>End</th>
+                  <th style={premiumStyles.table.headerCell}>Reason</th>
+                  <th style={premiumStyles.table.headerCell}>Status</th>
+                  <th style={premiumStyles.table.headerCell}>Remarks</th>
+                  <th style={premiumStyles.table.headerCell}>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {paged.map((req, idx) => (
+                  <tr key={req.id} style={premiumStyles.table.dataRow}>
+                    <td style={premiumStyles.table.dataCell}>
+                      <strong>{req.employee_name}</strong>
+                      <br />
+                      {req.employee_email}
+                      <br />
+                      <small>ID: {req.employee_id}</small>
+                    </td>
+                    <td style={premiumStyles.table.dataCell}>{req.leave_type}</td>
+                    <td style={premiumStyles.table.dataCell}>{req.start_date}</td>
+                    <td style={premiumStyles.table.dataCell}>{req.end_date}</td>
+                    <td style={premiumStyles.table.dataCell}>{req.reason || "-"}</td>
+                    <td
+                      style={{
+                        ...premiumStyles.table.dataCell,
+                        ...statusColor(req.status),
+                        fontWeight: "bold",
+                      }}
+                    >
+                      {req.status}
+                    </td>
+                    <td style={premiumStyles.table.dataCell}>
+                      {req.status.toLowerCase() === "pending" ? (
+                        <input
+                          type="text"
+                          value={req.remarksInput}
+                          placeholder="Remarks"
+                          onChange={(e) => updateRemarks(pageStart + idx, e.target.value)}
+                          style={premiumStyles.input}
+                        />
+                      ) : (
+                        <span style={{ fontSize: "0.85em", color: "#333" }}>
+                          {req.chairman_remarks || "-"}
+                          {(req.actioned_by_role || req.actioned_by_name) && (
+                            <>
+                              <br />
+                              <span
+                                style={{
+                                  color: "#888",
+                                  fontSize: "0.8em",
+                                  fontStyle: "italic",
+                                }}
+                              >
+                                {req.status.toLowerCase() === "approved"
+                                  ? `Approved By: ${
+                                      req.actioned_by_role || ""
+                                    }${req.actioned_by_name ? " - " + req.actioned_by_name : ""}`
+                                  : req.status.toLowerCase() === "rejected"
+                                  ? `Rejected By: ${
+                                      req.actioned_by_role || ""
+                                    }${req.actioned_by_name ? " - " + req.actioned_by_name : ""}`
+                                  : `By: ${
+                                      req.actioned_by_role || ""
+                                    }${req.actioned_by_name ? " - " + req.actioned_by_name : ""}`}
+                              </span>
+                            </>
+                          )}
+                        </span>
+                      )}
+                    </td>
+                    <td
+                      style={{
+                        ...premiumStyles.table.dataCell,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {req.status.toLowerCase() === "pending" && (
+                        <>
+                          <button
+                            style={{
+                              ...premiumStyles.btn,
+                              backgroundColor: "#2ecc71",
+                            }}
+                            onClick={() =>
+                              handleLeaveAction(req.id, "approve", req.remarksInput)
+                            }
+                          >
+                            Approve
+                          </button>
+                          <button
+                            style={{
+                              ...premiumStyles.btn,
+                              backgroundColor: "#e74c3c",
+                              marginLeft: 6,
+                            }}
+                            onClick={() =>
+                              handleLeaveAction(req.id, "reject", req.remarksInput)
+                            }
+                          >
+                            Reject
+                          </button>
+                        </>
+                      )}
+                      <button
+                        style={{
+                          ...premiumStyles.btn,
+                          backgroundColor: "#6c757d",
+                          marginLeft: 6,
+                        }}
+                        onClick={() => deleteLeaveRequest(req.id)}
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {/* Pagination Buttons */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              marginTop: 15,
+              gap: 10,
+            }}
+          >
+            <button
+              disabled={!showPrev}
+              onClick={() => setPageStart(Math.max(0, pageStart - 10))}
+              style={{
+                ...premiumStyles.btn,
+                backgroundColor: showPrev ? "#e67e22" : "#eee",
+                cursor: showPrev ? "pointer" : "not-allowed",
+                color: showPrev ? "#fff" : "#999",
+              }}
+            >
+              ◀ Prev
+            </button>
+            <button
+              disabled={!showNext}
+              onClick={() => setPageStart(Math.min(pageStart + 10, total - 10))}
+              style={{
+                ...premiumStyles.btn,
+                backgroundColor: showNext ? "#e67e22" : "#eee",
+                cursor: showNext ? "pointer" : "not-allowed",
+                color: showNext ? "#fff" : "#999",
+              }}
+            >
+              Next ▶
+            </button>
+          </div>
+        </>
       )}
     </div>
   );

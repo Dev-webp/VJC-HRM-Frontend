@@ -102,12 +102,52 @@ function LeaveRequestsSection({
   statusColor,
   premiumStyles,
 }) {
+  const [search, setSearch] = useState("");
+  const [scrollIdx, setScrollIdx] = useState(0);
+
+  // Filter leave requests by search string (name or email)
+  const filteredRequests = leaveRequests.filter((req) =>
+    (req.employee_name || "").toLowerCase().includes(search.toLowerCase()) ||
+    (req.employee_email || "").toLowerCase().includes(search.toLowerCase())
+  );
+
+  // Show only latest 10; remaining can be accessed by scrolling (pagination emulation)
+  const visibleRequests = filteredRequests.slice(scrollIdx, scrollIdx + 10);
+
+  const showPrev = scrollIdx > 0;
+  const showNext = scrollIdx + 10 < filteredRequests.length;
+
   return (
     <div style={premiumStyles.contentBoxNoMargin}>
       <h3 style={{ ...premiumStyles.sectionTitle, borderBottom: "none" }}>📝 Pending Leave Requests</h3>
       {message && <p style={premiumStyles.message}>{message}</p>}
-      {leaveRequests.length === 0 ? (
-        <p style={premiumStyles.emptyText}>No leave requests at the moment.</p>
+
+      {/* Search Bar */}
+      <div style={{ marginBottom: 20, display: "flex", alignItems: "center", gap: 16 }}>
+        <input
+          type="search"
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setScrollIdx(0); // reset scroll on new search
+          }}
+          style={{
+            ...premiumStyles.input,
+            maxWidth: 320,
+            fontSize: 15,
+            fontWeight: 500,
+            borderColor: "#e67e22",
+            background: "#fff8f1",
+          }}
+          placeholder="Search by name or mail id"
+        />
+        <span style={{ fontSize: 13, color: "#999" }}>
+          Showing {visibleRequests.length} of {filteredRequests.length} results
+        </span>
+      </div>
+
+      {visibleRequests.length === 0 ? (
+        <p style={premiumStyles.emptyText}>No leave requests found.</p>
       ) : (
         <div style={{ overflowX: "auto" }}>
           <table style={premiumStyles.table}>
@@ -124,7 +164,7 @@ function LeaveRequestsSection({
               </tr>
             </thead>
             <tbody>
-              {leaveRequests.map((req, idx) => (
+              {visibleRequests.map((req, idx) => (
                 <tr key={req.id} style={premiumStyles.table.dataRow}>
                   <td style={premiumStyles.table.dataCell}>
                     <strong>{req.employee_name}</strong>
@@ -146,14 +186,14 @@ function LeaveRequestsSection({
                   >
                     {req.status}
                   </td>
-                  {/* REMARKS COLUMN - Final Version */}
+                  {/* REMARKS COLUMN */}
                   <td style={premiumStyles.table.dataCell}>
                     {req.status.toLowerCase() === "pending" ? (
                       <input
                         type="text"
                         value={req.remarksInput}
                         placeholder="Remarks"
-                        onChange={(e) => updateRemarks(idx, e.target.value)}
+                        onChange={(e) => updateRemarks(idx + scrollIdx, e.target.value)}
                         style={premiumStyles.input}
                       />
                     ) : (
@@ -207,11 +247,41 @@ function LeaveRequestsSection({
               ))}
             </tbody>
           </table>
+          {/* Pagination Controls */}
+          <div style={{ display: "flex", justifyContent: "center", margin: "15px 0" }}>
+            <button
+              style={{
+                ...premiumStyles.btn,
+                backgroundColor: showPrev ? "#e67e22" : "#eee",
+                color: showPrev ? "#fff" : "#999",
+                marginRight: 10,
+                cursor: showPrev ? "pointer" : "not-allowed",
+              }}
+              disabled={!showPrev}
+              onClick={() => setScrollIdx(scrollIdx - 10)}
+            >
+              ◀ Prev
+            </button>
+            <button
+              style={{
+                ...premiumStyles.btn,
+                backgroundColor: showNext ? "#e67e22" : "#eee",
+                color: showNext ? "#fff" : "#999",
+                marginLeft: 10,
+                cursor: showNext ? "pointer" : "not-allowed",
+              }}
+              disabled={!showNext}
+              onClick={() => setScrollIdx(scrollIdx + 10)}
+            >
+              Next ▶
+            </button>
+          </div>
         </div>
       )}
     </div>
   );
 }
+
 
 // --- ChairmanDashboard Main Component ---
 export default function ChairmanDashboard() {
