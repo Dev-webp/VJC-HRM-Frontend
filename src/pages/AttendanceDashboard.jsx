@@ -313,7 +313,7 @@ function classifyDayPolicy({ isoDate, weekday, log, holidaysMap, monthlyLateStat
     }
 
     if ((lateInfo.isLate && lateInfo.isWithinGrace && isExceededLate) || (lateInfo.isLate && lateInfo.isBeyondGrace)) {
-        if (netHours >= 8) return { bucket: 'halfday', reason: 'Late beyond limit (Half Day)', netHHMM, netHours, flags: ['late_exceeded_or_beyond_grace'] };
+        if (netHours > 8) return { bucket: 'halfday', reason: 'Late beyond limit (Half Day)', netHHMM, netHours, flags: ['late_exceeded_or_beyond_grace'] };
         return { bucket: 'absent', reason: 'Late beyond limit + <8h (Absent)', netHHMM, netHours, flags: ['absent_late_less_than_8h'] };
     }
 
