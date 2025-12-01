@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
-// Add this style string with keyframes in a style tag or CSS file
+// Add shiny animation
 const shinyAnimationStyles = `
 @keyframes shiny-text {
   0%, 100% {
@@ -31,92 +31,135 @@ const shinyAnimationStyles = `
 }
 `;
 
-// ----------- 💻 Block Mobile, Landscape, Tablet screens -----------
-function useDesktopOnly() {
-  useEffect(() => {
-    function checkDesktop() {
-  // Block only if actual mobile or tablet device is detected
-  const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|Windows Phone/i.test(navigator.userAgent);
-  if (isMobileDevice) {
-    // Block UI
-    document.body.innerHTML = `
-      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#00448d82;">
-        <img src="/logo512.png" alt="Logo" style="width:110px;margin-bottom:22px;" />
-        <h2 style="color:#FF8C1A;font-weight:900;text-align:center;margin-bottom:10px;">Desktop Use Only</h2>
-        <div style="color:#2e2e2e;font-size:17px;text-align:center;font-weight:500;line-height:1.4;margin-bottom:4px;">
-          HRM VJC Overseas is designed for desktop/laptop devices only.<br>
-          <span style="color:#1E40AF;font-weight:bold;">Mobile, tablet, and landscape modes are NOT supported.</span>
-        </div>
-        <div style="color:#FF8C1A;font-size:15px;font-weight:bold;margin-top:10px;">
-          Please access this page from a desktop or laptop browser.
-        </div>
-      </div>
-    `;
-    document.body.style.overflow = "hidden";
-  }
-}
-
-    checkDesktop();
-    window.addEventListener('resize', checkDesktop);
-    return () => window.removeEventListener('resize', checkDesktop);
-  }, []);
-}
-// --------------------------------------------------
-
 function injectStyle() {
-  if (!document.getElementById('shiny-heading-keyframes')) {
-    const styleTag = document.createElement('style');
-    styleTag.id = 'shiny-heading-keyframes';
-    styleTag.type = 'text/css';
+  if (!document.getElementById("shiny-heading-keyframes")) {
+    const styleTag = document.createElement("style");
+    styleTag.id = "shiny-heading-keyframes";
     styleTag.appendChild(document.createTextNode(shinyAnimationStyles));
     document.head.appendChild(styleTag);
   }
 }
 
-function Login() {
-  // Blocks mobile, tablet, landscape completely (shows only desktop page)
-  useDesktopOnly();
+// 🟧 BLOCK MOBILE/TABLETS
+function useDesktopOnly() {
+  useEffect(() => {
+    function checkDesktop() {
+      const isMobileDevice = /Android|iPhone|iPad|iPod|webOS|BlackBerry|Windows Phone/i.test(
+        navigator.userAgent
+      );
+      if (isMobileDevice) {
+        document.body.innerHTML = `
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#00448d82;">
+            <img src="/logo512.png" style="width:110px;margin-bottom:22px;" />
+            <h2 style="color:#FF8C1A;font-weight:900;">Desktop Use Only</h2>
+            <p style="color:white;font-size:17px;text-align:center;">Please access from a desktop/laptop.</p>
+          </div>`;
+        document.body.style.overflow = "hidden";
+      }
+    }
+    checkDesktop();
+    window.addEventListener("resize", checkDesktop);
+    return () => window.removeEventListener("resize", checkDesktop);
+  }, []);
+}
 
-  // Inject animation styles once
+// ---------------------------------------------------------------------------
+// 🟩 FINAL FIX ➜ COLLECT FULL DEVICE + GEO DATA
+// ---------------------------------------------------------------------------
+async function collectTrackingData() {
+  try {
+    // 1️⃣ Get IP, Location, ISP
+    const geo = await axios.get("https://ipapi.co/json/");
+    const ipInfo = geo.data;
+
+    // 2️⃣ Detect browser + OS
+    const ua = navigator.userAgent;
+    let browser = "Unknown Browser";
+    if (ua.includes("Chrome")) browser = "Chrome";
+    else if (ua.includes("Firefox")) browser = "Firefox";
+    else if (ua.includes("Safari")) browser = "Safari";
+    else if (ua.includes("Edg")) browser = "Edge";
+
+    let os = "Unknown OS";
+    if (ua.includes("Windows")) os = "Windows";
+    else if (ua.includes("Mac")) os = "macOS";
+    else if (ua.includes("Linux")) os = "Linux";
+
+    let device = /Mobile|Android|iPhone|iPad/i.test(ua)
+      ? "Mobile"
+      : "Desktop";
+
+    return {
+      ip_address: ipInfo.ip,
+      city: ipInfo.city,
+      region: ipInfo.region,
+      country: ipInfo.country_name,
+      isp_org: ipInfo.org,
+      os_name: os,
+      browser_name: browser,
+      user_agent: ua,
+      device_name: device,
+    };
+  } catch (e) {
+    console.log("Tracking Error:", e);
+    return {}; // Fail silently
+  }
+}
+
+// ---------------------------------------------------------------------------
+
+function Login() {
+  useDesktopOnly();
   injectStyle();
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
 
   const backendBaseUrl =
-    window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-      ? 'http://localhost:5000'
-      : 'https://backend.vjcoverseas.com';
+    window.location.hostname === "localhost"
+      ? "http://localhost:5000"
+      : "https://backend.vjcoverseas.com";
 
+  // ------------------------------------------------------------------
+  // LOGIN SUBMIT — now sending FULL tracking fields
+  // ------------------------------------------------------------------
   const handleLogin = async (e) => {
     e.preventDefault();
+
+    // Collect IP + Location + Device info
+    const tracking = await collectTrackingData();
+
     const formData = new URLSearchParams();
-    formData.append('email', email);
-    formData.append('password', password);
+    formData.append("email", email);
+    formData.append("password", password);
+
+    Object.keys(tracking).forEach((key) => {
+      formData.append(key, tracking[key] ?? "");
+    });
+
     try {
       await axios.post(`${backendBaseUrl}/`, formData, {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
         withCredentials: true,
       });
-      const res = await axios.get(`${backendBaseUrl}/dashboard`, { withCredentials: true });
+
+      const res = await axios.get(`${backendBaseUrl}/dashboard`, {
+        withCredentials: true,
+      });
+
       const route = res.data.redirect;
-      if (route === 'chairman') {
-        navigate('/chairman');
-      } else if (route === 'employee') {
-        navigate('/employee');
-      } else {
-        alert('Unknown role');
-      }
+      navigate(route === "chairman" ? "/chairman" : "/employee");
     } catch (err) {
-      console.error(err);
-      alert('❌ ' + (err.response?.data?.message || err.message || 'Login failed'));
+      alert("❌ " + (err.response?.data?.message || "Login failed"));
     }
   };
 
+  // ----------------- UI ---------------------
+
   return (
-    <div style={styles.root}>
+<div style={styles.root}>
       <div style={styles.responsiveContainer}>
         {/* Left-side info & illustration */}
         <div style={styles.leftPanel}>
@@ -206,23 +249,20 @@ function Login() {
   );
 }
 
-// Reusable feature bullet component with orange check icon
+// Small feature item
 function Feature({ label, desc }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: 24 }}>
-      <span style={{
-        color: "#1a89ffff", fontSize: 22, marginTop: 2, marginRight: 12,
-      }}>✔</span>
+    <div style={{ display: "flex", marginBottom: 20 }}>
+      <span style={{ color: "#1a89ff", fontSize: 20, marginRight: 10 }}>✔</span>
       <div>
-        <div style={{ fontWeight: 'bold', color: '#fff', fontSize: 17 }}>{label}</div>
-        <div style={{ color: '#f3f2f1', fontSize: 15 }}>{desc}</div>
+        <div style={{ fontWeight: "bold", color: "#fff" }}>{label}</div>
+        <div style={{ color: "#f3f2f1" }}>{desc}</div>
       </div>
     </div>
   );
 }
 
-// --- Styles Object ---
-
+// ------------------- STYLES (same as your original) -------------------
 const styles = {
   root: {
     minHeight: '70vh',
@@ -379,8 +419,6 @@ const styles = {
     transition: 'background-color 0.3s ease',
   },
 };
-
-// --- Responsive adjustments for smaller screens ---
 const mobileBreakpoint = 700; // px
 if (window.innerWidth < mobileBreakpoint) {
   styles.responsiveContainer.flexDirection = 'column';

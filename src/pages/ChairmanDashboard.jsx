@@ -6,6 +6,7 @@ import Markabsent from "./Markabsent";
 import Payroll from "./Payroll";
 import AttendanceChatLogs from "./AttendanceChatLogs";
 import ManagerAssignment from "./ManagerAssignment"; 
+import Loginlogs from "./Loginlogs";
 const baseUrl =
   window.location.hostname === "localhost"
     ? "http://localhost:5000"
@@ -63,6 +64,7 @@ const navItems = {
   PAYROLL: { label: "💰 Payroll Processing", component: Payroll },
   SALARY_UPLOAD: { label: "📤 Salary Slip Upload", component: SalaryUpload },
   MARK_ABSENT: { label: "📅 Mark Holiday", component: Markabsent },
+  LOGIN_LOGS: { label: "🔐 Login Logs with IP", component: Loginlogs },
 };
 
 // Component to render based on active tab
