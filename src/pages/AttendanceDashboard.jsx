@@ -223,107 +223,79 @@ function classifyDayPolicy({ isoDate, weekday, log, holidaysMap, monthlyLateStat
       };
     }
   }
-// Sunday special condition check (Cross-month logs fix)
-if (weekday === 0) {
-  const dateObj = new Date(isoDate + "T00:00:00Z");
-  
-  // --- Month-end detection ---
-  const currentMonth = dateObj.getUTCMonth();
-  const nextDay = new Date(dateObj);
-  nextDay.setUTCDate(nextDay.getUTCDate() + 1);
-  const isMonthEndSunday = nextDay.getUTCMonth() !== currentMonth;
-  
-  // Previous Saturday (always same month)
-  const saturdayDate = new Date(dateObj);
-  saturdayDate.setUTCDate(saturdayDate.getUTCDate() - 1);
-  const saturdayStr = saturdayDate.toISOString().slice(0, 10);
+  // Sunday special condition check
+  if (weekday === 0) {
+    // Get previous day (Saturday) and next day (Monday) ISO dates
+    const dateObj = new Date(isoDate + 'T00:00:00Z'); // Treat as UTC
+    const saturdayISO = new Date(dateObj);
+    saturdayISO.setUTCDate(saturdayISO.getUTCDate() - 1);
+    const saturdayStr = saturdayISO.toISOString().slice(0, 10);
 
-  // Next Monday (might be NEXT MONTH!)
-  const mondayDate = new Date(dateObj);
-  mondayDate.setUTCDate(mondayDate.getUTCDate() + 1);
-  const mondayStr = mondayDate.toISOString().slice(0, 10);
+    const mondayISO = new Date(dateObj);
+    mondayISO.setUTCDate(mondayISO.getUTCDate() + 1);
+    const mondayStr = mondayISO.toISOString().slice(0, 10);
 
-  // 🔍 DEBUG: Check if logs exist for cross-month
-  console.log(`SUNDAY ${isoDate}: Sat=${saturdayStr} (${logsByDate.has(saturdayStr)?'✅':'❌'}), Mon=${mondayStr} (${logsByDate.has(mondayStr)?'✅':'❌'})`);
+    // Fetch logs for Saturday and Monday
+    const saturdayLog = logsByDate.get(saturdayStr) || {};
+    const mondayLog = logsByDate.get(mondayStr) || {};
 
-  const saturdayLog = logsByDate.get(saturdayStr) || {};
-  const mondayLog = logsByDate.get(mondayStr) || {}; // This fails if Monday is next month!
+    // Logic for Saturday logout at or after 7:00 PM or paid/half paid holiday with half worked
+    const logoutSatTime = parseTime(saturdayLog.office_out);
+    const cutoffLogoutTime = parseTime(LOGOUT_CUTOFF);
 
-  const logoutSatTime = parseTime(saturdayLog.office_out);
-  const cutoffLogoutTime = parseTime(LOGOUT_CUTOFF);
-  const loginMondayTime = parseTime(mondayLog.office_in);
-  const lateGraceTime = parseTime(LATE_GRACE_LIMIT);
+    // Monday login before 10:15 AM (grace)
+    const loginMondayTime = parseTime(mondayLog.office_in);
+    const lateGraceTime = parseTime(LATE_GRACE_LIMIT);
+    
+    // Conditions for Sunday as holiday
+    if (
+      (logoutSatTime && cutoffLogoutTime && logoutSatTime >= cutoffLogoutTime) || (saturdayLog.leave_type && (saturdayLog.leave_type.toLowerCase().includes('paid') || saturdayLog.leave_type.toLowerCase().includes('half'))) &&
+      netHours >= 4
+    ) {
+      if (loginMondayTime && lateGraceTime && loginMondayTime <= lateGraceTime) {
+        // Mark Sunday as holiday
+        if (holidaysMap.has(isoDate)) {
+          return { bucket: 'holiday', reason: `Paid Holiday: ${holidaysMap.get(isoDate).name}`, netHHMM: '00:00', netHours: 0, flags: ['paid_holiday'] };
+        }
+        return { bucket: 'holiday', reason: 'Sunday treated as Holiday (Weekend compliance)', netHHMM: '00:00', netHours: 0, flags: ['sunday_special_holiday'] };
+      }
+    }
 
-  // Saturday condition
-  const satConditionMet =
-    (logoutSatTime && cutoffLogoutTime && logoutSatTime >= cutoffLogoutTime) ||
-    (saturdayLog.leave_type &&
-      (saturdayLog.leave_type.toLowerCase().includes("paid") ||
-       saturdayLog.leave_type.toLowerCase().includes("half")));
-
-  // Monday condition  
-  const monConditionMet =
-    loginMondayTime && lateGraceTime && loginMondayTime <= lateGraceTime;
-
-  // BOTH conditions required for Sunday holiday
-  if (satConditionMet && monConditionMet) {
+    // Else mark Sunday as absent if no attendance log or no holiday
     if (holidaysMap.has(isoDate)) {
       return { bucket: 'holiday', reason: `Paid Holiday: ${holidaysMap.get(isoDate).name}`, netHHMM: '00:00', netHours: 0, flags: ['paid_holiday'] };
     }
-    return { 
-      bucket: 'holiday', 
-      reason: isMonthEndSunday 
-        ? 'Sunday Holiday (Month-end Sat ≥7PM & Mon ≤10:15AM)' 
-        : 'Sunday Holiday (Weekend Sat ≥7PM & Mon ≤10:15AM)', 
-      netHHMM: '00:00', 
-      netHours: 0, 
-      flags: ['sunday_special_holiday'] 
-    };
+
+    return { bucket: 'absent', reason: 'Sunday (Absent due to criteria not met)', netHHMM: '00:00', netHours: 0, flags: ['sunday_absent'] };
   }
 
-  // Holiday list override
-  if (holidaysMap.has(isoDate)) {
-    return { bucket: 'holiday', reason: `Paid Holiday: ${holidaysMap.get(isoDate).name}`, netHHMM: '00:00', netHours: 0, flags: ['paid_holiday'] };
-  }
+    if (log?.leave_type?.toLowerCase().includes('earned') && netHours >= 4) {
+        return { bucket: 'fullday_and_earned_leave', reason: 'Earned Leave (Half-Day) + Worked > 4h = Full Day', netHHMM, netHours, flags: ['earned_leave_fullday_override'] };
+    }
 
-  return { 
-    bucket: 'absent', 
-    reason: `Sunday Absent (Sat:${satConditionMet?'✅':'❌'} Mon:${monConditionMet?'✅':'❌'})`, 
-    netHHMM: '00:00', 
-    netHours: 0, 
-    flags: ['sunday_absent'] 
-  };
-}
+    if (weekday === 0) return { bucket: 'holiday', reason: 'Sunday (Holiday)', netHHMM: '00:00', netHours: 0, flags: ['sunday'] };
 
-// ---- ALL YOUR ORIGINAL CODE BELOW (UNCHANGED) ----
-if (log?.leave_type?.toLowerCase().includes('earned') && netHours >= 4) {
-  return { bucket: 'fullday_and_earned_leave', reason: 'Earned Leave (Half-Day) + Worked > 4h = Full Day', netHHMM, netHours, flags: ['earned_leave_fullday_override'] };
-}
+    if (holidaysMap.has(isoDate)) {
+        return { bucket: 'holiday', reason: `Paid Holiday: ${holidaysMap.get(isoDate).name}`, netHHMM: '00:00', netHours: 0, flags: ['paid_holiday'] };
+    }
 
-if (weekday === 0) return { bucket: 'holiday', reason: 'Sunday (Holiday)', netHHMM: '00:00', netHours: 0, flags: ['sunday'] };
+    if (leaveStatus && (leaveStatus === 'Pending' || leaveStatus === 'Rejected')) {
+        if (!log || !log.office_in || !log.office_out) {
+            return { bucket: 'absent', reason: `Leave ${leaveStatus.toLowerCase()} - treated as absent with grace`, netHHMM: '00:00', netHours: 0, flags: ['grace_absent', `leave_${leaveStatus.toLowerCase()}`] };
+        }
+    }
 
-if (holidaysMap.has(isoDate)) {
-  return { bucket: 'holiday', reason: `Paid Holiday: ${holidaysMap.get(isoDate).name}`, netHHMM: '00:00', netHours: 0, flags: ['paid_holiday'] };
-}
+    if (log?.leave_type?.toLowerCase().includes('earned')) {
+        return { bucket: 'paidleave', reason: `Paid Leave: ${log.leave_type}`, netHHMM: '00:00', netHours: 0, flags: ['paid_leave'] };
+    }
 
-if (leaveStatus && (leaveStatus === 'Pending' || leaveStatus === 'Rejected')) {
-  if (!log || !log.office_in || !log.office_out) {
-    return { bucket: 'absent', reason: `Leave ${leaveStatus.toLowerCase()} - treated as absent with grace`, netHHMM: '00:00', netHours: 0, flags: ['grace_absent', `leave_${leaveStatus.toLowerCase()}`] };
-  }
-}
+    if (log?.leave_type && !log.leave_type.toLowerCase().includes('earned')) {
+        return { bucket: 'absent', reason: `${log.leave_type} (unpaid)`, netHHMM: '00:00', netHours: 0, flags: ['unpaid_leave'] };
+    }
 
-if (log?.leave_type?.toLowerCase().includes('earned')) {
-  return { bucket: 'paidleave', reason: `Paid Leave: ${log.leave_type}`, netHHMM: '00:00', netHours: 0, flags: ['paid_leave'] };
-}
-
-if (log?.leave_type && !log.leave_type.toLowerCase().includes('earned')) {
-  return { bucket: 'absent', reason: `${log.leave_type} (unpaid)`, netHHMM: '00:00', netHours: 0, flags: ['unpaid_leave'] };
-}
-
-if (!log?.office_in || !log?.office_out) {
-  return { bucket: 'absent', reason: 'No attendance log', netHHMM: '00:00', netHours: 0, flags: [] };
-}
-
+    if (!log?.office_in || !log?.office_out) {
+        return { bucket: 'absent', reason: 'No attendance log', netHHMM: '00:00', netHours: 0, flags: [] };
+    }
 
     const logoutTime = parseTime(log.office_out);
     const logoutCutoff = parseTime(LOGOUT_CUTOFF);
@@ -426,33 +398,16 @@ export default function AttendanceDashboard() {
     applyDateFilter();
   }, [logs, fromDate, toDate]);
 
-
-  function getNextYearMonth(ym) {
-  const [y, m] = ym.split("-").map(Number);
-  const nextM = m === 12 ? 1 : m + 1;
-  const nextY = m === 12 ? y + 1 : y;
-  return `${nextY}-${String(nextM).padStart(2, "0")}`;
-}
-
-function fetchAttendance() {
-  if (!selectedMonth) return;
-
-  const nextMonth = getNextYearMonth(selectedMonth);
-
-  Promise.all([
-    axios.get(`${baseUrl}/my-attendance?month=${selectedMonth}`, { withCredentials: true }),
-    axios.get(`${baseUrl}/my-attendance?month=${nextMonth}`,    { withCredentials: true }),
-  ])
-    .then(([resCurrent, resNext]) => {
-      const cur = Array.isArray(resCurrent.data) ? resCurrent.data : [];
-      const nxt = Array.isArray(resNext.data) ? resNext.data : [];
-      // merge by date, next month only used for cross‑month (Mon) lookups
-      const merged = [...cur, ...nxt];
-      setLogs(merged);
-      setMessage("");
-    })
-    .catch(() => setMessage("❌ Failed to fetch attendance logs"));
-}
+  function fetchAttendance() {
+    if (!selectedMonth) return;
+    axios
+      .get(`${baseUrl}/my-attendance?month=${selectedMonth}`, { withCredentials: true })
+      .then((res) => {
+        setLogs(Array.isArray(res.data) ? res.data : []);
+        setMessage('');
+      })
+      .catch(() => setMessage('❌ Failed to fetch attendance logs'));
+  }
 
   function fetchHolidays() {
     if (!selectedMonth) return;
