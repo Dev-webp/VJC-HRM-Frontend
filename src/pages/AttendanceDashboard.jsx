@@ -426,8 +426,7 @@ export default function AttendanceDashboard() {
     applyDateFilter();
   }, [logs, fromDate, toDate]);
 
-
-  function getNextYearMonth(ym) {
+function getNextYearMonth(ym) {
   const [y, m] = ym.split("-").map(Number);
   const nextM = m === 12 ? 1 : m + 1;
   const nextY = m === 12 ? y + 1 : y;
@@ -446,9 +445,16 @@ function fetchAttendance() {
     .then(([resCurrent, resNext]) => {
       const cur = Array.isArray(resCurrent.data) ? resCurrent.data : [];
       const nxt = Array.isArray(resNext.data) ? resNext.data : [];
-      // merge by date, next month only used for cross‑month (Mon) lookups
-      const merged = [...cur, ...nxt];
-      setLogs(merged);
+
+      // All logs (current + next) for internal cross‑month checks (Sunday logic, etc.)
+      const allLogs = [...cur, ...nxt];
+
+      // UI / main month should only see selectedMonth dates
+      const monthLogs = allLogs.filter(
+        (log) => log.date && log.date.startsWith(selectedMonth)
+      );
+
+      setLogs(monthLogs);      // use this for calendar / chat status
       setMessage("");
     })
     .catch(() => setMessage("❌ Failed to fetch attendance logs"));
