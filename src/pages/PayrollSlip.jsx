@@ -46,7 +46,7 @@ function PayrollSlip() {
   }, [month]);
 
   const getDaysInMonth = (monthStr) => {
-    if (!monthStr) return 30; // fallback to 30 days
+    if (!monthStr) return 30;
     const [year, m] = monthStr.split("-").map(Number);
     return new Date(year, m, 0).getDate();
   };
@@ -125,15 +125,31 @@ function PayrollSlip() {
   let earnings = [];
   let deductions = [];
   let payable = 0;
+  let adjustmentNote = null;
 
   if (slip) {
     const totalSalary = Number(slip.base_salary) || 0;
     const totalDaysInMonth = getDaysInMonth(month) || 30;
-    const actualWorkDays = slip.work_days || slip.workDays || totalDaysInMonth;
-
-    // Calculate per day salary and payable based on actual work days
-    const salaryPerDay = totalSalary / totalDaysInMonth;
-    payable = salaryPerDay * actualWorkDays;
+    let actualWorkDays = slip.work_days || slip.workDays || totalDaysInMonth;
+    
+    // Check for previous month adjustments
+    let previousMonthAdjustment = 0;
+    let adjustmentDescription = "";
+    
+    if (slip.previous_month_adjustment) {
+      previousMonthAdjustment = Number(slip.previous_month_adjustment.amount) || 0;
+      adjustmentDescription = slip.previous_month_adjustment.description || "Previous Month Adjustment";
+      
+      // Apply adjustment to payable amount
+      payable = (totalSalary / totalDaysInMonth) * actualWorkDays + previousMonthAdjustment;
+      
+      // Create adjustment note
+      adjustmentNote = `${adjustmentDescription}: ₹${previousMonthAdjustment.toLocaleString()}`;
+    } else {
+      // Original logic without adjustment
+      const salaryPerDay = totalSalary / totalDaysInMonth;
+      payable = salaryPerDay * actualWorkDays;
+    }
 
     // Earnings breakdown for display only
     const basic = Math.round(totalSalary * 0.6);
@@ -147,12 +163,21 @@ function PayrollSlip() {
       { desc: "Work Allowance", amount: workAllowance },
     ];
 
-    const leaveDeduction = totalSalary - payable;
+    const leaveDeduction = totalSalary - ((totalSalary / totalDaysInMonth) * actualWorkDays);
     deductions = [
       { desc: "PF", amount: 0 },
       { desc: "Tax", amount: 0 },
       { desc: "Leave Deduction", amount: leaveDeduction < 0 ? 0 : leaveDeduction },
     ];
+
+    // Add previous month adjustment to deductions/earnings if exists
+    if (previousMonthAdjustment !== 0) {
+      if (previousMonthAdjustment > 0) {
+        earnings.push({ desc: adjustmentDescription, amount: previousMonthAdjustment });
+      } else {
+        deductions.push({ desc: adjustmentDescription, amount: Math.abs(previousMonthAdjustment) });
+      }
+    }
   }
 
   const officeAddresses = {
@@ -195,8 +220,9 @@ function PayrollSlip() {
 
   const downloadCSV = () => {
     if (!slip) return;
-    let csv = `Payroll Slip,${profile?.name || slip.employee_name}\nMonth,${slip.month}\nPayable Salary,${payable.toFixed(2)}\n\n`;
-    csv += "Earnings,Amount\n";
+    let csv = `Payroll Slip,${profile?.name || slip.employee_name}\nMonth,${slip.month}\nPayable Salary,${payable.toFixed(2)}\n`;
+    if (adjustmentNote) csv += `Adjustment,${adjustmentNote}\n`;
+    csv += "\nEarnings,Amount\n";
     earnings.forEach((r) => {
       csv += `${r.desc},${r.amount}\n`;
     });
@@ -346,9 +372,9 @@ function PayrollSlip() {
               <tbody>
                 <InfoRow label="DOB" value={formatDate(profile?.dob || slip.dob)} />
                 <InfoRow label="DOJ" value={formatDate(profile?.doj || slip.doj)} />
-                <InfoRow label="Work Days" value={slip?.work_days || "-"} />
-
+                <InfoRow label="Work Days" value={slip?.work_days || slip?.workDays || "-"} />
                 <InfoRow label="Days in Month" value={getDaysInMonth(month)} />
+                {adjustmentNote && <InfoRow label="Adjustment" value={adjustmentNote} />}
                 <InfoRow label="Bank/Pay Mode" value="NEFT" />
               </tbody>
             </table>
