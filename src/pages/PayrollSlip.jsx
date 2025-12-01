@@ -4,9 +4,10 @@ import axios from "axios";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 
-const baseUrl = window.location.hostname === "localhost"
-  ? "http://localhost:5000"
-  : "https://backend.vjcoverseas.com";
+const baseUrl =
+  window.location.hostname === "localhost"
+    ? "http://localhost:5000"
+    : "https://backend.vjcoverseas.com";
 
 function PayrollSlip() {
   const [month, setMonth] = useState(() => new Date().toISOString().substr(0, 7));
@@ -16,6 +17,7 @@ function PayrollSlip() {
   const slipRef = useRef();
   const [profile, setProfile] = useState(null);
 
+  // Fetch user profile once on mount
   useEffect(() => {
     axios
       .get(`${baseUrl}/me`, { withCredentials: true })
@@ -23,15 +25,16 @@ function PayrollSlip() {
       .catch(() => {});
   }, []);
 
-  useEffect(() => {
-    if (!month) return;
+  // Function to fetch payroll slip data for a given month
+  const fetchPayrollSlip = (targetMonth) => {
+    if (!targetMonth) return;
     setLoading(true);
     setError(null);
     setSlip(null);
     axios
       .post(
         `${baseUrl}/payroll/auto-generate-slip`,
-        { month },
+        { month: targetMonth },
         { withCredentials: true }
       )
       .then((res) => setSlip(res.data))
@@ -43,10 +46,20 @@ function PayrollSlip() {
         }
       })
       .finally(() => setLoading(false));
+  };
+
+  // Fetch slip on month change
+  useEffect(() => {
+    fetchPayrollSlip(month);
   }, [month]);
 
+  // Manual refresh handler to reload current month slip data
+  const handleRefresh = () => {
+    fetchPayrollSlip(month);
+  };
+
   const getDaysInMonth = (monthStr) => {
-    if (!monthStr) return 30; // fallback to 30 days
+    if (!monthStr) return 30; // fallback
     const [year, m] = monthStr.split("-").map(Number);
     return new Date(year, m, 0).getDate();
   };
@@ -129,7 +142,7 @@ function PayrollSlip() {
   if (slip) {
     const totalSalary = Number(slip.base_salary) || 0;
     const totalDaysInMonth = getDaysInMonth(month) || 30;
-    const actualWorkDays = slip.work_days || slip.workDays || totalDaysInMonth;
+    const actualWorkDays = slip.work_days ?? slip.workDays ?? totalDaysInMonth;
 
     // Calculate per day salary and payable based on actual work days
     const salaryPerDay = totalSalary / totalDaysInMonth;
@@ -195,7 +208,9 @@ function PayrollSlip() {
 
   const downloadCSV = () => {
     if (!slip) return;
-    let csv = `Payroll Slip,${profile?.name || slip.employee_name}\nMonth,${slip.month}\nPayable Salary,${payable.toFixed(2)}\n\n`;
+    let csv = `Payroll Slip,${profile?.name || slip.employee_name}\nMonth,${slip.month}\nPayable Salary,${payable.toFixed(
+      2
+    )}\n\n`;
     csv += "Earnings,Amount\n";
     earnings.forEach((r) => {
       csv += `${r.desc},${r.amount}\n`;
@@ -274,6 +289,9 @@ function PayrollSlip() {
             />
           </label>
         </div>
+        <button onClick={handleRefresh} disabled={loading} style={btnStyle}>
+          🔄 Refresh Slip
+        </button>
         <button onClick={downloadPDF} disabled={!slip} style={btnStyle}>
           ⏳ Download PDF
         </button>
@@ -347,7 +365,6 @@ function PayrollSlip() {
                 <InfoRow label="DOB" value={formatDate(profile?.dob || slip.dob)} />
                 <InfoRow label="DOJ" value={formatDate(profile?.doj || slip.doj)} />
                 <InfoRow label="Work Days" value={slip?.work_days || "-"} />
-
                 <InfoRow label="Days in Month" value={getDaysInMonth(month)} />
                 <InfoRow label="Bank/Pay Mode" value="NEFT" />
               </tbody>
