@@ -426,16 +426,33 @@ export default function AttendanceDashboard() {
     applyDateFilter();
   }, [logs, fromDate, toDate]);
 
-  function fetchAttendance() {
-    if (!selectedMonth) return;
-    axios
-      .get(`${baseUrl}/my-attendance?month=${selectedMonth}`, { withCredentials: true })
-      .then((res) => {
-        setLogs(Array.isArray(res.data) ? res.data : []);
-        setMessage('');
-      })
-      .catch(() => setMessage('❌ Failed to fetch attendance logs'));
-  }
+
+  function getNextYearMonth(ym) {
+  const [y, m] = ym.split("-").map(Number);
+  const nextM = m === 12 ? 1 : m + 1;
+  const nextY = m === 12 ? y + 1 : y;
+  return `${nextY}-${String(nextM).padStart(2, "0")}`;
+}
+
+function fetchAttendance() {
+  if (!selectedMonth) return;
+
+  const nextMonth = getNextYearMonth(selectedMonth);
+
+  Promise.all([
+    axios.get(`${baseUrl}/my-attendance?month=${selectedMonth}`, { withCredentials: true }),
+    axios.get(`${baseUrl}/my-attendance?month=${nextMonth}`,    { withCredentials: true }),
+  ])
+    .then(([resCurrent, resNext]) => {
+      const cur = Array.isArray(resCurrent.data) ? resCurrent.data : [];
+      const nxt = Array.isArray(resNext.data) ? resNext.data : [];
+      // merge by date, next month only used for cross‑month (Mon) lookups
+      const merged = [...cur, ...nxt];
+      setLogs(merged);
+      setMessage("");
+    })
+    .catch(() => setMessage("❌ Failed to fetch attendance logs"));
+}
 
   function fetchHolidays() {
     if (!selectedMonth) return;
