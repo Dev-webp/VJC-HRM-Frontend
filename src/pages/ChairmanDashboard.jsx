@@ -1,301 +1,31 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
+import { io } from "socket.io-client";
+
 import SalaryUpload from "./SalarySlipUpload";
-import UserManagement from "./UserManagement";
 import Markabsent from "./Markabsent";
 import Payroll from "./Payroll";
 import AttendanceChatLogs from "./AttendanceChatLogs";
-import ManagerAssignment from "./ManagerAssignment"; 
-import Loginlogs from "./Loginlogs";
+import LeaveRequestsSection from "./LeaveRequestsSection";
+import CreateUser from "./CreateUser";
+import ShowAllUsers from "./ShowAllUsers";
+import Offerletter from "./Offerletter";
+import Chairmanautosalaryslips from "./Chairmanautosalaryslips";
+
 const baseUrl =
   window.location.hostname === "localhost"
     ? "http://localhost:5000"
     : "https://backend.vjcoverseas.com";
 
-// --- UserMenu Component ---
-function UserMenu({ name = "User" }) {
-  const [open, setOpen] = useState(false);
-  const toggleDropdown = () => setOpen((o) => !o);
-
-  const handleLogout = async () => {
-    try {
-      await axios.get(`${baseUrl}/logout`, { withCredentials: true });
-      window.location.href = "/";
-    } catch (err) {
-      console.error("Logout failed", err);
-      alert("Logout failed");
-    }
-  };
-
-  const handleSwitchUser = () => {
-    window.location.href = "/";
-  };
-
-  useEffect(() => {
-    const onClickOutside = (e) => {
-      if (!e.target.closest(".usermenu-container")) setOpen(false);
-    };
-    window.addEventListener("click", onClickOutside);
-    return () => window.removeEventListener("click", onClickOutside);
-  }, []);
-
-  return (
-    <div className="usermenu-container" style={premiumStyles.userMenu.container}>
-      <div style={premiumStyles.userMenu.avatar} onClick={toggleDropdown} title={name}>
-        {name[0]?.toUpperCase() || "U"}
-      </div>
-      {open && (
-        <div style={premiumStyles.userMenu.dropdown}>
-          <div style={premiumStyles.userMenu.dropdownItem} onClick={handleLogout}>
-            🚪 Logout
-          </div>
-          <div style={premiumStyles.userMenu.dropdownItem} onClick={handleSwitchUser}>
-            🔄 Switch User
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// --- Navigation Items and Content Mapping ---
-const navItems = {
-  LEAVE_REQUESTS: { label: "📝 Leave Requests", component: LeaveRequestsSection },
-  PAYROLL: { label: "💰 Payroll Processing", component: Payroll },
-  SALARY_UPLOAD: { label: "📤 Salary Slip Upload", component: SalaryUpload },
-  MARK_ABSENT: { label: "📅 Mark Holiday", component: Markabsent },
-  LOGIN_LOGS: { label: "🔐 Login Logs with IP", component: Loginlogs },
-};
-
-// Component to render based on active tab
-const ComponentRenderer = ({
-  activeTab,
-  leaveRequests,
-  message,
-  updateRemarks,
-  handleLeaveAction,
-  deleteLeaveRequest,
-  statusColor,
-}) => {
-  const ActiveComponent = navItems[activeTab].component;
-
-  if (activeTab === "LEAVE_REQUESTS") {
-    return (
-      <ActiveComponent
-        leaveRequests={leaveRequests}
-        message={message}
-        updateRemarks={updateRemarks}
-        handleLeaveAction={handleLeaveAction}
-        deleteLeaveRequest={deleteLeaveRequest}
-        statusColor={statusColor}
-        premiumStyles={premiumStyles}
-      />
-    );
-  }
-
-  return <ActiveComponent />;
-};
-function LeaveRequestsSection({
-  leaveRequests,
-  message,
-  updateRemarks,
-  handleLeaveAction,
-  deleteLeaveRequest,
-  statusColor,
-  premiumStyles,
-}) {
-  const [search, setSearch] = useState("");
-  const [scrollIdx, setScrollIdx] = useState(0);
-
-  // Filter leave requests by search string (name or email)
-  const filteredRequests = leaveRequests.filter((req) =>
-    (req.employee_name || "").toLowerCase().includes(search.toLowerCase()) ||
-    (req.employee_email || "").toLowerCase().includes(search.toLowerCase())
-  );
-
-  // Show only latest 10; remaining can be accessed by scrolling (pagination emulation)
-  const visibleRequests = filteredRequests.slice(scrollIdx, scrollIdx + 10);
-
-  const showPrev = scrollIdx > 0;
-  const showNext = scrollIdx + 10 < filteredRequests.length;
-
-  return (
-    <div style={premiumStyles.contentBoxNoMargin}>
-      <h3 style={{ ...premiumStyles.sectionTitle, borderBottom: "none" }}>📝 Pending Leave Requests</h3>
-      {message && <p style={premiumStyles.message}>{message}</p>}
-
-      {/* Search Bar */}
-      <div style={{ marginBottom: 20, display: "flex", alignItems: "center", gap: 16 }}>
-        <input
-          type="search"
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setScrollIdx(0); // reset scroll on new search
-          }}
-          style={{
-            ...premiumStyles.input,
-            maxWidth: 320,
-            fontSize: 15,
-            fontWeight: 500,
-            borderColor: "#e67e22",
-            background: "#fff8f1",
-          }}
-          placeholder="Search by name or mail id"
-        />
-        <span style={{ fontSize: 13, color: "#999" }}>
-          Showing {visibleRequests.length} of {filteredRequests.length} results
-        </span>
-      </div>
-
-      {visibleRequests.length === 0 ? (
-        <p style={premiumStyles.emptyText}>No leave requests found.</p>
-      ) : (
-        <div style={{ overflowX: "auto" }}>
-          <table style={premiumStyles.table}>
-            <thead>
-              <tr style={premiumStyles.table.headerRow}>
-                <th style={premiumStyles.table.headerCell}>Employee</th>
-                <th style={premiumStyles.table.headerCell}>Type</th>
-                <th style={premiumStyles.table.headerCell}>Start</th>
-                <th style={premiumStyles.table.headerCell}>End</th>
-                <th style={premiumStyles.table.headerCell}>Reason</th>
-                <th style={premiumStyles.table.headerCell}>Status</th>
-                <th style={premiumStyles.table.headerCell}>Remarks</th>
-                <th style={premiumStyles.table.headerCell}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibleRequests.map((req, idx) => (
-                <tr key={req.id} style={premiumStyles.table.dataRow}>
-                  <td style={premiumStyles.table.dataCell}>
-                    <strong>{req.employee_name}</strong>
-                    <br />
-                    {req.employee_email}
-                    <br />
-                    <small>ID: {req.employee_id}</small>
-                  </td>
-                  <td style={premiumStyles.table.dataCell}>{req.leave_type}</td>
-                  <td style={premiumStyles.table.dataCell}>{req.start_date}</td>
-                  <td style={premiumStyles.table.dataCell}>{req.end_date}</td>
-                  <td style={premiumStyles.table.dataCell}>{req.reason || "-"}</td>
-                  <td
-                    style={{
-                      ...premiumStyles.table.dataCell,
-                      ...statusColor(req.status),
-                      fontWeight: "bold",
-                    }}
-                  >
-                    {req.status}
-                  </td>
-                  {/* REMARKS COLUMN */}
-                  <td style={premiumStyles.table.dataCell}>
-                    {req.status.toLowerCase() === "pending" ? (
-                      <input
-                        type="text"
-                        value={req.remarksInput}
-                        placeholder="Remarks"
-                        onChange={(e) => updateRemarks(idx + scrollIdx, e.target.value)}
-                        style={premiumStyles.input}
-                      />
-                    ) : (
-                      <span style={{ fontSize: "0.85em", color: "#333" }}>
-                        {req.chairman_remarks || "-"}
-                        {(req.actioned_by_role || req.actioned_by_name) && (
-                          <>
-                            <br />
-                            <span style={{ color: "#888", fontSize: "0.8em", fontStyle: "italic" }}>
-                              {req.status.toLowerCase() === "approved"
-                                ? `Approved By: ${req.actioned_by_role || ""}${req.actioned_by_name ? " - " + req.actioned_by_name : ""}`
-                                : req.status.toLowerCase() === "rejected"
-                                ? `Rejected By: ${req.actioned_by_role || ""}${req.actioned_by_name ? " - " + req.actioned_by_name : ""}`
-                                : `By: ${req.actioned_by_role || ""}${req.actioned_by_name ? " - " + req.actioned_by_name : ""}`}
-                            </span>
-                          </>
-                        )}
-                      </span>
-                    )}
-                  </td>
-                  {/* END REMARKS COLUMN */}
-                  <td style={{ ...premiumStyles.table.dataCell, whiteSpace: "nowrap" }}>
-                    {req.status.toLowerCase() === "pending" && (
-                      <>
-                        <button
-                          style={{ ...premiumStyles.btn, backgroundColor: "#2ecc71" }}
-                          onClick={() => handleLeaveAction(req.id, "approve", req.remarksInput)}
-                        >
-                          Approve
-                        </button>
-                        <button
-                          style={{
-                            ...premiumStyles.btn,
-                            backgroundColor: "#e74c3c",
-                            marginLeft: 6,
-                          }}
-                          onClick={() => handleLeaveAction(req.id, "reject", req.remarksInput)}
-                        >
-                          Reject
-                        </button>
-                      </>
-                    )}
-                    <button
-                      style={{ ...premiumStyles.btn, backgroundColor: "#6c757d", marginLeft: 6 }}
-                      onClick={() => deleteLeaveRequest(req.id)}
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {/* Pagination Controls */}
-          <div style={{ display: "flex", justifyContent: "center", margin: "15px 0" }}>
-            <button
-              style={{
-                ...premiumStyles.btn,
-                backgroundColor: showPrev ? "#e67e22" : "#eee",
-                color: showPrev ? "#fff" : "#999",
-                marginRight: 10,
-                cursor: showPrev ? "pointer" : "not-allowed",
-              }}
-              disabled={!showPrev}
-              onClick={() => setScrollIdx(scrollIdx - 10)}
-            >
-              ◀ Prev
-            </button>
-            <button
-              style={{
-                ...premiumStyles.btn,
-                backgroundColor: showNext ? "#e67e22" : "#eee",
-                color: showNext ? "#fff" : "#999",
-                marginLeft: 10,
-                cursor: showNext ? "pointer" : "not-allowed",
-              }}
-              disabled={!showNext}
-              onClick={() => setScrollIdx(scrollIdx + 10)}
-            >
-              Next ▶
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-
-// --- ChairmanDashboard Main Component ---
 export default function ChairmanDashboard() {
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [message, setMessage] = useState("");
-  const [activeTab, setActiveTab] = useState("LEAVE_REQUESTS"); // Default active tab
+  const [activeTab, setActiveTab] = useState("DASHBOARD");
+  const [toast, setToast] = useState(null);
+  const socketRef = useRef(null);
+  const audioRef = useRef(null);
+  let lastSoundTime = 0;
 
-  useEffect(() => {
-    fetchLeaveRequests();
-  }, []);
-
-  // Fetch leave requests
   async function fetchLeaveRequests() {
     try {
       const res = await axios.get(`${baseUrl}/all-leave-requests`, {
@@ -303,372 +33,299 @@ export default function ChairmanDashboard() {
       });
       setLeaveRequests(res.data.map((req) => ({ ...req, remarksInput: "" })));
     } catch (error) {
-      console.error(error);
+      console.error("❌ Failed to load leave requests", error);
       setMessage("Failed to load leave requests");
     }
   }
 
-  // Handle leave approve/reject action
-  async function handleLeaveAction(id, action, remarks) {
-    if (!remarks.trim()) {
-      setMessage("❌ Remarks are required");
-      return;
+  const showNotification = (data) => {
+    const now = Date.now();
+    if (now - lastSoundTime > 3000 && audioRef.current) {
+      audioRef.current.currentTime = 0;
+      audioRef.current.play().catch(() => {});
+      lastSoundTime = now;
     }
-    try {
-      await axios.post(
-        `${baseUrl}/leave-action`,
-        { id, action, remarks },
-        { withCredentials: true }
-      );
-      setMessage(`✅ Leave request ${action}d`);
-      fetchLeaveRequests();
-    } catch (error) {
-      console.error("Error in leave action", error);
-      setMessage("❌ Failed to update leave request");
-    }
-  }
-
-  // Delete a leave request
-  async function deleteLeaveRequest(id) {
-    if (!window.confirm("Are you sure you want to delete this leave request?")) return;
-    try {
-      await axios.delete(`${baseUrl}/delete-leave-request/${id}`, {
-        withCredentials: true,
-      });
-      setMessage("✅ Leave request deleted");
-      setLeaveRequests((prev) => prev.filter((r) => r.id !== id));
-    } catch (error) {
-      console.error("Failed to delete leave request", error);
-      setMessage("❌ Failed to delete leave request");
-    }
-  }
-
-  // Update remarks input for a leave request
-  function updateRemarks(index, value) {
-    setLeaveRequests((prev) => {
-      const updated = [...prev];
-      updated[index].remarksInput = value;
-      return updated;
+    setToast({
+      message: `🔔 New leave request from ${data.name || "an employee"}`,
     });
-  }
+    setTimeout(() => setToast(null), 5000);
+  };
 
-  // Returns style for status text color
-  function statusColor(status) {
-    const s = (status || "").toLowerCase();
-    switch (s) {
-      case "approved":
-        return premiumStyles.approvedColor;
-      case "rejected":
-        return premiumStyles.rejectedColor;
-      case "pending":
-        return premiumStyles.pendingColor;
-      default:
-        return {};
-    }
-  }
+  useEffect(() => {
+    fetchLeaveRequests();
+    socketRef.current = io(baseUrl, {
+      transports: ["websocket"],
+      withCredentials: true,
+    });
+    socketRef.current.on("connect", () => console.log("✅ Connected"));
+    socketRef.current.on("newLeaveRequest", (data) => {
+      showNotification(data);
+      fetchLeaveRequests();
+    });
+    return () => socketRef.current.disconnect();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // --- Render ---
+  const pendingCount = leaveRequests.filter(
+    (r) => (r.status || "").toLowerCase() === "pending"
+  ).length;
+
+  const navItems = [
+    { id: "DASHBOARD", label: "Executive Overview", icon: "🏛️" },
+    { id: "SHOW_USERS", label: "Employee List", icon: "👥" },
+    { id: "CREATE_USER", label: "Create User", icon: "👤" },
+    { id: "OFFER_LETTER", label: "Offer Letters", icon: "✉️" },
+    { id: "LEAVE_REQUESTS", label: "Leave Requests", icon: "📝" },
+    { id: "PAYROLL", label: "Payroll Control", icon: "💰" },
+    { id: "SALARY_UPLOAD", label: "Upload Slips", icon: "📤" },
+    { id: "MARK_ABSENT", label: "Holiday Planner", icon: "📅" },
+    { id: "AUTO_SALARY_SLIPS", label: "Auto Salary Slips", icon: "🤖" },
+  
+  ];
+
   return (
-    <div style={premiumStyles.container}>
-      <UserMenu name="Chairman" />
+    <div
+      style={{
+        display: "flex",
+        height: "100vh",
+        overflow: "hidden",
+       
+        fontFamily: "'Segoe UI', sans-serif",
+        color: "#111827",
+      }}
+    >
+      <audio ref={audioRef} src="/new-request.mp3" preload="auto" />
+      {toast && (
+        <div
+          style={{
+            position: "fixed",
+            top: 20,
+            right: 20,
+            background: "linear-gradient(90deg, #2563eb 0%, #f97316 100%)",
+            color: "white",
+            padding: "12px 20px",
+            borderRadius: "10px",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
+            fontWeight: 600,
+            zIndex: 9999,
+          }}
+        >
+          {toast.message}
+        </div>
+      )}
 
-      {/* Logo and Title Header Section */}
-      <div style={premiumStyles.headerSection}>
-        <div style={premiumStyles.logoContainer}>
-          {/* Replace with your actual logo path */}
+      {/* Sidebar */}
+      <aside
+        style={{
+          width: "250px",
+          background:
+            "linear-gradient(180deg, #60a5fa 0%, #fb923c 100%)",
+          color: "black",
+          display: "flex",
+          flexDirection: "column",
+          boxShadow: "4px 0 10px rgba(0,0,0,0.08)",
+        }}
+      >
+        <div
+          style={{
+            textAlign: "center",
+            padding: "25px 10px 15px",
+            borderBottom: "1px solid rgba(255,255,255,0.3)",
+            background: "rgba(255,255,255,0.2)",
+          }}
+        >
           <img
             src="/logo192.png"
-            alt="VJC-OVERSEAS Logo"
-            style={premiumStyles.logoImage}
-          />
-        </div>
-        <h2 style={premiumStyles.title}> Chairman VJC-OVERSEAS</h2>
-      </div>
-      {/* END HEADER */}
-
-      {/* 1. TOP PRIORITY: ATTENDANCE CHAT LOGS */}
-      <AttendanceChatLogs />
-
-      {/* 2. SECOND PRIORITY: USER MANAGEMENT */}
-      <div style={premiumStyles.contentBoxStack}>
-        <UserManagement />
-      </div>
-      <ManagerAssignment 
-      baseUrl={baseUrl} 
-      premiumStyles={premiumStyles} // <-- 🛑 This prop is critical and was likely missing 
-    />
-
-      <div style={premiumStyles.separator} />
-
-      {/* Main Navigation Bar */}
-      <div style={premiumStyles.navBar}>
-        {Object.keys(navItems).map((key) => (
-          <button
-            key={key}
-            onClick={() => setActiveTab(key)}
+            alt="Logo"
             style={{
-              ...premiumStyles.navItem,
-              ...(activeTab === key ? premiumStyles.activeNavItem : {}),
+              width: 70,
+              height: 70,
+              borderRadius: "50%",
+              background: "white",
+              padding: 5,
+              boxShadow: "0 0 8px rgba(0,0,0,0.1)",
+            }}
+          />
+          <h3
+            style={{
+              marginTop: 10,
+              fontWeight: 700,
+              fontSize: "1.1rem",
+              color: "#111827",
             }}
           >
-            {navItems[key].label}
-          </button>
-        ))}
-      </div>
+            VJC OVERSEAS HRM
+          </h3>
+        </div>
 
-      {/* Dynamic Content Area */}
-      <div style={premiumStyles.dynamicContent}>
-        <ComponentRenderer
-          activeTab={activeTab}
-          leaveRequests={leaveRequests}
-          message={message}
-          updateRemarks={updateRemarks}
-          handleLeaveAction={handleLeaveAction}
-          deleteLeaveRequest={deleteLeaveRequest}
-          statusColor={statusColor}
-        />
+        <nav style={{ flex: 1, padding: "10px 0", overflowY: "auto" }}>
+          {navItems.map((item) => (
+            <div
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                padding: "12px 20px",
+                cursor: "pointer",
+                fontWeight: 600,
+                fontSize: "0.95rem",
+                background:
+                  activeTab === item.id
+                    ? "rgba(255,255,255,0.8)"
+                    : "transparent",
+                color: activeTab === item.id ? "#111827" : "#1f2937",
+                transition: "all 0.3s ease",
+              }}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.background = "rgba(255,255,255,0.6)")
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.background =
+                  activeTab === item.id
+                    ? "rgba(255,255,255,0.8)"
+                    : "transparent")
+              }
+            >
+              <span style={{ fontSize: "1.2rem", marginRight: "10px" }}>
+                {item.icon}
+              </span>
+              {item.label}
+            </div>
+          ))}
+        </nav>
+      </aside>
+
+      {/* Main Content */}
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          height: "100vh",
+          overflow: "hidden",
+        }}
+      >
+        {/* Header */}
+        <header
+          style={{
+            background:
+              "linear-gradient(90deg, #60a5fa 0%, #fb923c 100%)",
+            color: "white",
+            padding: "20px 40px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
+          }}
+        >
+          <div>
+            <h2 style={{ margin: 0, fontWeight: 700 }}>
+              Good Day, Dr. V. Mani 👋
+            </h2>
+            <p style={{ margin: 0, fontSize: "0.9rem", opacity: 0.9 }}>
+              Chairman’s Administrative Portal
+            </p>
+          </div>
+          <div style={{ fontWeight: 600 }}>
+            🕒 {new Date().toLocaleTimeString()}
+          </div>
+        </header>
+
+        {/* Main Section */}
+        <main
+          style={{
+            flex: 1,
+            padding: "25px 35px",
+            overflowY: "auto",
+            background: "linear-gradient(135deg, #f9fafb 0%, #f1f5f9 100%)",
+          }}
+        >
+          {activeTab === "DASHBOARD" && (
+            <>
+              {/* Stats */}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                  gap: "20px",
+                  marginBottom: "25px",
+                }}
+              >
+                <div
+                  style={{
+                    background:
+                      "linear-gradient(135deg, #60a5fa 0%, #fb923c 100%)",
+                    color: "white",
+                    padding: "20px",
+                    borderRadius: "12px",
+                    boxShadow: "0 4px 10px rgba(0,0,0,0.1)",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: "2rem" }}>
+                      {pendingCount}
+                    </h3>
+                    <p style={{ margin: 0 }}>Pending Leave Requests</p>
+                  </div>
+                  <span style={{ fontSize: "2rem" }}>🔔</span>
+                </div>
+              </div>
+
+              {/* Logs */}
+              <div
+                style={{
+                
+                  borderRadius: "12px",
+                  padding: "20px",
+                  boxShadow: "0 4px 10px rgba(0,0,0,0.05)",
+                  height: "auto",
+                }}
+              >
+                <h3
+                  style={{
+                    fontSize: "1.1rem",
+                    fontWeight: 700,
+                    marginBottom: "15px",
+                    color: "#111827",
+                    borderBottom: "2px solid #60a5fa",
+                    paddingBottom: "8px",
+                  }}
+                >
+                  System Logs & Attendance
+                </h3>
+                <AttendanceChatLogs />
+              </div>
+            </>
+          )}
+
+          {/* Other Tabs */}
+          {activeTab !== "DASHBOARD" && (
+            <div
+             
+            >
+              {activeTab === "SHOW_USERS" && <ShowAllUsers />}
+              {activeTab === "CREATE_USER" && <CreateUser />}
+              {activeTab === "OFFER_LETTER" && <Offerletter />}
+              {activeTab === "PAYROLL" && <Payroll />}
+              {activeTab === "SALARY_UPLOAD" && <SalaryUpload />}
+              {activeTab === "MARK_ABSENT" && <Markabsent />}
+             
+              {activeTab === "AUTO_SALARY_SLIPS" && <Chairmanautosalaryslips />}
+              {activeTab === "LEAVE_REQUESTS" && (
+                <LeaveRequestsSection
+                  leaveRequests={leaveRequests}
+                  message={message}
+                
+                />
+              )}
+            </div>
+          )}
+        </main>
       </div>
     </div>
   );
 }
-
-// --- Premium Styles ---
-const premiumStyles = {
-  container: {
-    padding: 40,
-    fontFamily: "'Inter', sans-serif",
-    backgroundColor: "#f0f2f5",
-    minHeight: "100vh",
-    width: "100%",
-    boxSizing: "border-box",
-  },
-
-  // Header styles
-  headerSection: {
-    display: "flex",
-    alignItems: "center",
-    marginBottom: 40,
-    paddingLeft: 10,
-  },
-  logoContainer: {
-    marginRight: 15,
-    width: 160,
-    height: 100,
-    flexShrink: 0,
-  },
-  logoImage: {
-    width: "100%",
-    height: "100%",
-    objectFit: "contain",
-    borderRadius: "16px",
-  },
-  title: {
-    fontSize: "2.8rem",
-    fontWeight: "800",
-    color: "#2c3e50",
-    textAlign: "left",
-    letterSpacing: "-1px",
-    margin: 0,
-  },
-
-  // Content box styles
-  contentBoxStack: {
-    backgroundColor: "#fff",
-    padding: 30,
-    borderRadius: 15,
-    boxShadow: "0 12px 30px rgba(0,0,0,0.08)",
-    marginBottom: 25,
-    boxSizing: "border-box",
-    width: "100%",
-  },
-  contentBoxNoMargin: {
-    backgroundColor: "#fff",
-    borderRadius: 15,
-    boxSizing: "border-box",
-  },
-
-  separator: {
-    borderBottom: "1px solid #dcdfe4",
-    marginBottom: 30,
-    marginTop: -5,
-  },
-
-  // Navigation bar styles
-  navBar: {
-    display: "flex",
-    justifyContent: "flex-start",
-    backgroundColor: "#ffffff",
-    borderRadius: "10px 10px 0 0",
-    padding: "0 10px",
-    borderBottom: "3px solid #e0e0e0",
-    overflowX: "auto",
-  },
-  navItem: {
-    padding: "15px 25px",
-    cursor: "pointer",
-    border: "none",
-    backgroundColor: "transparent",
-    fontSize: "1rem",
-    fontWeight: "600",
-    color: "#7f8c8d",
-    transition: "color 0.3s, border-bottom 0.3s",
-    margin: "0 10px",
-    position: "relative",
-    whiteSpace: "nowrap",
-  },
-  activeNavItem: {
-    color: "#3498db",
-    borderBottom: "3px solid #3498db",
-    zIndex: 10,
-    transform: "translateY(1px)",
-  },
-  dynamicContent: {
-    backgroundColor: "#fff",
-    padding: 30,
-    paddingTop: 40,
-    borderRadius: "0 0 15px 15px",
-    boxShadow: "0 12px 30px rgba(0,0,0,0.08)",
-  },
-
-  // Section title styling
-  sectionTitle: {
-    fontSize: "1.5rem",
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 20,
-    borderBottom: "2px solid #e2f0ff",
-    paddingBottom: 10,
-  },
-
-  // Table styles
-  table: {
-    width: "100%",
-    borderCollapse: "separate",
-    borderSpacing: "0 10px",
-    headerRow: {
-      backgroundColor: "#eef2f7",
-      boxShadow: "0 2px 5px rgba(0,0,0,0.05)",
-    },
-    headerCell: {
-      padding: 15,
-      border: "none",
-      fontSize: 14,
-      fontWeight: 700,
-      color: "#2c3e50",
-      textAlign: "left",
-    },
-    dataRow: {
-      backgroundColor: "#f9f9f9",
-      boxShadow: "0 2px 5px rgba(0,0,0,0.05)",
-      borderRadius: 8,
-    },
-    dataCell: {
-      padding: 15,
-      border: "none",
-      fontSize: 14,
-      verticalAlign: "middle",
-      textAlign: "left",
-    },
-  },
-
-  // Buttons and inputs
-  btn: {
-    cursor: "pointer",
-    padding: "8px 15px",
-    borderRadius: 8,
-    border: "none",
-    fontWeight: "600",
-    color: "#fff",
-    transition: "background-color 0.3s ease, transform 0.1s ease",
-    fontSize: 13,
-  },
-  input: {
-    padding: 8,
-    borderRadius: 6,
-    border: "1px solid #ccc",
-    fontSize: 13,
-    outlineColor: "#3498db",
-    width: "100%",
-    boxSizing: "border-box",
-  },
-
-  emptyText: {
-    fontStyle: "italic",
-    color: "#666",
-    textAlign: "center",
-    padding: 40,
-    backgroundColor: "#f5f5f5",
-    borderRadius: 8,
-    fontSize: "1.1rem",
-  },
-
-  message: {
-    fontWeight: "600",
-    marginBottom: 15,
-    padding: 12,
-    borderRadius: 8,
-    textAlign: "center",
-    color: "#fff",
-    backgroundColor: "#e74c3c",
-  },
-
-  // Status text colors
-  approvedColor: {
-    color: "#2ecc71",
-  },
-  rejectedColor: {
-    color: "#e74c3c",
-  },
-  pendingColor: {
-    color: "#f39c12",
-  },
-
-  // User menu styles
-  userMenu: {
-    container: {
-      position: "fixed",
-      top: 30,
-      right: 40,
-      zIndex: 1000,
-      userSelect: "none",
-    },
-    avatar: {
-      backgroundColor: "#3498db",
-      color: "#fff",
-      width: 50,
-      height: 50,
-      borderRadius: "50%",
-      fontSize: 22,
-      fontWeight: "600",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      cursor: "pointer",
-      boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-      transition: "transform 0.2s ease-in-out",
-    },
-    dropdown: {
-      position: "absolute",
-      top: "calc(100% + 10px)",
-      right: 0,
-      background: "#fff",
-      borderRadius: 10,
-      boxShadow: "0 6px 20px rgba(0,0,0,0.15)",
-      overflow: "hidden",
-      minWidth: 160,
-      animation: "fadeIn 0.3s ease-in-out",
-      listStyle: "none",
-      padding: 0,
-      margin: 0,
-    },
-    dropdownItem: {
-      padding: 12,
-      cursor: "pointer",
-      fontWeight: "500",
-      color: "#333",
-      borderBottom: "1px solid #f0f2f5",
-      transition: "background-color 0.2s",
-      // Note: ':hover' cannot be applied here inline. Use CSS or a library for hover.
-    },
-  },
-};

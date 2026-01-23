@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
+import { io } from "socket.io-client";
 
 const baseUrl =
   window.location.hostname === "localhost"
@@ -13,6 +14,7 @@ const premiumStyles = {
     borderRadius: 15,
     boxShadow: "0 12px 30px rgba(0,0,0,0.08)",
     boxSizing: "border-box",
+    position: "relative",
   },
   sectionTitle: {
     fontSize: "1.5rem",
@@ -93,9 +95,10 @@ const premiumStyles = {
 };
 
 const filterAndPaginate = (requests, search, fromIndex = 0, pageSize = 10) => {
-  const filtered = requests.filter((req) =>
-    (req.employee_name || "").toLowerCase().includes(search.toLowerCase()) ||
-    (req.employee_email || "").toLowerCase().includes(search.toLowerCase())
+  const filtered = requests.filter(
+    (req) =>
+      (req.employee_name || "").toLowerCase().includes(search.toLowerCase()) ||
+      (req.employee_email || "").toLowerCase().includes(search.toLowerCase())
   );
   return {
     filtered,
@@ -107,11 +110,16 @@ const filterAndPaginate = (requests, search, fromIndex = 0, pageSize = 10) => {
 export default function LeaveRequestsContainer() {
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [message, setMessage] = useState("");
+  const [toast, setToast] = useState(null);
   const [userRole, setUserRole] = useState("");
   const [userLocation, setUserLocation] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [pageStart, setPageStart] = useState(0);
+  const socketRef = useRef(null);
+  const audioRef = useRef(null);
+  const lastSoundTime = useRef(0);
 
+  // Fetch user info
   async function fetchCurrentUser() {
     try {
       const res = await axios.get(`${baseUrl}/me`, { withCredentials: true });
@@ -123,14 +131,14 @@ export default function LeaveRequestsContainer() {
     }
   }
 
+  // Fetch leave requests
   async function fetchLeaveRequests() {
-    setMessage("⏳ Loading leave requests...");
     try {
       const res = await axios.get(`${baseUrl}/all-leave-requests`, {
         withCredentials: true,
       });
       setLeaveRequests(res.data.map((req) => ({ ...req, remarksInput: "" })));
-      setMessage("✅ Leave requests loaded");
+      setMessage("");
       setPageStart(0);
     } catch (error) {
       console.error(error);
@@ -138,6 +146,7 @@ export default function LeaveRequestsContainer() {
     }
   }
 
+  // Approve or reject
   async function handleLeaveAction(id, action, remarks) {
     if (!remarks.trim()) {
       setMessage("❌ Remarks are required");
@@ -159,6 +168,7 @@ export default function LeaveRequestsContainer() {
     }
   }
 
+  // Delete
   async function deleteLeaveRequest(id) {
     if (!window.confirm("Are you sure you want to delete this leave request?"))
       return;
@@ -175,6 +185,7 @@ export default function LeaveRequestsContainer() {
     }
   }
 
+  // Update remarks locally
   function updateRemarks(index, value) {
     setLeaveRequests((prev) => {
       const updated = [...prev];
@@ -183,14 +194,50 @@ export default function LeaveRequestsContainer() {
     });
   }
 
+  // Play sound + toast
+  const showNotification = React.useCallback((data) => {
+    const now = Date.now();
+    if (now - lastSoundTime.current > 3000 && audioRef.current) {
+      audioRef.current.currentTime = 0;
+      audioRef.current.play().catch((err) => console.warn("Sound blocked:", err));
+      lastSoundTime.current = now;
+    }
+
+    setToast({
+      message: `🆕 New leave request received from ${
+        data.name || "an employee"
+      }`,
+    });
+    setTimeout(() => setToast(null), 5000);
+  }, [audioRef, setToast]);
+
+  // Socket setup
   useEffect(() => {
     async function init() {
       await fetchCurrentUser();
       await fetchLeaveRequests();
     }
     init();
-  }, []);
 
+    // Connect socket
+    socketRef.current = io(baseUrl, { transports: ["websocket"], withCredentials: true });
+
+    socketRef.current.on("connect", () => {
+      console.log("✅ Connected to Socket.IO");
+    });
+
+    socketRef.current.on("newLeaveRequest", (data) => {
+      console.log("📩 New leave request:", data);
+      showNotification(data);
+      fetchLeaveRequests();
+    });
+
+    return () => {
+      if (socketRef.current) socketRef.current.disconnect();
+    };
+  }, [showNotification]);
+
+  // Filter and paginate
   const filteredLeaveRequests =
     userRole.toLowerCase() === "manager"
       ? leaveRequests.filter(
@@ -201,8 +248,7 @@ export default function LeaveRequestsContainer() {
         )
       : leaveRequests;
 
-  // eslint-disable-next-line no-unused-vars
-  const { filtered, paged, total } = filterAndPaginate(
+  const { paged, total } = filterAndPaginate(
     filteredLeaveRequests,
     searchTerm,
     pageStart,
@@ -212,7 +258,7 @@ export default function LeaveRequestsContainer() {
   const showPrev = pageStart > 0;
   const showNext = pageStart + 10 < total;
 
-  function statusColor(status) {
+  const statusColor = (status) => {
     const s = (status || "").toLowerCase();
     switch (s) {
       case "approved":
@@ -224,10 +270,33 @@ export default function LeaveRequestsContainer() {
       default:
         return {};
     }
-  }
+  };
 
   return (
     <div style={premiumStyles.contentBoxNoMargin}>
+      {/* Notification Sound */}
+      <audio ref={audioRef} src="/new-request.mp3" preload="auto" />
+
+      {/* Toast Notification */}
+      {toast && (
+        <div
+          style={{
+            position: "fixed",
+            top: 20,
+            right: 20,
+            background: "#2563eb",
+            color: "white",
+            padding: "12px 18px",
+            borderRadius: 8,
+            boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
+            zIndex: 9999,
+            fontWeight: 600,
+          }}
+        >
+          {toast.message}
+        </div>
+      )}
+
       <h3 style={{ ...premiumStyles.sectionTitle, borderBottom: "none" }}>
         📝 Pending Leave Requests
       </h3>
@@ -266,7 +335,7 @@ export default function LeaveRequestsContainer() {
         }}
       />
 
-      {paged.length === 0 && !message.startsWith("⏳") ? (
+      {paged.length === 0 ? (
         <p style={premiumStyles.emptyText}>No leave requests at the moment.</p>
       ) : (
         <>
@@ -313,36 +382,14 @@ export default function LeaveRequestsContainer() {
                           type="text"
                           value={req.remarksInput}
                           placeholder="Remarks"
-                          onChange={(e) => updateRemarks(pageStart + idx, e.target.value)}
+                          onChange={(e) =>
+                            updateRemarks(pageStart + idx, e.target.value)
+                          }
                           style={premiumStyles.input}
                         />
                       ) : (
                         <span style={{ fontSize: "0.85em", color: "#333" }}>
                           {req.chairman_remarks || "-"}
-                          {(req.actioned_by_role || req.actioned_by_name) && (
-                            <>
-                              <br />
-                              <span
-                                style={{
-                                  color: "#888",
-                                  fontSize: "0.8em",
-                                  fontStyle: "italic",
-                                }}
-                              >
-                                {req.status.toLowerCase() === "approved"
-                                  ? `Approved By: ${
-                                      req.actioned_by_role || ""
-                                    }${req.actioned_by_name ? " - " + req.actioned_by_name : ""}`
-                                  : req.status.toLowerCase() === "rejected"
-                                  ? `Rejected By: ${
-                                      req.actioned_by_role || ""
-                                    }${req.actioned_by_name ? " - " + req.actioned_by_name : ""}`
-                                  : `By: ${
-                                      req.actioned_by_role || ""
-                                    }${req.actioned_by_name ? " - " + req.actioned_by_name : ""}`}
-                              </span>
-                            </>
-                          )}
                         </span>
                       )}
                     </td>
@@ -395,7 +442,8 @@ export default function LeaveRequestsContainer() {
               </tbody>
             </table>
           </div>
-          {/* Pagination Buttons */}
+
+          {/* Pagination */}
           <div
             style={{
               display: "flex",
@@ -418,7 +466,9 @@ export default function LeaveRequestsContainer() {
             </button>
             <button
               disabled={!showNext}
-              onClick={() => setPageStart(Math.min(pageStart + 10, total - 10))}
+              onClick={() =>
+                setPageStart(Math.min(pageStart + 10, total - 10))
+              }
               style={{
                 ...premiumStyles.btn,
                 backgroundColor: showNext ? "#e67e22" : "#eee",

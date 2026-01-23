@@ -150,7 +150,18 @@ function Login() {
       });
 
       const route = res.data.redirect;
-      navigate(route === "chairman" ? "/chairman" : "/employee");
+
+      // 3. Logic for Two Chairpersons
+      if (route === "chairman") {
+        // Change "veni@vjcoverseas.com" to the real email Miss Veni uses to login
+        if (email.toLowerCase() === "veni@vjcoverseas.com") {
+          navigate("/veni-dashboard");
+        } else {
+          navigate("/chairman");
+        }
+      } else {
+        navigate("/employee");
+      }
     } catch (err) {
       alert("❌ " + (err.response?.data?.message || "Login failed"));
     }

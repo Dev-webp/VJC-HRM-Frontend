@@ -1,57 +1,48 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 
-function MarkHolidayPanel({ selectedYear: propSelectedYear, onHolidayMarked }) {
+function MarkHolidayPanel({ onHolidayMarked }) {
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
   const [date, setDate] = useState('');
   const [name, setName] = useState('');
   const [msg, setMsg] = useState('');
   const [holidays, setHolidays] = useState([]);
-  const [holidayCount, setHolidayCount] = useState(0);
 
-  // Backend URL auto-switching
+  // Backend URL logic
   const backendUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     ? 'http://localhost:5000'
     : 'https://backend.vjcoverseas.com';
 
-  const selectedYear = propSelectedYear || new Date().getFullYear().toString();
+  // Generate a list of years for the dropdown (e.g., 2023 to 2030)
+  const yearOptions = [];
+  const currentYear = new Date().getFullYear();
+  for (let i = currentYear - 2; i <= currentYear + 2; i++) {
+    yearOptions.push(i.toString());
+  }
 
-  useEffect(() => {
-    fetchHolidays();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedYear]);
+  // Fetch holidays for the chosen year
+  const fetchHolidays = useCallback(() => {
+    if (!selectedYear) return;
 
-  function fetchHolidays() {
-    if (!selectedYear) {
-      setHolidays([]);
-      setHolidayCount(0);
-      return;
-    }
     axios.get(`${backendUrl}/holidays?month=${selectedYear}`, { withCredentials: true })
       .then(res => {
         setHolidays(res.data);
         setMsg('');
-        updateHolidayCount(selectedYear);
       })
       .catch((error) => {
         console.error('Failed to fetch holidays', error);
-        setMsg('Failed to fetch holidays. Please try again later.');
-        setHolidayCount(0);
+        setMsg('Failed to fetch holidays for ' + selectedYear);
+        setHolidays([]);
       });
-  }
+  }, [selectedYear, backendUrl]);
 
-  function updateHolidayCount(month) {
-    axios.post(`${backendUrl}/update-holiday-count`, { month }, { withCredentials: true })
-      .then(res => {
-        setHolidayCount(res.data.count || 0);
-      })
-      .catch(() => {
-        setHolidayCount(0);
-      });
-  }
+  useEffect(() => {
+    fetchHolidays();
+  }, [fetchHolidays]);
 
   function markHoliday() {
     if (!date || !name.trim()) {
-      setMsg('Please enter both date and holiday name.');
+      setMsg('⚠️ Please enter both date and holiday name.');
       return;
     }
     axios.post(`${backendUrl}/mark-holiday`, { date, name }, { withCredentials: true })
@@ -63,7 +54,7 @@ function MarkHolidayPanel({ selectedYear: propSelectedYear, onHolidayMarked }) {
         if (onHolidayMarked) onHolidayMarked();
       })
       .catch(() => {
-        setMsg('Failed to mark holiday.');
+        setMsg('❌ Failed to mark holiday.');
       });
   }
 
@@ -76,20 +67,34 @@ function MarkHolidayPanel({ selectedYear: propSelectedYear, onHolidayMarked }) {
         if (onHolidayMarked) onHolidayMarked();
       })
       .catch(() => {
-        setMsg('Failed to delete holiday.');
+        setMsg('❌ Failed to delete holiday.');
       });
   }
 
   return (
     <div style={styles.container}>
-      <h2 style={styles.heading}>Mark Paid Holiday</h2>
+      <h2 style={styles.heading}>Manage Holidays</h2>
+
+      {/* --- Year Selection Dropdown --- */}
+      <div style={styles.selectorRow}>
+        <label style={styles.label}>Select Year: </label>
+        <select 
+          value={selectedYear} 
+          onChange={(e) => setSelectedYear(e.target.value)}
+          style={styles.selectInput}
+        >
+          {yearOptions.map(y => (
+            <option key={y} value={y}>{y}</option>
+          ))}
+        </select>
+      </div>
+
       <div style={styles.formRow}>
         <input
           type="date"
           value={date}
           onChange={e => setDate(e.target.value)}
           style={styles.dateInput}
-          aria-label="Select holiday date"
         />
         <input
           type="text"
@@ -97,20 +102,22 @@ function MarkHolidayPanel({ selectedYear: propSelectedYear, onHolidayMarked }) {
           onChange={e => setName(e.target.value)}
           placeholder="Holiday name"
           style={styles.textInput}
-          aria-label="Enter holiday name"
         />
         <button onClick={markHoliday} style={styles.markButton}>Mark</button>
       </div>
+
       {msg && <div style={styles.message}>{msg}</div>}
-      <h3 style={styles.subheading}>Existing Holidays ({holidayCount} {holidayCount === 1 ? 'holiday' : 'holidays'})</h3>
+
+      <h3 style={styles.subheading}>{selectedYear} Holiday List</h3>
+
       {holidays.length === 0 ? (
-        <p style={styles.noHolidays}>No holidays found.</p>
+        <p style={styles.noHolidays}>No holidays found for {selectedYear}.</p>
       ) : (
         <ul style={styles.holidayList}>
-          {holidays.map(({ date, name }) => (
-            <li key={date} style={styles.holidayItem}>
-              <span><strong>{date}</strong> - {name}</span>
-              <button onClick={() => deleteHoliday(date)} style={styles.deleteButton} aria-label={`Delete holiday on ${date}`}>×</button>
+          {holidays.map(({ date: hDate, name: hName }) => (
+            <li key={hDate} style={styles.holidayItem}>
+              <span><strong>{hDate}</strong> - {hName}</span>
+              <button onClick={() => deleteHoliday(hDate)} style={styles.deleteButton}>×</button>
             </li>
           ))}
         </ul>
@@ -124,101 +131,105 @@ const styles = {
     maxWidth: 520,
     margin: '30px auto',
     padding: 20,
-    fontFamily: '"Segoe UI", Tahoma, Geneva, Verdana, sans-serif',
+    fontFamily: '"Segoe UI", sans-serif',
     backgroundColor: '#fff',
     borderRadius: 12,
-    boxShadow: '0 4px 15px rgba(0,0,0,0.12)',
+    boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
   },
   heading: {
-    fontSize: 28,
-    marginBottom: 20,
+    fontSize: 26,
+    marginBottom: 15,
     color: '#f97316',
-    fontWeight: '700',
     textAlign: 'center',
-    userSelect: 'none',
+    fontWeight: '700',
+  },
+  selectorRow: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 20,
+    padding: '10px',
+    backgroundColor: '#fff7ed',
+    borderRadius: 8,
+  },
+  label: {
+    fontWeight: '600',
+    color: '#4b5563',
+  },
+  selectInput: {
+    padding: '8px',
+    fontSize: 16,
+    borderRadius: 6,
+    border: '1.5px solid #f97316',
+    cursor: 'pointer',
   },
   formRow: {
     display: 'flex',
-    gap: 14,
-    alignItems: 'center',
-    marginBottom: 18,
+    gap: 10,
+    marginBottom: 15,
     flexWrap: 'wrap',
   },
   dateInput: {
-    flexShrink: 0,
-    width: 160,
-    padding: '10px 12px',
-    fontSize: 17,
+    flex: '1',
+    padding: '10px',
     borderRadius: 6,
     border: '1.5px solid #60aaff',
-    outlineColor: '#60aaff',
   },
   textInput: {
-    flexGrow: 1,
-    padding: '10px 12px',
-    fontSize: 17,
+    flex: '2',
+    padding: '10px',
     borderRadius: 6,
     border: '1.5px solid #60aaff',
-    outlineColor: '#60aaff',
   },
   markButton: {
-    padding: '11px 22px',
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#fff',
+    padding: '10px 20px',
     backgroundColor: '#f97316',
+    color: '#fff',
     border: 'none',
     borderRadius: 6,
+    fontWeight: 'bold',
     cursor: 'pointer',
-    userSelect: 'none',
-    transition: 'background-color 0.3s ease',
   },
   message: {
-    marginTop: 14,
-    color: '#16a34a',
-    fontWeight: '600',
     textAlign: 'center',
+    color: '#16a34a',
+    margin: '10px 0',
+    fontWeight: '600',
   },
   subheading: {
-    marginTop: 36,
-    fontSize: 22,
-    borderBottom: '3px solid #f97316',
-    paddingBottom: 6,
+    fontSize: 20,
+    borderBottom: '2px solid #f97316',
+    paddingBottom: 5,
+    marginTop: 25,
     color: '#374151',
-    userSelect: 'none',
   },
   noHolidays: {
-    fontStyle: 'italic',
-    color: '#6b7280',
-    marginTop: 14,
     textAlign: 'center',
+    color: '#9ca3af',
+    marginTop: 20,
+    fontStyle: 'italic',
   },
   holidayList: {
     listStyle: 'none',
     padding: 0,
-    marginTop: 12,
+    marginTop: 10,
   },
   holidayItem: {
-    backgroundColor: 'rgba(96, 170, 255, 0.2)',
-    marginBottom: 10,
-    padding: '12px 18px',
-    borderRadius: 8,
     display: 'flex',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    fontSize: 17,
-    fontWeight: 500,
+    padding: '10px 15px',
+    backgroundColor: '#f0f7ff',
+    borderRadius: 8,
+    marginBottom: 8,
   },
   deleteButton: {
     backgroundColor: 'transparent',
     border: 'none',
     color: '#ef4444',
-    cursor: 'pointer',
     fontSize: 22,
-    lineHeight: 1,
-    padding: 0,
-    transition: 'color 0.3s ease',
-  },
+    cursor: 'pointer',
+  }
 };
 
 export default MarkHolidayPanel;
