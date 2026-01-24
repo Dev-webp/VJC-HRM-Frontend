@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from "react";
+/* eslint-disable */
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import axios from "axios";
 import { io } from "socket.io-client";
 
@@ -12,6 +13,7 @@ import ShowAllUsers from "./ShowAllUsers";
 import Offerletter from "./Offerletter";
 import Chairmanautosalaryslips from "./Chairmanautosalaryslips";
 
+// ✅ Auto-detect environment
 const baseUrl =
   window.location.hostname === "localhost"
     ? "http://localhost:5000"
@@ -24,8 +26,9 @@ export default function ChairmanDashboard() {
   const [toast, setToast] = useState(null);
   const socketRef = useRef(null);
   const audioRef = useRef(null);
-  let lastSoundTime = 0;
+  const lastSoundTimeRef = useRef(0);
 
+  // ✅ Fetch all leave requests
   async function fetchLeaveRequests() {
     try {
       const res = await axios.get(`${baseUrl}/all-leave-requests`, {
@@ -38,33 +41,61 @@ export default function ChairmanDashboard() {
     }
   }
 
-  const showNotification = (data) => {
+  // ✅ Toast + sound on new request
+  const showNotification = useCallback((data) => {
     const now = Date.now();
-    if (now - lastSoundTime > 3000 && audioRef.current) {
+    if (now - lastSoundTimeRef.current > 3000 && audioRef.current) {
       audioRef.current.currentTime = 0;
       audioRef.current.play().catch(() => {});
-      lastSoundTime = now;
+      lastSoundTimeRef.current = now;
     }
     setToast({
       message: `🔔 New leave request from ${data.name || "an employee"}`,
     });
     setTimeout(() => setToast(null), 5000);
-  };
+  }, []);
 
+  // ✅ SOCKET.IO Setup
   useEffect(() => {
     fetchLeaveRequests();
-    socketRef.current = io(baseUrl, {
-      transports: ["websocket"],
+
+    const socketUrl =
+      window.location.hostname === "localhost"
+        ? "http://localhost:5000"
+        : "https://backend.vjcoverseas.com";
+
+    socketRef.current = io(socketUrl, {
+      transports: ["websocket"], // force websocket
+      secure: window.location.protocol === "https:",
       withCredentials: true,
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 2000,
+      timeout: 20000,
+      path: "/socket.io/",
     });
-    socketRef.current.on("connect", () => console.log("✅ Connected"));
+
+    socketRef.current.on("connect", () => {
+      console.log("✅ Socket connected:", socketRef.current.id);
+    });
+
+    socketRef.current.on("disconnect", (reason) => {
+      console.warn("⚠️ Socket disconnected:", reason);
+    });
+
+    socketRef.current.on("connect_error", (error) => {
+      console.error("❌ Socket connection error:", error.message);
+    });
+
     socketRef.current.on("newLeaveRequest", (data) => {
       showNotification(data);
       fetchLeaveRequests();
     });
-    return () => socketRef.current.disconnect();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+
+    return () => {
+      if (socketRef.current) socketRef.current.disconnect();
+    };
+  }, [showNotification]);
 
   const pendingCount = leaveRequests.filter(
     (r) => (r.status || "").toLowerCase() === "pending"
@@ -80,7 +111,6 @@ export default function ChairmanDashboard() {
     { id: "SALARY_UPLOAD", label: "Upload Slips", icon: "📤" },
     { id: "MARK_ABSENT", label: "Holiday Planner", icon: "📅" },
     { id: "AUTO_SALARY_SLIPS", label: "Auto Salary Slips", icon: "🤖" },
-  
   ];
 
   return (
@@ -89,12 +119,12 @@ export default function ChairmanDashboard() {
         display: "flex",
         height: "100vh",
         overflow: "hidden",
-       
         fontFamily: "'Segoe UI', sans-serif",
         color: "#111827",
       }}
     >
       <audio ref={audioRef} src="/new-request.mp3" preload="auto" />
+
       {toast && (
         <div
           style={{
@@ -118,8 +148,7 @@ export default function ChairmanDashboard() {
       <aside
         style={{
           width: "250px",
-          background:
-            "linear-gradient(180deg, #60a5fa 0%, #fb923c 100%)",
+          background: "linear-gradient(180deg, #60a5fa 0%, #fb923c 100%)",
           color: "black",
           display: "flex",
           flexDirection: "column",
@@ -209,8 +238,7 @@ export default function ChairmanDashboard() {
         {/* Header */}
         <header
           style={{
-            background:
-              "linear-gradient(90deg, #60a5fa 0%, #fb923c 100%)",
+            background: "linear-gradient(90deg, #60a5fa 0%, #fb923c 100%)",
             color: "white",
             padding: "20px 40px",
             display: "flex",
@@ -224,7 +252,7 @@ export default function ChairmanDashboard() {
               Good Day, Dr. V. Mani 👋
             </h2>
             <p style={{ margin: 0, fontSize: "0.9rem", opacity: 0.9 }}>
-              Chairman’s Administrative Portal
+              Chairman's Administrative Portal
             </p>
           </div>
           <div style={{ fontWeight: 600 }}>
@@ -278,7 +306,6 @@ export default function ChairmanDashboard() {
               {/* Logs */}
               <div
                 style={{
-                
                   borderRadius: "12px",
                   padding: "20px",
                   boxShadow: "0 4px 10px rgba(0,0,0,0.05)",
@@ -304,22 +331,18 @@ export default function ChairmanDashboard() {
 
           {/* Other Tabs */}
           {activeTab !== "DASHBOARD" && (
-            <div
-             
-            >
+            <div>
               {activeTab === "SHOW_USERS" && <ShowAllUsers />}
               {activeTab === "CREATE_USER" && <CreateUser />}
               {activeTab === "OFFER_LETTER" && <Offerletter />}
               {activeTab === "PAYROLL" && <Payroll />}
               {activeTab === "SALARY_UPLOAD" && <SalaryUpload />}
               {activeTab === "MARK_ABSENT" && <Markabsent />}
-             
               {activeTab === "AUTO_SALARY_SLIPS" && <Chairmanautosalaryslips />}
               {activeTab === "LEAVE_REQUESTS" && (
                 <LeaveRequestsSection
                   leaveRequests={leaveRequests}
                   message={message}
-                
                 />
               )}
             </div>
