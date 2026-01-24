@@ -24,6 +24,7 @@ export default function ChairmanDashboard() {
   const [message, setMessage] = useState("");
   const [activeTab, setActiveTab] = useState("DASHBOARD");
   const [toast, setToast] = useState(null);
+  const [socketConnected, setSocketConnected] = useState(false);
   const socketRef = useRef(null);
   const audioRef = useRef(null);
   const lastSoundTimeRef = useRef(0);
@@ -50,61 +51,95 @@ export default function ChairmanDashboard() {
       lastSoundTimeRef.current = now;
     }
     setToast({
-      message: `🔔 New leave request from ${data.name || "an employee"}`,
+      message: `🔔 New leave request from ${data.employee_name || "an employee"}`,
     });
     setTimeout(() => setToast(null), 5000);
   }, []);
 
-  // ✅ FIXED SOCKET.IO Setup - Production ready for Gunicorn/Nginx
+  // ✅ PRODUCTION-READY SOCKET.IO SETUP FOR GUNICORN + EVENTLET
   useEffect(() => {
     fetchLeaveRequests();
 
+    // Determine socket URL based on environment
     const socketUrl =
       window.location.hostname === "localhost"
         ? "http://localhost:5000"
         : "https://backend.vjcoverseas.com";
 
-    // ✅ CRITICAL FIX: Removed transports: ["websocket"] - enables polling fallback
+    console.log("🔌 Connecting to Socket.IO server:", socketUrl);
+
+    // ✅ CRITICAL CONFIG FOR GUNICORN/EVENTLET
     socketRef.current = io(socketUrl, {
-      secure: window.location.protocol === "https:",
+      path: "/socket.io/",
+      transports: ["polling", "websocket"], // Start with polling, upgrade to websocket
       withCredentials: true,
+      secure: window.location.protocol === "https:",
       reconnection: true,
-      reconnectionAttempts: 5, // Reduced for faster recovery
+      reconnectionAttempts: 10,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       timeout: 20000,
-      path: "/socket.io/",
-      // ✅ Order matters: Try polling first (works with Gunicorn), then upgrade to WS
-      transports: ["polling", "websocket"],
-      // ✅ Force polling on WS failure (Gunicorn fix)
       upgrade: true,
       rememberUpgrade: false,
+      autoConnect: true,
     });
 
+    // Connection success
     socketRef.current.on("connect", () => {
-      console.log("✅ Socket connected:", socketRef.current.id);
+      console.log("✅ Socket.IO connected! ID:", socketRef.current.id);
+      console.log("🔧 Transport:", socketRef.current.io.engine.transport.name);
+      setSocketConnected(true);
     });
 
-    socketRef.current.on("disconnect", (reason) => {
-      console.warn("⚠️ Socket disconnected:", reason);
-    });
-
+    // Connection error
     socketRef.current.on("connect_error", (error) => {
       console.error("❌ Socket connection error:", error.message);
-      // ✅ Auto-fallback logic
-      if (error.message.includes("websocket")) {
-        console.log("🔄 Falling back to polling...");
+      setSocketConnected(false);
+    });
+
+    // Disconnection
+    socketRef.current.on("disconnect", (reason) => {
+      console.warn("⚠️ Socket disconnected. Reason:", reason);
+      setSocketConnected(false);
+      
+      // Auto-reconnect on certain disconnects
+      if (reason === "io server disconnect") {
+        socketRef.current.connect();
       }
     });
 
+    // Reconnection attempts
+    socketRef.current.on("reconnect_attempt", (attemptNumber) => {
+      console.log(`🔄 Reconnection attempt #${attemptNumber}...`);
+    });
+
+    socketRef.current.on("reconnect", (attemptNumber) => {
+      console.log(`✅ Reconnected after ${attemptNumber} attempts`);
+      setSocketConnected(true);
+      fetchLeaveRequests(); // Refresh data on reconnect
+    });
+
+    socketRef.current.on("reconnect_error", (error) => {
+      console.error("❌ Reconnection error:", error.message);
+    });
+
+    socketRef.current.on("reconnect_failed", () => {
+      console.error("❌ Failed to reconnect after all attempts");
+    });
+
+    // Listen for new leave requests
     socketRef.current.on("newLeaveRequest", (data) => {
+      console.log("📩 New leave request received:", data);
       showNotification(data);
       fetchLeaveRequests();
     });
 
+    // Cleanup on unmount
     return () => {
       if (socketRef.current) {
+        console.log("🔌 Disconnecting socket...");
         socketRef.current.disconnect();
+        socketRef.current = null;
       }
     };
   }, [showNotification]);
@@ -137,6 +172,7 @@ export default function ChairmanDashboard() {
     >
       <audio ref={audioRef} src="/new-request.mp3" preload="auto" />
 
+      {/* Toast Notification */}
       {toast && (
         <div
           style={{
@@ -150,6 +186,7 @@ export default function ChairmanDashboard() {
             boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
             fontWeight: 600,
             zIndex: 9999,
+            animation: "slideIn 0.3s ease-out",
           }}
         >
           {toast.message}
@@ -197,6 +234,28 @@ export default function ChairmanDashboard() {
           >
             VJC OVERSEAS HRM
           </h3>
+          {/* Socket Status Indicator */}
+          <div
+            style={{
+              marginTop: 8,
+              fontSize: "0.75rem",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "6px",
+            }}
+          >
+            <span
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                background: socketConnected ? "#22c55e" : "#ef4444",
+                display: "inline-block",
+              }}
+            />
+            {socketConnected ? "Live Updates ON" : "Connecting..."}
+          </div>
         </div>
 
         <nav style={{ flex: 1, padding: "10px 0", overflowY: "auto" }}>
@@ -361,6 +420,19 @@ export default function ChairmanDashboard() {
           )}
         </main>
       </div>
+
+      <style>{`
+        @keyframes slideIn {
+          from {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
+        }
+      `}</style>
     </div>
   );
 }
