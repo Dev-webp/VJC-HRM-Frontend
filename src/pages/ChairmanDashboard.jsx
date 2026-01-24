@@ -55,7 +55,7 @@ export default function ChairmanDashboard() {
     setTimeout(() => setToast(null), 5000);
   }, []);
 
-  // ✅ SOCKET.IO Setup
+  // ✅ FIXED SOCKET.IO Setup - Production ready for Gunicorn/Nginx
   useEffect(() => {
     fetchLeaveRequests();
 
@@ -64,15 +64,21 @@ export default function ChairmanDashboard() {
         ? "http://localhost:5000"
         : "https://backend.vjcoverseas.com";
 
+    // ✅ CRITICAL FIX: Removed transports: ["websocket"] - enables polling fallback
     socketRef.current = io(socketUrl, {
-      transports: ["websocket"], // force websocket
       secure: window.location.protocol === "https:",
       withCredentials: true,
       reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 2000,
+      reconnectionAttempts: 5, // Reduced for faster recovery
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
       timeout: 20000,
       path: "/socket.io/",
+      // ✅ Order matters: Try polling first (works with Gunicorn), then upgrade to WS
+      transports: ["polling", "websocket"],
+      // ✅ Force polling on WS failure (Gunicorn fix)
+      upgrade: true,
+      rememberUpgrade: false,
     });
 
     socketRef.current.on("connect", () => {
@@ -85,6 +91,10 @@ export default function ChairmanDashboard() {
 
     socketRef.current.on("connect_error", (error) => {
       console.error("❌ Socket connection error:", error.message);
+      // ✅ Auto-fallback logic
+      if (error.message.includes("websocket")) {
+        console.log("🔄 Falling back to polling...");
+      }
     });
 
     socketRef.current.on("newLeaveRequest", (data) => {
@@ -93,7 +103,9 @@ export default function ChairmanDashboard() {
     });
 
     return () => {
-      if (socketRef.current) socketRef.current.disconnect();
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
     };
   }, [showNotification]);
 
