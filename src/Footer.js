@@ -65,7 +65,7 @@ const footerStyles = {
     padding: "40px 20px 20px 20px",
     fontSize: 14,
     fontFamily: "'Inter', sans-serif",
-    marginTop: 60,
+   
     borderTop: `5px solid #f97316`,
     width: "100%",
     boxSizing: "border-box",

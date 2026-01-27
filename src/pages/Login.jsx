@@ -64,15 +64,13 @@ function useDesktopOnly() {
 }
 
 // ---------------------------------------------------------------------------
-// 🟩 FINAL FIX ➜ COLLECT FULL DEVICE + GEO DATA
+// 🟩 COLLECT FULL DEVICE + GEO DATA
 // ---------------------------------------------------------------------------
 async function collectTrackingData() {
   try {
-    // 1️⃣ Get IP, Location, ISP
     const geo = await axios.get("https://ipapi.co/json/");
     const ipInfo = geo.data;
 
-    // 2️⃣ Detect browser + OS
     const ua = navigator.userAgent;
     let browser = "Unknown Browser";
     if (ua.includes("Chrome")) browser = "Chrome";
@@ -102,11 +100,9 @@ async function collectTrackingData() {
     };
   } catch (e) {
     console.log("Tracking Error:", e);
-    return {}; // Fail silently
+    return {};
   }
 }
-
-// ---------------------------------------------------------------------------
 
 function Login() {
   useDesktopOnly();
@@ -123,12 +119,11 @@ function Login() {
       : "https://backend.vjcoverseas.com";
 
   // ------------------------------------------------------------------
-  // LOGIN SUBMIT — now sending FULL tracking fields
+  // LOGIN SUBMIT — FIXED to get user info and navigate properly
   // ------------------------------------------------------------------
   const handleLogin = async (e) => {
     e.preventDefault();
 
-    // Collect IP + Location + Device info
     const tracking = await collectTrackingData();
 
     const formData = new URLSearchParams();
@@ -140,25 +135,39 @@ function Login() {
     });
 
     try {
+      // Step 1: Login
       await axios.post(`${backendBaseUrl}/`, formData, {
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         withCredentials: true,
       });
 
-      const res = await axios.get(`${backendBaseUrl}/dashboard`, {
+      // Step 2: Get dashboard redirect info
+      const dashboardRes = await axios.get(`${backendBaseUrl}/dashboard`, {
         withCredentials: true,
       });
 
-      const route = res.data.redirect;
+      const route = dashboardRes.data.redirect;
 
-      // 3. Logic for Two Chairpersons
+      // Step 3: Get user profile to get the name
+      const profileRes = await axios.get(`${backendBaseUrl}/me`, {
+        withCredentials: true,
+      });
+
+      const userName = profileRes.data.name;
+
+      // Step 4: Navigate based on role
       if (route === "chairman") {
-        // Change "veni@vjcoverseas.com" to the real email Miss Veni uses to login
         if (email.toLowerCase() === "veni@vjcoverseas.com") {
           navigate("/veni-dashboard");
         } else {
           navigate("/chairman");
         }
+      } else if (route === "employee") {
+        // Create URL-friendly name
+        const urlName = userName 
+          ? userName.toLowerCase().replace(/\s+/g, '-')
+          : 'dashboard';
+        navigate(`/employee/${urlName}`);
       } else {
         navigate("/employee");
       }
@@ -167,10 +176,8 @@ function Login() {
     }
   };
 
-  // ----------------- UI ---------------------
-
   return (
-<div style={styles.root}>
+    <div style={styles.root}>
       <div style={styles.responsiveContainer}>
         {/* Left-side info & illustration */}
         <div style={styles.leftPanel}>
@@ -200,7 +207,6 @@ function Login() {
             alt="VJC Overseas Logo"
             style={styles.logo}
           />
-          {/* Use the shiny-heading class for the premium shiny effect */}
           <h1 className="shiny-heading">HRM VJC-OVERSEAS</h1>
           <p style={styles.slogan}>
             Empower your potential, drive our success.<br />
@@ -260,7 +266,6 @@ function Login() {
   );
 }
 
-// Small feature item
 function Feature({ label, desc }) {
   return (
     <div style={{ display: "flex", marginBottom: 20 }}>
@@ -273,7 +278,6 @@ function Feature({ label, desc }) {
   );
 }
 
-// ------------------- STYLES (same as your original) -------------------
 const styles = {
   root: {
     minHeight: '70vh',
@@ -335,15 +339,6 @@ const styles = {
     marginBottom: 10,
     objectFit: 'contain',
     alignSelf: 'center',
-  },
-  heading: {
-    fontSize: 22,
-    color: '#FF8C1A',
-    fontWeight: '900',
-    marginBottom: 6,
-    letterSpacing: 1.1,
-    fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
-    textAlign: 'center',
   },
   slogan: {
     fontSize: 14,
@@ -430,7 +425,8 @@ const styles = {
     transition: 'background-color 0.3s ease',
   },
 };
-const mobileBreakpoint = 700; // px
+
+const mobileBreakpoint = 700;
 if (window.innerWidth < mobileBreakpoint) {
   styles.responsiveContainer.flexDirection = 'column';
   styles.leftPanel.alignItems = 'center';
@@ -439,9 +435,6 @@ if (window.innerWidth < mobileBreakpoint) {
   styles.illustration.width = 240;
   styles.illustration.height = 240;
   styles.logo.width = 160;
-  styles.heading.fontSize = 20;
-  styles.input.fontSize = 14;
-  styles.loginButton.fontSize = 14;
   styles.slogan.fontSize = 13;
 }
 

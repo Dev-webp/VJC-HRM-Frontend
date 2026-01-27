@@ -1,13 +1,14 @@
+/* eslint-disable no-unused-vars */
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+import { useParams, useNavigate } from "react-router-dom";
 import LeaveApplication from "./LeaveApplication";
 import AttendanceDashboard from "./AttendanceDashboard";
 import SalarySlips from "./SalarySlips";
 import PayrollSlip from "./PayrollSlip";
-// 👇 IMPORT THE NEW COMPONENT
-import AttendanceChatLogs from "./AttendanceChatLogs"; // Assume this file is created
+import AttendanceChatLogs from "./AttendanceChatLogs";
+import SalesStats from "./SalesStats";
 
-// Dynamic backend baseUrl logic
 const baseUrl =
     window.location.hostname === "localhost"
         ? "http://localhost:5000"
@@ -16,27 +17,25 @@ const baseUrl =
 // --- Manager Login Button Component ---
 const ManagerLoginButton = () => {
     const handleManagerDashboard = () => {
-        // Redirect to the manager dashboard URL
         window.location.href = "/manager-dashboard";
     };
 
     return (
-        <div
+        <button
             onClick={handleManagerDashboard}
             style={styles.managerLoginButton}
             title="Switch to Manager Dashboard"
         >
-            👉 Login as Manager
-        </div>
+            👔 Manager Dashboard
+        </button>
     );
 };
-// --- END Manager Login Button Component ---
 
+// --- User Menu Component ---
 function UserMenu({ name = "User", role = "employee" }) {
     const [open, setOpen] = useState(false);
+    const navigate = useNavigate();
     const toggleDropdown = () => setOpen((o) => !o);
-    
-    // NOTE: Removed the Manager Dashboard link from the dropdown to focus on the main dashboard button.
 
     const handleLogout = async () => {
         try {
@@ -67,6 +66,11 @@ function UserMenu({ name = "User", role = "employee" }) {
             </div>
             {open && (
                 <div style={styles.userMenu.dropdown}>
+                    <div style={styles.userMenu.header}>
+                        <div style={styles.userMenu.name}>{name}</div>
+                        <div style={styles.userMenu.role}>{role}</div>
+                    </div>
+                    <div style={styles.userMenu.divider}></div>
                     <div style={styles.userMenu.dropdownItem} onClick={handleLogout}>
                         🚪 Logout
                     </div>
@@ -79,66 +83,43 @@ function UserMenu({ name = "User", role = "employee" }) {
     );
 }
 
+// --- Instructions Button ---
 const InstructionButton = ({ onClick }) => (
-    <div
+    <button
         onClick={onClick}
-        style={{
-            backgroundColor: "#ff7b16",
-            color: "white",
-            fontWeight: "700",
-            borderRadius: "22px",
-            padding: "10px 24px",
-            fontSize: "1rem",
-            boxShadow: "0 3px 10px rgba(0,0,0,0.25)",
-            border: "2px solid #fff",
-            display: "inline-block",
-            letterSpacing: 0.8,
-            cursor: "pointer",
-            transition: "background 0.3s, transform 0.2s",
-            textShadow: "1px 1px 4px #4442",
-            userSelect: "none",
-            position: 'absolute',
-            bottom: 0,
-            right: 40,
-            zIndex: 100,
-        }}
-        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#e86a0e"; e.currentTarget.style.transform = "scale(1.03)"; }}
-        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#ff7b16"; e.currentTarget.style.transform = "scale(1)"; }}
+        style={styles.instructionButton}
         title="Show instructions"
-        aria-label="Show instructions"
     >
-        👉 Instructions
-    </div>
+        📋 Instructions
+    </button>
 );
 
-// --- EmployeeDashboard START ---
+// --- Main Employee Dashboard ---
 function EmployeeDashboard() {
+    const { employeeName } = useParams();
+    const navigate = useNavigate();
     const [profile, setProfile] = useState(null);
     const [salarySlips, setSalarySlips] = useState([]);
     const [toast, setToast] = useState(null);
-    const [hoveredCard, setHoveredCard] = useState(null);
+    const [activeTab, setActiveTab] = useState('overview');
 
-    // Profile edit state
     const [editMode, setEditMode] = useState(false);
     const [editName, setEditName] = useState("");
     const [editPassword, setEditPassword] = useState("");
     const [imageFile, setImageFile] = useState(null);
 
-    // Show instructions
     const [showInstructions, setShowInstructions] = useState(false);
-    
-    // 👇 NEW STATE FOR ATTENDANCE CHAT LOGS
-    const [showChatLogs, setShowChatLogs] = useState(false); 
-
-    // Images from localStorage
     const [localProfileImage, setLocalProfileImage] = useState(null);
+    
+    // Sales stats availability
+    const [hasSalesTarget, setHasSalesTarget] = useState(false);
+    const [checkingSalesTarget, setCheckingSalesTarget] = useState(true);
+    
+    // Change password modal
+    const [showPasswordModal, setShowPasswordModal] = useState(false);
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
 
-    // Static BG image for ALL users
-    const staticBgUrl =
-        "/vjcoverseas.png";
-
-
-    // Toast helper
     const showToast = (msg, type = "info") => {
         setToast({ msg, type });
         setTimeout(() => setToast(null), 3500);
@@ -148,21 +129,38 @@ function EmployeeDashboard() {
     useEffect(() => {
         axios
             .get(`${baseUrl}/me`, { withCredentials: true })
-            .then((res) => setProfile(res.data))
-            .catch((err) => {
+            .then((res) => {
+                setProfile(res.data);
+                if (!employeeName && res.data.name) {
+                    const urlName = res.data.name.toLowerCase().replace(/\s+/g, '-');
+                    navigate(`/employee/${urlName}`, { replace: true });
+                }
+            })
+            .catch(() => {
                 showToast("❌ Failed to fetch profile", "error");
             });
 
-        // Local profile image
         const storedImg = localStorage.getItem("userProfileImage");
         if (storedImg) setLocalProfileImage(storedImg);
+    }, [employeeName, navigate]);
 
-        // Clear old, complex BG styles from local storage to ensure the static one is used
-        localStorage.removeItem("userBgImage");
-        localStorage.removeItem("userBgSize");
-        localStorage.removeItem("userBgPosition");
-
-    }, []);
+    // Check if employee has sales target assigned
+    useEffect(() => {
+        if (profile?.email) {
+            axios
+                .get(`${baseUrl}/sales-stats/${profile.email}`, { withCredentials: true })
+                .then((res) => {
+                    const target = parseFloat(res.data.target || 0);
+                    setHasSalesTarget(target > 0);
+                })
+                .catch(() => {
+                    setHasSalesTarget(false);
+                })
+                .finally(() => {
+                    setCheckingSalesTarget(false);
+                });
+        }
+    }, [profile]);
 
     // Salary slips
     useEffect(() => {
@@ -174,7 +172,7 @@ function EmployeeDashboard() {
         }
     }, [profile]);
 
-    // Profile edit triggers
+    // Profile editing
     const handleEditProfile = () => {
         setEditName(profile?.name || "");
         setEditPassword("");
@@ -186,22 +184,18 @@ function EmployeeDashboard() {
         setEditPassword("");
         setImageFile(null);
     };
-
-    // Profile image selection
     const handleProfileImageSelect = (e) => {
         const file = e.target.files[0];
         setImageFile(file);
         if (file) setLocalProfileImage(URL.createObjectURL(file));
-        else setLocalProfileImage(null); // Will default to placeholder or old image on save if file is cleared
+        else setLocalProfileImage(null);
     };
 
-    // Save profile + images
     const handleSaveProfile = async () => {
         try {
             let updatedProfile = { ...profile };
             let changes = [];
 
-            // Profile img
             if (imageFile) {
                 const reader = new FileReader();
                 reader.onloadend = async () => {
@@ -214,14 +208,12 @@ function EmployeeDashboard() {
                 return;
             }
 
-            // If only text fields
             await saveOtherChanges(updatedProfile, changes);
         } catch {
             showToast("❌ Failed to update profile", "error");
         }
     };
 
-    // Save name/password logic
     const saveOtherChanges = async (updatedProfile, changes) => {
         if (editName && editName !== updatedProfile.name) {
             try {
@@ -232,6 +224,8 @@ function EmployeeDashboard() {
                 );
                 updatedProfile.name = editName;
                 changes.push("name");
+                const urlName = editName.toLowerCase().replace(/\s+/g, '-');
+                navigate(`/employee/${urlName}`, { replace: true });
             } catch {
                 showToast("❌ Failed to update name", "error");
             }
@@ -251,278 +245,385 @@ function EmployeeDashboard() {
         setProfile(updatedProfile);
         setEditMode(false);
         if (changes.length > 0) {
-            showToast(
-                `✅ Updated ${changes.join(", ")} successfully`,
-                "success"
-            );
+            showToast(`✅ Updated ${changes.join(", ")} successfully`, "success");
         }
     };
     
-    // Helper function to get the style for a detail card (including hover)
-    const getDetailCardStyle = (cardName, initialBg = '#ffd9706b', accent = '#ff7f07ff') => {
-        const baseStyle = {
-            ...styles.detailCard,
-            borderLeft: `4px solid ${accent}`,
-            backgroundColor: initialBg,
-        };
-        const hoverStyle = {
-            backgroundColor: '#f6f6ff', // Light hover background
-            transform: 'translateY(-2px)', // Lift effect
-            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-        };
+    // Handle password change from modal
+    const handleChangePassword = async () => {
+        if (!newPassword || !confirmPassword) {
+            showToast("❌ Please fill both password fields", "error");
+            return;
+        }
         
-        return hoveredCard === cardName 
-            ? { ...baseStyle, ...hoverStyle }
-            : baseStyle;
+        if (newPassword !== confirmPassword) {
+            showToast("❌ Passwords do not match", "error");
+            return;
+        }
+        
+        if (newPassword.length < 6) {
+            showToast("❌ Password must be at least 6 characters", "error");
+            return;
+        }
+        
+        try {
+            await axios.post(
+                `${baseUrl}/update-password`,
+                new URLSearchParams({ password: newPassword }),
+                { withCredentials: true }
+            );
+            showToast("✅ Password updated successfully", "success");
+            setShowPasswordModal(false);
+            setNewPassword('');
+            setConfirmPassword('');
+        } catch {
+            showToast("❌ Failed to update password", "error");
+        }
     };
 
-    // --- RENDER START ---
+    // Determine if MIS Executive role (for attendance chat logs)
+    const isMISExecutive = profile?.role?.toLowerCase().includes('mis executive') || 
+                          profile?.role?.toLowerCase() === 'mis executive';
+
     return (
         <div style={styles.page}>
             <UserMenu name={profile?.name || "User"} role={profile?.role || "employee"} />
+            
             {toast && (
-                <div
-                    style={{
-                        ...styles.toast.base,
-                        ...styles.toast[toast.type],
-                    }}
-                >
+                <div style={{ ...styles.toast.base, ...styles.toast[toast.type] }}>
                     {toast.msg}
                 </div>
             )}
 
-            {/* -------- Profile Background - Static BG, Width: 1400px --------- */}
-            <div style={styles.profileTopContainer}>
-                <div style={styles.profileTopWrap}>
-                    <div
-                        style={{
-                            ...styles.profileBg,
-                            // Use the single static URL, cover and center it
-                            backgroundImage: `url('${staticBgUrl}')`,
-                            backgroundSize: 'cover',
-                            backgroundPosition: 'center',
-                        }}
-                    >
-                        {/* Empty input now, as customization is removed */}
+            {/* Top Navigation */}
+            <div style={styles.topNav}>
+                <div style={styles.navContent}>
+                    <div style={styles.logo}>
+                        <img src="/logo512.png" alt="Logo" style={styles.logoImg} />
+                        <span style={styles.logoText}>VJC Overseas HRM</span>
                     </div>
-                    {/* INSTRUCTION BUTTON PLACED HERE on the BG banner's bottom right */}
-                    <InstructionButton onClick={() => setShowInstructions(true)} /> 
+                    <div style={styles.navRight}>
+                        {profile?.role === 'manager' && <ManagerLoginButton />}
+                        <InstructionButton onClick={() => setShowInstructions(true)} />
+                    </div>
                 </div>
             </div>
 
-            {/* -------- Profile Image and Name/Edit - Width: 1400px --------- */}
-            <div style={styles.profileNameSection}>
-                <div style={styles.profileNameWrap}>
-                    {/* Profile image, circle */}
-                    <div style={styles.profileImageOuter}>
-                        <img
-                            src={
-                                localProfileImage || (profile?.image ? `${baseUrl}${profile?.image}` : "https://placehold.co/170x170?text=Profile")
-                            }
-                            alt="Profile"
-                            style={styles.profileImageCircle}
-                        />
-                        <input
-                            id="profile-upload"
-                            type="file"
-                            accept="image/*"
-                            onChange={handleProfileImageSelect}
-                            style={{ display: "none" }}
-                            disabled={!editMode}
-                        />
-                    </div>
-
-                    {/* Name, Edit Icon, and NEW Manager Button */}
-                    <div style={{ ...styles.nameAndEditWrap, gap: '15px' }}>
-                        {!editMode ? (
-                            <h2 style={styles.profileName}>{profile?.name}</h2>
-                        ) : (
-                            <label style={styles.editLabelName}>
-                                Name:
-                                <input
-                                    type="text"
-                                    value={editName}
-                                    onChange={(e) => setEditName(e.target.value)}
-                                    style={styles.imageInput}
-                                    placeholder="Enter new name"
-                                />
-                            </label>
-                        )}
-                        
-                        {/* CONDITIONAL MANAGER LOGIN BUTTON */}
-                        {profile?.role === 'manager' && (
-                            <ManagerLoginButton />
-                        )}
-
-                        {/* Edit Button - Triggers all edits (Name, Password, Photos) */}
-                        <div onClick={handleEditProfile} style={styles.profileEditPencil} title="Edit Profile Details">
-                            {editMode ? "Viewing Edit Mode" : "✏️ Edit Profile"}
+            {/* Profile Header */}
+            <div style={styles.profileHeader}>
+                <div style={styles.profileHeaderContent}>
+                    <div style={styles.profileLeft}>
+                        <div style={styles.profileImageContainer}>
+                            <img
+                                src={
+                                    localProfileImage || 
+                                    (profile?.image ? `${baseUrl}${profile?.image}` : "https://placehold.co/120x120?text=Profile")
+                                }
+                                alt="Profile"
+                                style={styles.profileImage}
+                            />
+                            {editMode && (
+                                <label style={styles.imageUploadLabel} htmlFor="profile-upload">
+                                    📷
+                                </label>
+                            )}
+                            <input
+                                id="profile-upload"
+                                type="file"
+                                accept="image/*"
+                                onChange={handleProfileImageSelect}
+                                style={{ display: "none" }}
+                                disabled={!editMode}
+                            />
                         </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* -------- Details Row - Width: 1400px --------- */}
-            <div style={styles.detailsSection}>
-                {!editMode ? (
-                    <>
-                        <div style={styles.detailsGridHorizontal}>
-                            <div 
-                                style={getDetailCardStyle('employeeId')}
-                                onMouseEnter={() => setHoveredCard('employeeId')}
-                                onMouseLeave={() => setHoveredCard(null)}
-                            >
-                                <div style={styles.detailCardLabel}>Employee ID</div>
-                                <div style={styles.detailCardValue}>{profile?.employeeId || profile?.id}</div>
-                            </div>
-                            <div 
-                                style={getDetailCardStyle('role')}
-                                onMouseEnter={() => setHoveredCard('role')}
-                                onMouseLeave={() => setHoveredCard(null)}
-                            >
-                                <div style={styles.detailCardLabel}>Role</div>
-                                <div style={styles.detailCardValue}>{profile?.role || "N/A"}</div>
-                            </div>
-                            <div 
-                                style={getDetailCardStyle('email')}
-                                onMouseEnter={() => setHoveredCard('email')}
-                                onMouseLeave={() => setHoveredCard(null)}
-                            >
-                                <div style={styles.detailCardLabel}>Email</div>
-                                <div style={styles.detailCardValue}>{profile?.email}</div>
-                            </div>
-                            <div 
-                                style={getDetailCardStyle('location')}
-                                onMouseEnter={() => setHoveredCard('location')}
-                                onMouseLeave={() => setHoveredCard(null)}
-                            >
-                                <div style={styles.detailCardLabel}>Location</div>
-                                <div style={styles.detailCardValue}>{profile?.location || "N/A"}</div>
-                            </div>
-                            {profile?.offer_letter_url && (
-                                <div 
-                                    style={getDetailCardStyle('offerLetter', '#e9f7ef', '#28a745')}
-                                    onMouseEnter={() => setHoveredCard('offerLetter')}
-                                    onMouseLeave={() => setHoveredCard(null)}
-                                >
-                                    <div style={styles.detailCardLabel}>Offer Letter</div>
-                                    <a
-                                        href={`${baseUrl}${profile.offer_letter_url}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        style={styles.detailCardLink}
-                                    >
-                                        📄 View Document
-                                    </a>
+                        <div style={styles.profileInfo}>
+                            {!editMode ? (
+                                <>
+                                    <h1 style={styles.profileName}>{profile?.name}</h1>
+                                    <div style={styles.profileMeta}>
+                                        <span style={styles.profileRole}>{profile?.role || "Employee"}</span>
+                                        <span style={styles.profileDivider}>•</span>
+                                        <span style={styles.profileDept}>{profile?.department || "N/A"}</span>
+                                        <span style={styles.profileDivider}>•</span>
+                                        <span style={styles.profileId}>ID: {profile?.employeeId || profile?.id}</span>
+                                    </div>
+                                </>
+                            ) : (
+                                <div style={styles.editNameContainer}>
+                                    <label style={styles.editLabel}>Name:</label>
+                                    <input
+                                        type="text"
+                                        value={editName}
+                                        onChange={(e) => setEditName(e.target.value)}
+                                        style={styles.editInput}
+                                        placeholder="Enter new name"
+                                    />
                                 </div>
                             )}
                         </div>
-                    </>
-                ) : (
-                    <div style={styles.editForm}>
-                        <label style={styles.editLabel}>
-                            Password:
-                            <input
-                                type="password"
-                                value={editPassword}
-                                onChange={(e) => setEditPassword(e.target.value)}
-                                style={styles.imageInput}
-                                autoComplete="new-password"
-                                placeholder="Enter new password (leave blank to keep current)"
-                            />
-                        </label>
-                        <div style={styles.editButtonRow}>
-                            <label style={styles.fileUploadLabel} htmlFor="profile-upload">Change Profile Photo</label>
-                            {/* Static BG, so only profile photo can be changed in edit mode now */}
-                            <button onClick={handleSaveProfile} style={styles.saveButton}>Save Changes</button>
-                            <button
-                                onClick={handleCancelEdit}
-                                style={{ ...styles.saveButton, backgroundColor: "#6c757d" }}
-                            >
-                                Cancel
-                            </button>
-                        </div>
                     </div>
-                )}
+                    <div style={styles.profileRight}>
+                        {!editMode ? (
+                            <>
+                                <button onClick={handleEditProfile} style={styles.editButton}>
+                                    ✏️ Edit Profile
+                                </button>
+                                <button onClick={() => setShowPasswordModal(true)} style={styles.passwordButton}>
+                                    🔐 Change Password
+                                </button>
+                            </>
+                        ) : (
+                            <div style={styles.editButtons}>
+                                <button onClick={handleSaveProfile} style={styles.saveButton}>
+                                    💾 Save
+                                </button>
+                                <button onClick={handleCancelEdit} style={styles.cancelButton}>
+                                    ❌ Cancel
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
             </div>
 
-            {/* ----- Rest of dashboard (Attendance, Leave, Slips) - Width: 1400px ------ */}
-            <div style={styles.mainLayout}>
-                {/* 👇 CONDITIONAL CHAT LOGS SECTION */}
-                {profile?.role === 'front-desk' && (
-                    <div style={styles.sectionCard}>
-                         <div style={{display: 'flex', justifyContent: 'flex-end', marginBottom: '15px'}}>
-                            <button 
-                                onClick={() => setShowChatLogs(o => !o)}
-                                style={{
-                                    ...styles.chatLogButton, // A new style is recommended here
-                                    backgroundColor: showChatLogs ? '#dc3545' : '#8e44ad',
-                                    color: 'white',
-                                    padding: '10px 20px',
-                                    borderRadius: '8px',
-                                    fontWeight: '600',
-                                    cursor: 'pointer',
-                                    border: 'none',
-                                    transition: 'background-color 0.2s',
-                                }}
-                            >
-                                {showChatLogs ? '❌ Hide Chat Logs' : '💬 View Attendance Chat Logs'}
-                            </button>
+            {/* Tabs */}
+            <div style={styles.container}>
+                <div style={styles.quickInfoGrid}>
+                    <div style={styles.infoCard}>
+                        <div style={styles.infoIcon}>📧</div>
+                        <div style={styles.infoContent}>
+                            <div style={styles.infoLabel}>Email</div>
+                            <div style={styles.infoValue}>{profile?.email}</div>
                         </div>
-                        {showChatLogs && <AttendanceChatLogs />}
                     </div>
-                )}
-                {/* 👆 END CONDITIONAL CHAT LOGS SECTION */}
+                    <div style={styles.infoCard}>
+                        <div style={styles.infoIcon}>📍</div>
+                        <div style={styles.infoContent}>
+                            <div style={styles.infoLabel}>Location</div>
+                            <div style={styles.infoValue}>{profile?.location || "N/A"}</div>
+                        </div>
+                    </div>
+                    <div style={styles.infoCard}>
+                        <div style={styles.infoIcon}>💼</div>
+                        <div style={styles.infoContent}>
+                            <div style={styles.infoLabel}>Department</div>
+                            <div style={styles.infoValue}>{profile?.department || "N/A"}</div>
+                        </div>
+                    </div>
+                </div>
 
-                <div style={styles.sectionCard}>
-                    <AttendanceDashboard />
-                </div>
-                              <div style={styles.sectionCard}>
-                    <LeaveApplication onMessage={(msg) => showToast(msg, "info")} />
-                </div>
-                <div style={styles.sectionCard}>
-                    <SalarySlips salarySlips={salarySlips} />
-                </div>
-                <div style={styles.sectionCard}>
-                    <PayrollSlip />
+                {/* Tab Navigation */}
+                <div style={styles.tabContainer}>
+                    <div style={styles.tabNav}>
+                        <button onClick={() => setActiveTab('overview')} style={{ ...styles.tabButton, ...(activeTab === 'overview' ? styles.tabButtonActive : {}) }}>
+                            📊 Overview
+                        </button>
+                        <button onClick={() => setActiveTab('attendance')} style={{ ...styles.tabButton, ...(activeTab === 'attendance' ? styles.tabButtonActive : {}) }}>
+                            🕒 Attendance
+                        </button>
+                        <button onClick={() => setActiveTab('leave')} style={{ ...styles.tabButton, ...(activeTab === 'leave' ? styles.tabButtonActive : {}) }}>
+                            📅 Leave
+                        </button>
+                        <button onClick={() => setActiveTab('salary')} style={{ ...styles.tabButton, ...(activeTab === 'salary' ? styles.tabButtonActive : {}) }}>
+                            💰 Salary
+                        </button>
+                        {hasSalesTarget && !checkingSalesTarget && (
+                            <button onClick={() => setActiveTab('sales')} style={{ ...styles.tabButton, ...(activeTab === 'sales' ? styles.tabButtonActive : {}) }}>
+                                📈 Sales Stats
+                            </button>
+                        )}
+                        {isMISExecutive && (
+                            <button onClick={() => setActiveTab('chatlogs')} style={{ ...styles.tabButton, ...(activeTab === 'chatlogs' ? styles.tabButtonActive : {}) }}>
+                                💬 Chat Logs
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Tab Content */}
+                    <div style={styles.tabContent}>
+                        {activeTab === 'overview' && (
+                            <div style={styles.overviewSection}>
+                                <div style={styles.welcomeCard}>
+                                    <h2 style={styles.welcomeTitle}>Welcome back, {profile?.name}! 👋</h2>
+                                    <p style={styles.welcomeText}>Here's your quick overview</p>
+                                </div>
+                                
+                                <div style={styles.statsGrid}>
+                                    <div style={styles.statCard}>
+                                        <div style={styles.statIcon}>🆔</div>
+                                        <div style={styles.statContent}>
+                                            <div style={styles.statLabel}>Employee ID</div>
+                                            <div style={styles.statValue}>{profile?.employeeId || profile?.id}</div>
+                                        </div>
+                                    </div>
+                                    <div style={styles.statCard}>
+                                        <div style={styles.statIcon}>👔</div>
+                                        <div style={styles.statContent}>
+                                            <div style={styles.statLabel}>Role</div>
+                                            <div style={styles.statValue}>{profile?.role}</div>
+                                        </div>
+                                    </div>
+                                    <div style={styles.statCard}>
+                                        <div style={styles.statIcon}>🏢</div>
+                                        <div style={styles.statContent}>
+                                            <div style={styles.statLabel}>Department</div>
+                                            <div style={styles.statValue}>{profile?.department || "N/A"}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'attendance' && (
+                            <div style={styles.sectionCard}><AttendanceDashboard /></div>
+                        )}
+                        {activeTab === 'leave' && (
+                            <div style={styles.sectionCard}>
+                                <LeaveApplication onMessage={(msg) => showToast(msg, "info")} />
+                            </div>
+                        )}
+                        {activeTab === 'salary' && (
+                            <>
+                                <div style={styles.sectionCard}><SalarySlips salarySlips={salarySlips} /></div>
+                                <div style={styles.sectionCard}><PayrollSlip /></div>
+                            </>
+                        )}
+                        {activeTab === 'sales' && hasSalesTarget && (
+                            <div style={styles.sectionCard}>
+                                <SalesStats 
+                                    employeeEmail={profile?.email} 
+                                    isChairman={false}
+                                />
+                            </div>
+                        )}
+                        {activeTab === 'chatlogs' && isMISExecutive && (
+                            <div style={styles.sectionCard}>
+                                <AttendanceChatLogs />
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
-            {/* ----- Instructions popup ----- */}
+            
+            {/* Instructions Modal */}
             {showInstructions && (
-                <div style={styles.instructionsOverlay}>
-                    <div style={styles.instructionsPopup}>
-                        <div style={styles.instructionsHeader}>
-                            <h2>📋 Attendance & Profile Instructions</h2>
-                            <button
-                                onClick={() => setShowInstructions(false)}
-                                aria-label="Close instructions"
-                                style={styles.instructionsCloseButton}
-                            >
+                <div style={styles.modal} onClick={() => setShowInstructions(false)}>
+                    <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+                        <div style={styles.modalHeader}>
+                            <h3 style={styles.modalTitle}>📋 Dashboard Instructions</h3>
+                            <button onClick={() => setShowInstructions(false)} style={styles.modalClose}>
                                 ×
                             </button>
                         </div>
-                        <div style={styles.instructionsContent}>
-                            <ol style={{ paddingLeft: "20px" }}>
-                                <li style={styles.instructionsListItem}>The background image is now **standard for all users** and cannot be changed.</li>
-                                <li style={styles.instructionsListItem}>To **change your profile photo, name, or password**, click the **Edit Profile** button.</li>
-                                <li style={styles.instructionsListItem}>Password must be strong: use letters, numbers, and symbols.</li>
-                                <li style={styles.instructionsListItem}>Offer letter, if provided, is downloadable below your details.</li>
-                                <li style={styles.instructionsListItem}>Clock in/out and log **breaks** via dashboard attendance actions.</li>
-                                <li style={styles.instructionsListItem}>Office hours start at **10:00 AM**. After **10:15 AM** is late.</li>
-                                <li style={styles.instructionsListItem}>**Login counts milliseconds – always login before 10!**</li>
-                                <li style={styles.instructionsListItem}>**Grace:** 6 late logins/month before penalties.</li>
-                                <li style={styles.instructionsListItem}>Late arrivals or after 10:15: half-day or absent.</li>
-                                <li style={styles.instructionsListItem}>Minimum work for full day is **8 hours**.</li>
-                                <li style={styles.instructionsListItem}>*User has no log on saturday or monday then Sunday is also marked as Absent /and make your logs on Saturday logout:7:00pm and on Monday Login before 10:15am if not these two marked as Absent on Sunday**.</li>
-                                <li style={styles.instructionsListItem}>Unapproved leave = Full-day absence.</li>
-                                <li style={styles.instructionsListItem}>**If you forget to logout, marked absent.**</li>
-                                <li style={styles.instructionsListItem}>Partial attendance in slots = half-day.</li>
-                                <li style={styles.instructionsListItem}>Attendance excludes holidays, paid leaves, penalties.</li>
-                                <li style={styles.instructionsListItem}>Each attendance action shows only if allowed.</li>
-                                <li style={styles.instructionsListItem}>Filter history by date for records.</li>
-                                <li style={styles.instructionsListItem}>To calculate paid leave/in the leave request we have an option of earned leave there you use your paid-leaves if not system will not calculate it automatically.</li>
-                                <li style={styles.instructionsListItem}>**Contact Developer (nuthan-full-stack-dev)** for issues or payroll help.</li>
-                            </ol>
+                        <div style={styles.modalBody}>
+                            <div style={styles.instructionSection}>
+                                <h4 style={styles.instructionTitle}>🎯 Overview Tab</h4>
+                                <p style={styles.instructionText}>
+                                    View your quick profile summary including your employee ID, role, and department.
+                                </p>
+                            </div>
+                            
+                            <div style={styles.instructionSection}>
+                                <h4 style={styles.instructionTitle}>🕒 Attendance Tab</h4>
+                                <p style={styles.instructionText}>
+                                    Mark your daily attendance, view attendance history, and track your work hours. Office hours start at 10:00 AM. After 10:15 AM is late. Login counts milliseconds – always login before 10!
+                                </p>
+                            </div>
+                            
+                            <div style={styles.instructionSection}>
+                                <h4 style={styles.instructionTitle}>📅 Leave Tab</h4>
+                                <p style={styles.instructionText}>
+                                    Apply for leave, view pending requests, and check your leave history. Use earned leave option for paid leaves. Unapproved leave = Full-day absence.
+                                </p>
+                            </div>
+                            
+                            <div style={styles.instructionSection}>
+                                <h4 style={styles.instructionTitle}>💰 Salary Tab</h4>
+                                <p style={styles.instructionText}>
+                                    View your salary slips, download payroll documents, and track payment history.
+                                </p>
+                            </div>
+                            
+                            {hasSalesTarget && (
+                                <div style={styles.instructionSection}>
+                                    <h4 style={styles.instructionTitle}>📈 Sales Stats Tab</h4>
+                                    <p style={styles.instructionText}>
+                                        Track your sales performance, add new sales entries, view targets, and monitor your achievement percentage. This tab is only visible if your manager has assigned you a sales target.
+                                    </p>
+                                </div>
+                            )}
+                            
+                            {isMISExecutive && (
+                                <div style={styles.instructionSection}>
+                                    <h4 style={styles.instructionTitle}>💬 Chat Logs Tab</h4>
+                                    <p style={styles.instructionText}>
+                                        Access attendance-related chat logs and communications. This feature is available for MIS Executive role.
+                                    </p>
+                                </div>
+                            )}
+                            
+                            <div style={styles.instructionSection}>
+                                <h4 style={styles.instructionTitle}>⚠️ Important Rules</h4>
+                                <ul style={styles.instructionList}>
+                                    <li>Grace: 6 late logins/month before penalties</li>
+                                    <li>Minimum work for full day is 8 hours</li>
+                                    <li>If you forget to logout, marked absent</li>
+                                    <li>Partial attendance in slots = half-day</li>
+                                    <li>Contact Developer (nuthan-full-stack-dev) for issues</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+            
+            {/* Change Password Modal */}
+            {showPasswordModal && (
+                <div style={styles.modal} onClick={() => setShowPasswordModal(false)}>
+                    <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+                        <div style={styles.modalHeader}>
+                            <h3 style={styles.modalTitle}>🔐 Change Password</h3>
+                            <button onClick={() => setShowPasswordModal(false)} style={styles.modalClose}>
+                                ×
+                            </button>
+                        </div>
+                        <div style={styles.modalBody}>
+                            <div style={styles.formGroup}>
+                                <label style={styles.modalLabel}>New Password</label>
+                                <input
+                                    type="password"
+                                    value={newPassword}
+                                    onChange={(e) => setNewPassword(e.target.value)}
+                                    style={styles.modalInput}
+                                    placeholder="Enter new password"
+                                    autoComplete="new-password"
+                                />
+                            </div>
+                            
+                            <div style={styles.formGroup}>
+                                <label style={styles.modalLabel}>Confirm Password</label>
+                                <input
+                                    type="password"
+                                    value={confirmPassword}
+                                    onChange={(e) => setConfirmPassword(e.target.value)}
+                                    style={styles.modalInput}
+                                    placeholder="Confirm new password"
+                                    autoComplete="new-password"
+                                />
+                            </div>
+                            
+                            <div style={styles.modalActions}>
+                                <button onClick={handleChangePassword} style={styles.modalSaveButton}>
+                                    💾 Update Password
+                                </button>
+                                <button onClick={() => {
+                                    setShowPasswordModal(false);
+                                    setNewPassword('');
+                                    setConfirmPassword('');
+                                }} style={styles.modalCancelButton}>
+                                    Cancel
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -531,389 +632,611 @@ function EmployeeDashboard() {
     );
 }
 
-// Styling (Adding a new style for the Manager Button)
+// Comprehensive Professional Styles
 const styles = {
-    // New Content Width for all main sections
-    CONTENT_MAX_WIDTH: 1400,
-
     page: {
-        padding: "40px 0 0 0",
-        fontFamily: "'Inter', 'Segoe UI', sans-serif",
-        backgroundColor: "#f0f2f5",
-        minHeight: "100vh",
-        boxSizing: "border-box",
-        position: "relative",
+        minHeight: '100vh',
+        backgroundColor: '#f0f4f8',
+        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
     },
-    userMenu: {
-        container: {
-            position: "fixed",
-            top: 30,
-            right: 40,
-            zIndex: 2000,
-            userSelect: "none",
-        },
-        avatar: {
-            backgroundColor: "#4c556a",
-            color: "#fff",
-            width: 50,
-            height: 50,
-            borderRadius: "50%",
-            fontSize: 22,
-            fontWeight: "600",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            cursor: "pointer",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-            transition: "transform 0.2s ease-in-out",
-        },
-        dropdown: {
-            position: "absolute",
-            top: "calc(100% + 10px)",
-            right: 0,
-            background: "#fff",
-            borderRadius: 10,
-            boxShadow: "0 6px 20px rgba(0,0,0,0.15)",
-            overflow: "hidden",
-            minWidth: 160,
-            animation: "fadeIn 0.3s ease-in-out",
-            listStyle: "none",
-            padding: 0,
-            margin: 0,
-        },
-        dropdownItem: {
-            padding: "12px 18px",
-            cursor: "pointer",
-            fontWeight: "500",
-            color: "#333",
-            borderBottom: "1px solid #f0f2f5",
-            transition: "background-color 0.2s",
-        },
+    
+    topNav: {
+        backgroundColor: '#fff',
+        borderBottom: '1px solid #e2e8f0',
+        position: 'sticky',
+        top: 0,
+        zIndex: 1000,
+        boxShadow: '0 2px 4px rgba(0,0,0,0.04)',
     },
-
-    // NEW STYLE FOR MANAGER LOGIN BUTTON
-    managerLoginButton: {
-        padding: '10px 20px',
-        backgroundColor: '#2c6be0', // Blue color for a strong CTA
-        color: '#fff',
-        borderRadius: '25px',
-        fontWeight: '700',
-        cursor: 'pointer',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-        transition: 'background-color 0.2s, transform 0.2s',
-        fontSize: '1.05rem',
-        whiteSpace: 'nowrap',
-        minWidth: '180px',
-        textAlign: 'center',
-        // Hover effect for manager button
-        ':hover': {
-            backgroundColor: '#1e54a3',
-            transform: 'scale(1.02)'
-        }
-    },
-
-    // --------------------------------------------------------
-    // ** PROFILE STYLES - Width 1400px **
-    // --------------------------------------------------------
-    profileTopContainer: {
-        width: '100%',
-        display: 'flex',
-        justifyContent: 'center',
-    },
-    profileTopWrap: {
-        maxWidth: 1400,
-        width: '100%',
-        position: 'relative',
-        boxSizing: 'border-box',
-    },
-    profileBg: {
-        width: "100%",
-        height: 250,
-        borderRadius: "0 0 34px 34px",
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-        position: "relative",
-        zIndex: 1,
-        boxShadow: "0 4px 28px rgba(12,42,63,0.13)",
-    },
-
-    // Section 2: Image, Name, and Edit
-    profileNameSection: {
+    navContent: {
         maxWidth: 1400,
         margin: '0 auto',
-        position: 'relative',
-        zIndex: 10,
-        marginBottom: 20,
-    },
-    profileNameWrap: {
+        padding: '16px 32px',
         display: 'flex',
-        alignItems: 'center',
-        position: 'relative',
-        minHeight: 100,
-        padding: '0 56px',
-    },
-    profileImageOuter: {
-        width: 175,
-        height: 175,
-        borderRadius: "50%",
-        background: "#fff",
-        boxShadow: "0 2px 18px rgba(18,40,80,0.35)",
-        zIndex: 15,
-        overflow: "visible",
-        position: 'absolute',
-        top: -100,
-        left: 56,
-    },
-    profileImageCircle: {
-        width: 170,
-        height: 170,
-        borderRadius: "50%",
-        objectFit: "cover",
-        border: "5px solid #fff",
-        background: "#efeffe",
-        position: "absolute",
-        left: "50%",
-        top: "50%",
-        transform: "translate(-50%,-50%)",
-        zIndex: 1,
-    },
-
-    nameAndEditWrap: {
-        marginLeft: 230,
-        flexGrow: 1,
-        display: 'flex',
-        alignItems: 'center',
         justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    logo: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+    },
+    logoImg: {
+        width: 40,
+        height: 40,
+        borderRadius: '8px',
+    },
+    logoText: {
+        fontSize: '1.3rem',
+        fontWeight: '700',
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        WebkitBackgroundClip: 'text',
+        WebkitTextFillColor: 'transparent',
+    },
+    navRight: {
+        display: 'flex',
+        gap: '12px',
+        alignItems: 'center',
+    },
+    
+    userMenu: {
+        container: {
+            position: 'fixed',
+            top: 20,
+            right: 32,
+            zIndex: 2000,
+        },
+        avatar: {
+            width: 48,
+            height: 48,
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            color: '#fff',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '1.2rem',
+            fontWeight: '700',
+            cursor: 'pointer',
+            boxShadow: '0 4px 12px rgba(102, 126, 234, 0.4)',
+            transition: 'transform 0.2s, box-shadow 0.2s',
+        },
+        dropdown: {
+            position: 'absolute',
+            top: 'calc(100% + 12px)',
+            right: 0,
+            backgroundColor: '#fff',
+            borderRadius: '16px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+            minWidth: 220,
+            overflow: 'hidden',
+            border: '1px solid #e2e8f0',
+        },
+        header: {
+            padding: '20px',
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            color: '#fff',
+        },
+        name: {
+            fontWeight: '700',
+            fontSize: '1rem',
+        },
+        role: {
+            fontSize: '0.85rem',
+            opacity: 0.9,
+            marginTop: '4px',
+        },
+        divider: {
+            height: 1,
+            backgroundColor: '#e2e8f0',
+        },
+        dropdownItem: {
+            padding: '14px 20px',
+            cursor: 'pointer',
+            transition: 'background-color 0.2s',
+            color: '#334155',
+            fontSize: '0.95rem',
+            fontWeight: '500',
+        },
+    },
+    
+    profileHeader: {
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        color: '#fff',
+        padding: '48px 0',
+    },
+    profileHeaderContent: {
+        maxWidth: 1400,
+        margin: '0 auto',
+        padding: '0 32px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: '24px',
+    },
+    profileLeft: {
+        display: 'flex',
+        gap: '24px',
+        alignItems: 'center',
+    },
+    profileImageContainer: {
         position: 'relative',
-        height: 60,
+    },
+    profileImage: {
+        width: 120,
+        height: 120,
+        borderRadius: '50%',
+        objectFit: 'cover',
+        border: '5px solid rgba(255,255,255,0.3)',
+        boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+    },
+    imageUploadLabel: {
+        position: 'absolute',
+        bottom: 0,
+        right: 0,
+        width: 40,
+        height: 40,
+        borderRadius: '50%',
+        backgroundColor: '#fff',
+        color: '#667eea',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        cursor: 'pointer',
+        fontSize: '1.3rem',
+        border: '3px solid #667eea',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+    },
+    profileInfo: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px',
     },
     profileName: {
-        fontSize: "2.8rem",
-        margin: "0",
-        color: "#212d37",
-        fontWeight: "800",
+        fontSize: '2.2rem',
+        fontWeight: '800',
+        margin: 0,
+        textShadow: '0 2px 4px rgba(0,0,0,0.1)',
     },
-    profileEditPencil: {
-        padding: '10px 20px',
-        backgroundColor: '#f8d36f',
-        borderRadius: '25px',
+    profileMeta: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+        fontSize: '1rem',
+        opacity: 0.95,
+    },
+    profileRole: {
+        fontWeight: '600',
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        padding: '4px 12px',
+        borderRadius: '20px',
+    },
+    profileDept: {
+        fontWeight: '500',
+    },
+    profileDivider: {
+        opacity: 0.5,
+    },
+    profileId: {
+        fontWeight: '500',
+        fontFamily: 'monospace',
+    },
+    profileRight: {
+        display: 'flex',
+        gap: '12px',
+        flexWrap: 'wrap',
+    },
+    
+    editButton: {
+        padding: '12px 24px',
+        backgroundColor: '#fff',
+        color: '#667eea',
+        border: 'none',
+        borderRadius: '12px',
+        fontSize: '0.95rem',
         fontWeight: '700',
         cursor: 'pointer',
-        boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
-        transition: 'background-color 0.2s',
-        color: '#333',
-        fontSize: '1.05rem',
-        whiteSpace: 'nowrap',
+        transition: 'transform 0.2s, box-shadow 0.2s',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
     },
-
-    // Section 3: Details Row (CLEAN)
-    detailsSection: {
-        maxWidth: 1400,
-        margin: '0 auto 30px auto',
-        padding: '25px 56px',
-        backgroundColor: 'transparent',
-        borderRadius: 15,
-        boxShadow: 'none',
-        display: 'flex',
-        flexDirection: 'column',
-    },
-
-    // Details Grid
-    detailsGridHorizontal: {
-        display: "flex",
-        flexWrap: "wrap",
-        justifyContent: 'flex-start',
-        gap: "20px",
-        width: "100%",
-    },
-    // DETAIL CARD (Updated for hover via getDetailCardStyle)
-    detailCard: {
-        flex: '1 1 auto',
-        minWidth: '220px',
-        maxWidth: '300px',
-        padding: '18px',
-        borderRadius: '8px',
-        boxShadow: '0 1px 5px rgba(0,0,0,0.08)',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'space-between',
-        color: '#333',
-        transition: 'background-color 0.2s, transform 0.2s, box-shadow 0.2s',
-        cursor: 'default',
-    },
-    detailCardLabel: {
-        fontSize: '0.9rem',
-        fontWeight: '500',
-        color: '#6c757d',
-        marginBottom: '5px',
-    },
-    detailCardValue: {
-        fontSize: '1.2rem',
-        fontWeight: '700',
-        color: '#212d37',
-        wordBreak: 'break-all',
-    },
-    detailCardLink: {
-        fontSize: '1.2rem',
-        fontWeight: '700',
-        color: '#28a745',
-        textDecoration: 'none',
-        transition: 'color 0.2s',
-    },
-
-    // Edit Mode Styles
-    editForm: {
-        width: '100%',
-        paddingTop: 10,
+    passwordButton: {
+        padding: '12px 24px',
         backgroundColor: '#fff',
-        padding: '20px',
-        borderRadius: '10px',
-        boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
-    },
-    editLabel: {
-        display: "block",
-        fontWeight: 600,
-        color: "#4a5568",
-        marginBottom: "10px",
-        fontSize: "15px",
-        width: '100%',
-    },
-    editLabelName: {
-        display: "block",
-        fontWeight: 600,
-        color: "#4a5568",
-        fontSize: "15px",
-        width: '80%',
-    },
-    editButtonRow: {
-        marginTop: 16,
-        display: "flex",
-        gap: 12,
-        flexWrap: 'wrap'
-    },
-    fileUploadLabel: {
-        display: "block",
-        marginTop: 7,
-        fontWeight: "600",
-        color: "#2c374c",
-        padding: "9px 18px",
-        backgroundColor: "#cdb4f6",
-        borderRadius: "8px",
-        cursor: "pointer",
-        transition: "background-color 0.2s",
-        textAlign: "center",
-        flex: '1 1 auto',
-        minWidth: '150px'
-    },
-    imageInput: {
-        width: "100%",
-        padding: "10px",
-        border: "1px solid #ccc",
-        backgroundColor: "#f9fafb",
-        color: "#333",
-        borderRadius: "8px",
-        fontSize: "1rem",
-        transition: "border-color 0.2s",
-        marginTop: 5,
-        marginBottom: 12,
+        color: '#10b981',
+        border: 'none',
+        borderRadius: '12px',
+        fontSize: '0.95rem',
+        fontWeight: '700',
+        cursor: 'pointer',
+        transition: 'transform 0.2s, box-shadow 0.2s',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
     },
     saveButton: {
-        padding: "10px 22px",
-        fontWeight: "600",
-        border: "none",
-        borderRadius: "8px",
-        cursor: "pointer",
-        backgroundColor: "#3b82f6",
-        color: "#fff",
-        transition: "background-color 0.22s",
-        fontSize: "1.1rem",
+        padding: '12px 24px',
+        background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+        color: '#fff',
+        border: 'none',
+        borderRadius: '12px',
+        fontSize: '0.95rem',
+        fontWeight: '700',
+        cursor: 'pointer',
+        boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
     },
-    // --------------------------------------------------------
-    // ** MAIN LAYOUT AND MODAL STYLES **
-    // --------------------------------------------------------
-    mainLayout: {
+    cancelButton: {
+        padding: '12px 24px',
+        backgroundColor: '#64748b',
+        color: '#fff',
+        border: 'none',
+        borderRadius: '12px',
+        fontSize: '0.95rem',
+        fontWeight: '700',
+        cursor: 'pointer',
+    },
+    managerLoginButton: {
+        padding: '10px 20px',
+        background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+        color: '#fff',
+        border: 'none',
+        borderRadius: '10px',
+        fontSize: '0.95rem',
+        fontWeight: '700',
+        cursor: 'pointer',
+        boxShadow: '0 4px 12px rgba(139, 92, 246, 0.3)',
+    },
+    instructionButton: {
+        padding: '10px 20px',
+        background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+        color: '#fff',
+        border: 'none',
+        borderRadius: '10px',
+        fontSize: '0.95rem',
+        fontWeight: '700',
+        cursor: 'pointer',
+        boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)',
+    },
+    editButtons: {
+        display: 'flex',
+        gap: '12px',
+    },
+    
+    container: {
         maxWidth: 1400,
-        margin: "0px auto",
-        display: "flex",
-        flexDirection: "column",
-        gap: "32px",
-        zIndex: 4
+        margin: '0 auto',
+        padding: '32px',
     },
+    
+    quickInfoGrid: {
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+        gap: '24px',
+        marginBottom: '32px',
+    },
+    infoCard: {
+        backgroundColor: '#fff',
+        borderRadius: '16px',
+        padding: '24px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '20px',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
+        transition: 'transform 0.2s, box-shadow 0.2s',
+        border: '1px solid #e2e8f0',
+    },
+    infoIcon: {
+        fontSize: '2.5rem',
+        width: 64,
+        height: 64,
+        borderRadius: '16px',
+        background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    infoContent: {
+        flex: 1,
+    },
+    infoLabel: {
+        fontSize: '0.85rem',
+        color: '#64748b',
+        fontWeight: '600',
+        marginBottom: '6px',
+        textTransform: 'uppercase',
+        letterSpacing: '0.5px',
+    },
+    infoValue: {
+        fontSize: '1.15rem',
+        fontWeight: '700',
+        color: '#1e293b',
+        wordBreak: 'break-word',
+    },
+    
+    editNameContainer: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px',
+    },
+    editLabel: {
+        fontSize: '0.95rem',
+        fontWeight: '700',
+        color: '#fff',
+        marginBottom: '10px',
+        display: 'block',
+    },
+    editInput: {
+        width: '100%',
+        padding: '14px',
+        border: '2px solid #e2e8f0',
+        borderRadius: '10px',
+        fontSize: '1rem',
+        transition: 'border-color 0.2s, box-shadow 0.2s',
+        boxSizing: 'border-box',
+    },
+    
+    tabContainer: {
+        backgroundColor: '#fff',
+        borderRadius: '16px',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
+        overflow: 'hidden',
+        border: '1px solid #e2e8f0',
+    },
+    tabNav: {
+        display: 'flex',
+        borderBottom: '2px solid #f1f5f9',
+        overflowX: 'auto',
+        backgroundColor: '#f8fafc',
+    },
+    tabButton: {
+        padding: '18px 28px',
+        border: 'none',
+        backgroundColor: 'transparent',
+        fontSize: '0.95rem',
+        fontWeight: '700',
+        color: '#64748b',
+        cursor: 'pointer',
+        transition: 'color 0.2s, background-color 0.2s, border-color 0.2s',
+        borderBottom: '3px solid transparent',
+        whiteSpace: 'nowrap',
+    },
+    tabButtonActive: {
+        color: '#667eea',
+        borderBottomColor: '#667eea',
+        backgroundColor: '#fff',
+    },
+    tabContent: {
+        padding: '32px',
+        minHeight: '400px',
+    },
+    
+    overviewSection: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '24px',
+    },
+    welcomeCard: {
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        borderRadius: '16px',
+        padding: '32px',
+        color: '#fff',
+        textAlign: 'center',
+    },
+    welcomeTitle: {
+        fontSize: '2rem',
+        fontWeight: '800',
+        margin: 0,
+        marginBottom: '8px',
+    },
+    welcomeText: {
+        fontSize: '1.1rem',
+        opacity: 0.9,
+        margin: 0,
+    },
+    statsGrid: {
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+        gap: '20px',
+    },
+    statCard: {
+        backgroundColor: '#f8fafc',
+        borderRadius: '16px',
+        padding: '24px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '16px',
+        border: '2px solid #e2e8f0',
+        transition: 'transform 0.2s, box-shadow 0.2s',
+    },
+    statIcon: {
+        fontSize: '2.5rem',
+        width: 64,
+        height: 64,
+        borderRadius: '16px',
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    statContent: {
+        flex: 1,
+    },
+    statLabel: {
+        fontSize: '0.85rem',
+        color: '#64748b',
+        fontWeight: '600',
+        marginBottom: '6px',
+        textTransform: 'uppercase',
+        letterSpacing: '0.5px',
+    },
+    statValue: {
+        fontSize: '1.3rem',
+        fontWeight: '800',
+        color: '#1e293b',
+    },
+    
     sectionCard: {
-        backgroundColor: "#fff",
-        padding: "25px",
-        borderRadius: "15px",
-        boxShadow: "0 6px 20px rgba(0,0,0,0.08)",
-        marginBottom: "10px"
+        backgroundColor: '#fff',
+        borderRadius: '16px',
+        padding: '28px',
+        marginBottom: '24px',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
+        border: '1px solid #e2e8f0',
     },
-
-    // Toast/Instructions (unchanged)
+    
     toast: {
         base: {
-            position: "fixed",
-            top: 30,
-            left: "50%",
-            transform: "translateX(-50%)",
-            padding: "15px 30px",
-            borderRadius: 10,
-            color: "#fff",
-            fontWeight: "bold",
-            zIndex: 2800,
-            boxShadow: "0 6px 15px rgba(0,0,0,0.2)",
-            animation: "fadeIn 0.3s ease-in-out",
-            background: "#444"
+            position: 'fixed',
+            top: 90,
+            right: 32,
+            padding: '18px 28px',
+            borderRadius: '12px',
+            color: '#fff',
+            fontWeight: '700',
+            zIndex: 3000,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+            maxWidth: 400,
         },
-        info: { background: "#007bff" },
-        success: { background: "#28a745" },
-        error: { background: "#dc3545" },
-        warning: { background: "#ffc107" },
+        info: { 
+            background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+        },
+        success: { 
+            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+        },
+        error: { 
+            background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+        },
+        warning: { 
+            background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+        },
     },
-    instructionsOverlay: {
-        position: "fixed",
+    
+    modal: {
+        position: 'fixed',
         top: 0,
         left: 0,
-        width: "100vw",
-        height: "100vh",
-        backgroundColor: "rgba(19,13,13,0.66)",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-        zIndex: 3500,
-        padding: 22,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 4000,
+        padding: '20px',
     },
-    instructionsPopup: {
-        backgroundColor: "#fff",
-        borderRadius: "16px",
-        maxWidth: 710,
-        maxHeight: "84vh",
-        overflowY: "auto",
-        padding: 0,
-        boxShadow: "0 12px 34px rgba(8,8,16,0.23)",
-        position: "relative",
+    modalContent: {
+        backgroundColor: '#fff',
+        borderRadius: '20px',
+        maxWidth: 700,
+        width: '100%',
+        maxHeight: '90vh',
+        overflow: 'auto',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
     },
-    instructionsHeader: {
-        padding: '20px 30px',
-        borderBottom: '1px solid #eee',
+    modalHeader: {
+        padding: '28px 32px',
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        color: '#fff',
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
+        borderRadius: '20px 20px 0 0',
     },
-    instructionsCloseButton: {
-        background: 'none',
+    modalTitle: {
+        fontSize: '1.6rem',
+        fontWeight: '800',
+        margin: 0,
+    },
+    modalClose: {
+        background: 'rgba(255,255,255,0.2)',
         border: 'none',
         fontSize: '2rem',
+        color: '#fff',
         cursor: 'pointer',
-        color: '#666',
+        padding: '0',
+        width: 40,
+        height: 40,
+        borderRadius: '50%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontWeight: '300',
+        transition: 'background 0.2s',
     },
-    instructionsContent: {
-        padding: '10px 30px 30px 30px',
+    modalBody: {
+        padding: '32px',
+    },
+    instructionSection: {
+        marginBottom: '28px',
+        paddingBottom: '20px',
+        borderBottom: '2px solid #f1f5f9',
+    },
+    instructionTitle: {
+        fontSize: '1.2rem',
+        fontWeight: '700',
+        color: '#1e293b',
+        marginTop: 0,
+        marginBottom: '12px',
+    },
+    instructionText: {
         fontSize: '1rem',
-        lineHeight: 1.6,
-        color: '#444',
+        color: '#64748b',
+        lineHeight: '1.6',
+        margin: 0,
     },
-    instructionsListItem: {
-        marginBottom: '8px',
-    }
+    instructionList: {
+        margin: '10px 0',
+        paddingLeft: '20px',
+        color: '#64748b',
+        lineHeight: '1.8',
+    },
+    formGroup: {
+        marginBottom: '20px',
+    },
+    modalLabel: {
+        display: 'block',
+        fontSize: '0.95rem',
+        fontWeight: '700',
+        color: '#334155',
+        marginBottom: '10px',
+    },
+    modalInput: {
+        width: '100%',
+        padding: '14px',
+        border: '2px solid #e2e8f0',
+        borderRadius: '10px',
+        fontSize: '1rem',
+        transition: 'border-color 0.2s, box-shadow 0.2s',
+        boxSizing: 'border-box',
+    },
+    modalActions: {
+        display: 'flex',
+        gap: '12px',
+        marginTop: '28px',
+    },
+    modalSaveButton: {
+        flex: 1,
+        padding: '14px 24px',
+        background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+        color: '#fff',
+        border: 'none',
+        borderRadius: '12px',
+        fontSize: '1rem',
+        fontWeight: '700',
+        cursor: 'pointer',
+        boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
+        transition: 'transform 0.2s',
+    },
+    modalCancelButton: {
+        flex: 1,
+        padding: '14px 24px',
+        backgroundColor: '#64748b',
+        color: '#fff',
+        border: 'none',
+        borderRadius: '12px',
+        fontSize: '1rem',
+        fontWeight: '700',
+        cursor: 'pointer',
+        transition: 'background-color 0.2s',
+    },
 };
 
 export default EmployeeDashboard;

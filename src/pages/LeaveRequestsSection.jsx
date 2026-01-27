@@ -107,7 +107,7 @@ const filterAndPaginate = (requests, search, fromIndex = 0, pageSize = 10) => {
   };
 };
 
-export default function LeaveRequestsContainer() {
+export default function LeaveRequestsContainer({ leaveRequests: parentLeaveRequests, onRefresh }) {
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [message, setMessage] = useState("");
   const [toast, setToast] = useState(null);
@@ -118,6 +118,13 @@ export default function LeaveRequestsContainer() {
   const socketRef = useRef(null);
   const audioRef = useRef(null);
   const lastSoundTime = useRef(0);
+
+  // Use parent leave requests if provided, otherwise fetch own
+  useEffect(() => {
+    if (parentLeaveRequests && parentLeaveRequests.length >= 0) {
+      setLeaveRequests(parentLeaveRequests.map((req) => ({ ...req, remarksInput: "" })));
+    }
+  }, [parentLeaveRequests]);
 
   // Fetch user info
   async function fetchCurrentUser() {
@@ -146,7 +153,7 @@ export default function LeaveRequestsContainer() {
     }
   }
 
-  // Approve or reject
+  // Approve or reject - WITH INSTANT PARENT UPDATE
   async function handleLeaveAction(id, action, remarks) {
     if (!remarks.trim()) {
       setMessage("❌ Remarks are required");
@@ -161,14 +168,28 @@ export default function LeaveRequestsContainer() {
         { withCredentials: true }
       );
       setMessage(`✅ Leave request ${action}d`);
-      fetchLeaveRequests();
+      
+      // 🔥 INSTANT UPDATE - Remove from list immediately
+      setLeaveRequests((prev) => prev.filter((r) => r.id !== id));
+      
+      // 🔥 INSTANT PARENT UPDATE - Notify parent immediately
+      if (onRefresh) {
+        // Call parent's fetchLeaveRequests to update counts
+        setTimeout(() => onRefresh(), 100);
+      }
+      
+      // Emit socket event for other connected clients
+      if (socketRef.current) {
+        socketRef.current.emit('leaveActionTaken', { id, action });
+      }
     } catch (error) {
       console.error("Error in leave action", error);
       setMessage("❌ Failed to update leave request");
+      if (onRefresh) onRefresh();
     }
   }
 
-  // Delete
+  // Delete - WITH INSTANT PARENT UPDATE
   async function deleteLeaveRequest(id) {
     if (!window.confirm("Are you sure you want to delete this leave request?"))
       return;
@@ -178,10 +199,23 @@ export default function LeaveRequestsContainer() {
         withCredentials: true,
       });
       setMessage("✅ Leave request deleted");
+      
+      // 🔥 INSTANT UPDATE - Remove from list immediately
       setLeaveRequests((prev) => prev.filter((r) => r.id !== id));
+      
+      // 🔥 INSTANT PARENT UPDATE - Notify parent immediately
+      if (onRefresh) {
+        setTimeout(() => onRefresh(), 100);
+      }
+      
+      // Emit socket event for other connected clients
+      if (socketRef.current) {
+        socketRef.current.emit('leaveActionTaken', { id, action: 'delete' });
+      }
     } catch (error) {
       console.error("Failed to delete leave request", error);
       setMessage("❌ Failed to delete leave request");
+      if (onRefresh) onRefresh();
     }
   }
 
@@ -209,7 +243,7 @@ export default function LeaveRequestsContainer() {
       }`,
     });
     setTimeout(() => setToast(null), 5000);
-  }, [audioRef, setToast]);
+  }, []);
 
   // Socket setup
   useEffect(() => {
@@ -219,17 +253,36 @@ export default function LeaveRequestsContainer() {
     }
     init();
 
-    // Connect socket
-    socketRef.current = io(baseUrl, { transports: ["websocket"], withCredentials: true });
+    // Determine socket URL
+    const socketUrl =
+      window.location.hostname === "localhost"
+        ? "http://localhost:5000"
+        : "https://backend.vjcoverseas.com";
+
+    // Connect socket with proper config
+    socketRef.current = io(socketUrl, {
+      path: "/socket.io/",
+      transports: ["polling", "websocket"],
+      withCredentials: true,
+      reconnection: true,
+    });
 
     socketRef.current.on("connect", () => {
       console.log("✅ Connected to Socket.IO");
     });
 
+    // Listen for new leave requests
     socketRef.current.on("newLeaveRequest", (data) => {
       console.log("📩 New leave request:", data);
       showNotification(data);
       fetchLeaveRequests();
+    });
+
+    // Listen for leave actions from other clients
+    socketRef.current.on("leaveActionTaken", (data) => {
+      console.log("🔄 Leave action taken by another user:", data);
+      // Remove the request from local state
+      setLeaveRequests((prev) => prev.filter((r) => r.id !== data.id));
     });
 
     return () => {
@@ -298,7 +351,7 @@ export default function LeaveRequestsContainer() {
       )}
 
       <h3 style={{ ...premiumStyles.sectionTitle, borderBottom: "none" }}>
-        📝 Pending Leave Requests
+        📝 Pending Leave Requests ({filteredLeaveRequests.filter(r => r.status.toLowerCase() === 'pending').length})
       </h3>
 
       {message && (
@@ -350,6 +403,7 @@ export default function LeaveRequestsContainer() {
                   <th style={premiumStyles.table.headerCell}>Reason</th>
                   <th style={premiumStyles.table.headerCell}>Status</th>
                   <th style={premiumStyles.table.headerCell}>Remarks</th>
+                  <th style={premiumStyles.table.headerCell}>Actioned By</th>
                   <th style={premiumStyles.table.headerCell}>Actions</th>
                 </tr>
               </thead>
@@ -391,6 +445,23 @@ export default function LeaveRequestsContainer() {
                         <span style={{ fontSize: "0.85em", color: "#333" }}>
                           {req.chairman_remarks || "-"}
                         </span>
+                      )}
+                    </td>
+                    <td style={premiumStyles.table.dataCell}>
+                      {req.status.toLowerCase() === "pending" ? (
+                        <span style={{ fontSize: "0.85em", color: "#999", fontStyle: "italic" }}>
+                          Pending...
+                        </span>
+                      ) : (
+                        <div>
+                          <strong style={{ color: "#2c3e50" }}>
+                            {req.actioned_by_name || req.chairman_name || "Admin"}
+                          </strong>
+                          <br />
+                          <small style={{ color: "#666" }}>
+                            {req.actioned_at ? new Date(req.actioned_at).toLocaleDateString('en-IN') : ""}
+                          </small>
+                        </div>
                       )}
                     </td>
                     <td
