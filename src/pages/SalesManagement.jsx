@@ -16,14 +16,42 @@ function SalesManagement() {
   const [targetAmount, setTargetAmount] = useState("");
   const [currentSales, setCurrentSales] = useState("");
   
-  // New: Sales entries for selected employee
+  // Sales entries for selected employee
   const [salesEntries, setSalesEntries] = useState([]);
   const [viewPeriod, setViewPeriod] = useState('all');
+  
+  // Real-time calculation toggle
+  const [useRealTimeCalc, setUseRealTimeCalc] = useState(false);
+  const [attendanceSummary, setAttendanceSummary] = useState(null);
+  const [currentMonth, setCurrentMonth] = useState(new Date().toISOString().slice(0, 7));
 
   useEffect(() => {
     fetchAllEmployees();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Recalculate current sales when month or mode changes
+  useEffect(() => {
+    if (selectedEmail && salesEntries.length > 0 && useRealTimeCalc) {
+      const monthSales = calculateMonthSales(salesEntries, currentMonth);
+      setCurrentSales(monthSales.toString());
+    } else if (selectedEmail && !useRealTimeCalc) {
+      // Fetch total sales when switching back to simple mode
+      fetchStats(selectedEmail);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentMonth, useRealTimeCalc, salesEntries]);
+
+  const fetchStats = async (email) => {
+    try {
+      const res = await axios.get(`${baseUrl}/sales-stats/${email}`, {
+        withCredentials: true,
+      });
+      setCurrentSales(res.data.current_sales || "");
+    } catch (err) {
+      console.error('Failed to fetch sales stats', err);
+    }
+  };
 
   const fetchAllEmployees = async () => {
     try {
@@ -65,6 +93,22 @@ function SalesManagement() {
     }
   };
 
+  const fetchAttendanceSummary = async (email, month) => {
+    try {
+      const res = await axios.post(
+        `${baseUrl}/get-attendance-summary`,
+        { email, month },
+        { withCredentials: true }
+      );
+      setAttendanceSummary(res.data);
+      return res.data;
+    } catch (err) {
+      console.error("Failed to fetch attendance summary", err);
+      setAttendanceSummary(null);
+      return null;
+    }
+  };
+
   const handleSelectEmployee = async (email) => {
     setSelectedEmail(email);
     const emp = allEmployees.find((e) => e.email === email);
@@ -77,18 +121,42 @@ function SalesManagement() {
       });
       const data = res.data;
       setTargetAmount(data.target || "");
-      setCurrentSales(data.current_sales || "");
       
       // Fetch sales entries
       const entriesRes = await axios.get(`${baseUrl}/sales-entries/${email}`, {
         withCredentials: true,
       });
       setSalesEntries(entriesRes.data || []);
+      
+      // Calculate current sales based on selected month if in real-time mode
+      if (useRealTimeCalc) {
+        const monthSales = calculateMonthSales(entriesRes.data || [], currentMonth);
+        setCurrentSales(monthSales.toString());
+      } else {
+        setCurrentSales(data.current_sales || "");
+      }
+      
+      // Fetch attendance summary for current month
+      await fetchAttendanceSummary(email, currentMonth);
     } catch {
       setTargetAmount("");
       setCurrentSales("");
       setSalesEntries([]);
+      setAttendanceSummary(null);
     }
+  };
+
+  const calculateMonthSales = (entries, month) => {
+    if (!entries || entries.length === 0) return 0;
+    
+    const [year, monthNum] = month.split('-');
+    const monthSales = entries.filter(entry => {
+      const entryDate = new Date(entry.sale_date);
+      return entryDate.getFullYear() === parseInt(year) && 
+             (entryDate.getMonth() + 1) === parseInt(monthNum);
+    });
+    
+    return monthSales.reduce((sum, entry) => sum + parseFloat(entry.amount || 0), 0);
   };
 
   const handleSaveStats = async () => {
@@ -119,7 +187,77 @@ function SalesManagement() {
     }
   };
 
-  const calculateSalary = () => {
+  const calculateSalaryWithAttendance = () => {
+    if (!selectedEmployee || !targetAmount || !attendanceSummary) return null;
+
+    const target = parseFloat(targetAmount) || 0;
+    const current = parseFloat(currentSales) || 0;
+    const baseSalary = parseFloat(selectedEmployee.salary) || 0;
+    
+    // Get attendance data
+    const totalDays = attendanceSummary.totalDays || 0;
+    const sundays = attendanceSummary.sundays || 0;
+    const workDays = parseFloat(attendanceSummary.workDays) || 0;
+    const daysPresent = workDays; // work_days already represents effective attendance
+
+    if (target === 0 || totalDays === 0) {
+      return { 
+        percentage: 0, 
+        payable: 0, 
+        salaryPercentage: 0,
+        baseSalary: baseSalary.toFixed(2),
+        proratedSalary: 0,
+        adjustedTarget: 0,
+        attendanceData: {
+          totalDays,
+          sundays,
+          workDays,
+          daysPresent
+        }
+      };
+    }
+
+    // Calculate pro-rated salary based on attendance
+    const workingDays = totalDays;
+    const perDaySalary = baseSalary / workingDays;
+    const proratedSalary = perDaySalary * daysPresent;
+
+    // Calculate adjusted target based on attendance
+    const adjustedTarget = (target / workingDays) * daysPresent;
+
+    // Calculate achievement percentage against adjusted target
+    const percentage = (current / adjustedTarget) * 100;
+
+    // Determine salary percentage based on achievement
+    let salaryPercentage = 0;
+    if (percentage >= 100) salaryPercentage = 100;
+    else if (percentage >= 75) salaryPercentage = 75;
+    else if (percentage >= 50) salaryPercentage = 50;
+    else if (percentage >= 25) salaryPercentage = 25;
+    else salaryPercentage = 0;
+
+    // Calculate final payable salary
+    const payable = proratedSalary * (salaryPercentage / 100);
+
+    return {
+      percentage: percentage.toFixed(1),
+      salaryPercentage,
+      payable: payable.toFixed(2),
+      baseSalary: baseSalary.toFixed(2),
+      proratedSalary: proratedSalary.toFixed(2),
+      adjustedTarget: adjustedTarget.toFixed(2),
+      originalTarget: target.toFixed(2),
+      attendanceData: {
+        totalDays,
+        sundays,
+        workDays: workDays.toFixed(2),
+        daysPresent: daysPresent.toFixed(2),
+        workingDays
+      }
+    };
+  };
+
+  const calculateSalarySimple = () => {
     if (!selectedEmployee || !targetAmount) return null;
 
     const target = parseFloat(targetAmount) || 0;
@@ -147,7 +285,7 @@ function SalesManagement() {
     };
   };
 
-  const salaryInfo = calculateSalary();
+  const salaryInfo = useRealTimeCalc ? calculateSalaryWithAttendance() : calculateSalarySimple();
   
   // Filter sales entries based on period
   const getFilteredEntries = () => {
@@ -190,7 +328,7 @@ function SalesManagement() {
         <div>
           <h2 style={styles.mainTitle}>📈 Sales Target Management</h2>
           <p style={styles.subtitle}>
-            Set sales targets, track performance, and view detailed sales entries
+            Set sales targets, track performance, and calculate net payable salary
           </p>
         </div>
       </div>
@@ -224,9 +362,36 @@ function SalesManagement() {
             </div>
           </div>
 
+          {/* Real-time Calculation Toggle */}
+          <div style={styles.toggleCard}>
+            <div style={styles.toggleHeader}>
+              <h4 style={styles.toggleTitle}>💡 Calculation Mode</h4>
+              <label style={styles.toggleSwitch}>
+                <input
+                  type="checkbox"
+                  checked={useRealTimeCalc}
+                  onChange={(e) => setUseRealTimeCalc(e.target.checked)}
+                  style={styles.toggleInput}
+                />
+                <span style={styles.toggleSlider}></span>
+              </label>
+            </div>
+            <p style={styles.toggleDescription}>
+              {useRealTimeCalc 
+                ? "✅ Real-time mode: Salary calculated based on attendance + sales targets" 
+                : "📊 Simple mode: Salary calculated based on sales targets only"}
+            </p>
+            {useRealTimeCalc && !attendanceSummary && (
+              <p style={styles.toggleWarning}>
+                ⚠️ No attendance summary found for {currentMonth}. Generate attendance summary first.
+              </p>
+            )}
+          </div>
+
           {salaryInfo && (
             <div style={styles.salaryCard}>
               <h4 style={styles.salaryCardTitle}>💰 Salary Calculation</h4>
+              
               <div style={styles.salaryRow}>
                 <span style={styles.salaryLabel}>Base Salary:</span>
                 <span style={styles.salaryValue}>
@@ -236,10 +401,42 @@ function SalesManagement() {
                   )}
                 </span>
               </div>
+
+              {useRealTimeCalc && salaryInfo.proratedSalary && (
+                <>
+                  <div style={styles.salaryRow}>
+                    <span style={styles.salaryLabel}>Attendance (Work Days):</span>
+                    <span style={styles.salaryValue}>
+                      {salaryInfo.attendanceData?.daysPresent || 0} days
+                    </span>
+                  </div>
+                  <div style={styles.salaryRow}>
+                    <span style={styles.salaryLabel}>Pro-rated Salary:</span>
+                    <span style={styles.salaryValue}>
+                      ₹ {parseFloat(salaryInfo.proratedSalary).toLocaleString("en-IN")}
+                    </span>
+                  </div>
+                  <div style={styles.salaryRow}>
+                    <span style={styles.salaryLabel}>Original Target:</span>
+                    <span style={styles.salaryValue}>
+                      ₹ {parseFloat(salaryInfo.originalTarget).toLocaleString("en-IN")}
+                    </span>
+                  </div>
+                  <div style={styles.salaryRow}>
+                    <span style={styles.salaryLabel}>Adjusted Target:</span>
+                    <span style={{...styles.salaryValue, color: '#e74c3c'}}>
+                      ₹ {parseFloat(salaryInfo.adjustedTarget).toLocaleString("en-IN")}
+                    </span>
+                  </div>
+                </>
+              )}
+
               {targetAmount && (
                 <>
                   <div style={styles.salaryRow}>
-                    <span style={styles.salaryLabel}>Achievement:</span>
+                    <span style={styles.salaryLabel}>
+                      {useRealTimeCalc ? "Achievement (vs Adjusted):" : "Achievement:"}
+                    </span>
                     <span style={styles.salaryValue}>
                       {salaryInfo.percentage}%
                     </span>
@@ -263,6 +460,31 @@ function SalesManagement() {
                   </div>
                 </>
               )}
+            </div>
+          )}
+
+          {/* Month Selector for Real-time Calculation */}
+          {useRealTimeCalc && (
+            <div style={styles.monthSelector}>
+              <label style={styles.label}>Select Month for Calculation:</label>
+              <input
+                type="month"
+                value={currentMonth}
+                onChange={async (e) => {
+                  setCurrentMonth(e.target.value);
+                  if (selectedEmail) {
+                    await fetchAttendanceSummary(selectedEmail, e.target.value);
+                    // Recalculate sales for selected month
+                    const monthSales = calculateMonthSales(salesEntries, e.target.value);
+                    setCurrentSales(monthSales.toString());
+                  }
+                }}
+                style={styles.input}
+              />
+              <p style={styles.monthNote}>
+                📊 Sales for {new Date(currentMonth + '-01').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}: 
+                <strong> ₹{parseFloat(currentSales || 0).toLocaleString('en-IN')}</strong>
+              </p>
             </div>
           )}
 
@@ -414,18 +636,23 @@ function SalesManagement() {
 
           <div style={styles.rulesCard}>
             <h4 style={styles.rulesTitle}>📋 Salary Eligibility Rules</h4>
+            {useRealTimeCalc && (
+              <p style={styles.rulesNote}>
+                <strong>Real-time Mode:</strong> Salary is calculated based on pro-rated salary (attendance) × achievement percentage
+              </p>
+            )}
             <ul style={styles.rulesList}>
               <li style={styles.ruleItem}>
                 <span style={{ color: "#28a745", fontWeight: "bold" }}>✓</span>{" "}
-                100% Target = 100% Salary
+                100% Target = 100% Salary {useRealTimeCalc && "(of pro-rated)"}
               </li>
               <li style={styles.ruleItem}>
                 <span style={{ color: "#ffc107", fontWeight: "bold" }}>⚠</span>{" "}
-                75-99% Target = 75% Salary
+                75-99% Target = 75% Salary {useRealTimeCalc && "(of pro-rated)"}
               </li>
               <li style={styles.ruleItem}>
                 <span style={{ color: "#fd7e14", fontWeight: "bold" }}>⚠</span>{" "}
-                50-74% Target = 50% Salary
+                50-74% Target = 50% Salary {useRealTimeCalc && "(of pro-rated)"}
               </li>
               <li style={styles.ruleItem}>
                 <span style={{ color: "#dc3545", fontWeight: "bold" }}>✗</span>{" "}
@@ -437,8 +664,7 @@ function SalesManagement() {
       ) : (
         <div style={styles.noSelection}>
           <p style={styles.noSelectionText}>
-            👆 Select an employee above to set their sales target, view net
-            payable salary, and see all sales entries
+            👆 Select an employee above to set their sales target and calculate net payable salary
           </p>
         </div>
       )}
@@ -604,6 +830,72 @@ const styles = {
         margin: '0 10px',
         color: '#dee2e6'
     },
+    toggleCard: {
+        backgroundColor: '#f0f9ff',
+        border: '3px solid #3498db',
+        borderRadius: '12px',
+        padding: '20px',
+        marginBottom: '25px'
+    },
+    toggleHeader: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '10px'
+    },
+    toggleTitle: {
+        fontSize: '1.2rem',
+        fontWeight: '700',
+        color: '#2c3e50',
+        margin: 0
+    },
+    toggleSwitch: {
+        position: 'relative',
+        display: 'inline-block',
+        width: '60px',
+        height: '34px'
+    },
+    toggleInput: {
+        opacity: 0,
+        width: 0,
+        height: 0
+    },
+    toggleSlider: {
+        position: 'absolute',
+        cursor: 'pointer',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: '#ccc',
+        transition: '0.4s',
+        borderRadius: '34px',
+        '::before': {
+            position: 'absolute',
+            content: '""',
+            height: '26px',
+            width: '26px',
+            left: '4px',
+            bottom: '4px',
+            backgroundColor: 'white',
+            transition: '0.4s',
+            borderRadius: '50%'
+        }
+    },
+    toggleDescription: {
+        fontSize: '0.95rem',
+        color: '#495057',
+        margin: '5px 0 0 0'
+    },
+    toggleWarning: {
+        fontSize: '0.9rem',
+        color: '#e74c3c',
+        backgroundColor: '#fee',
+        padding: '10px',
+        borderRadius: '6px',
+        marginTop: '10px',
+        marginBottom: 0
+    },
     salaryCard: {
         backgroundColor: '#e3f2fd',
         border: '3px solid #2196f3',
@@ -648,6 +940,22 @@ const styles = {
         fontSize: '1.6rem',
         color: '#28a745',
         fontWeight: '700'
+    },
+    monthSelector: {
+        backgroundColor: '#fff3cd',
+        border: '2px solid #ffc107',
+        borderRadius: '12px',
+        padding: '20px',
+        marginBottom: '25px'
+    },
+    monthNote: {
+        fontSize: '1rem',
+        color: '#856404',
+        marginTop: '10px',
+        marginBottom: 0,
+        padding: '10px',
+        backgroundColor: '#fff',
+        borderRadius: '6px'
     },
     editForm: {
         backgroundColor: '#fff',
@@ -719,6 +1027,14 @@ const styles = {
         color: '#2c3e50',
         marginBottom: '15px',
         marginTop: 0
+    },
+    rulesNote: {
+        fontSize: '0.9rem',
+        color: '#856404',
+        backgroundColor: '#fff',
+        padding: '10px',
+        borderRadius: '6px',
+        marginBottom: '15px'
     },
     rulesList: {
         listStyle: 'none',

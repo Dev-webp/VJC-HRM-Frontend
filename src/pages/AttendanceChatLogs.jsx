@@ -161,7 +161,7 @@ export default function AttendanceChatLogs() {
 
   const userLogs = useMemo(() => {
     const filtered = attendanceData.filter((user) => {
-        if (currentUserRole === "chairman" || currentUserRole === "front-desk") { return true; } 
+        if (currentUserRole === "chairman" || currentUserRole === "mis-execuitve") { return true; } 
         else if (currentUserRole === "manager") { return user.location === currentUserLocation; }
         return false;
     });

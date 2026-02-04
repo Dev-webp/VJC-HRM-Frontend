@@ -17,6 +17,9 @@ export default function ShowAllUsers() {
   const [searchTerm, setSearchTerm] = useState("");
   const [currentUser, setCurrentUser] = useState(null);
   const [showAllUsers, setShowAllUsers] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [showPassword, setShowPassword] = useState({});
+  const [showOldPasswordInEdit, setShowOldPasswordInEdit] = useState({});
 
   const colors = {
     orange500: "#f97316",
@@ -27,6 +30,7 @@ export default function ShowAllUsers() {
     green500: "#22c55e",
     red500: "#ef4444",
     bgLight: "#f9fafb",
+    yellow500: "#eab308",
   };
 
   const fetchCurrentUser = async () => {
@@ -60,6 +64,7 @@ export default function ShowAllUsers() {
         panNo: info.panNo || info.pan_no || "",
         ifscCode: info.ifscCode || info.ifsc_code || "",
         paidLeaves: info.paidLeaves || "",
+        password: info.password || "", // Include password
       }));
       setUsers(formatted);
     } catch (err) {
@@ -80,20 +85,37 @@ export default function ShowAllUsers() {
   const handleEdit = (user) => {
     setEditingEmail(user.email);
     setEditedUser({ ...user });
+    setNewPassword(""); // Reset password field
   };
 
   const handleSave = async () => {
     try {
-      // ✅ normalize backend field naming to ensure proper update
+      // ✅ Comprehensive payload with ALL fields normalized
       const payload = {
-        ...editedUser,
+        name: editedUser.name || "",
+        email: editedUser.email || "",
+        role: editedUser.role || "",
+        location: editedUser.location || "",
+        department: editedUser.department || "",
+        employeeId: editedUser.employeeId || "",
+        employee_id: editedUser.employeeId || "", // Backend compatibility
+        salary: editedUser.salary || "",
         bankAccount: editedUser.bankAccount || "",
-        bank_account: editedUser.bankAccount || "",
-        ifscCode: editedUser.ifscCode || "",
-        ifsc_code: editedUser.ifscCode || "",
+        bank_account: editedUser.bankAccount || "", // Backend compatibility
+        BankAccount: editedUser.bankAccount || "", // Additional compatibility
         panNo: editedUser.panNo || "",
-        pan_no: editedUser.panNo || "",
+        pan_no: editedUser.panNo || "", // Backend compatibility
+        ifscCode: editedUser.ifscCode || "",
+        ifsc_code: editedUser.ifscCode || "", // Backend compatibility
+        dob: editedUser.dob || "",
+        doj: editedUser.doj || "",
+        paidLeaves: editedUser.paidLeaves || "",
       };
+
+      // ✅ Only include password if a new one is set
+      if (newPassword && newPassword.trim() !== "") {
+        payload.password = newPassword.trim();
+      }
 
       await axios.put(
         `${baseUrl}/update-user/${encodeURIComponent(editingEmail)}`,
@@ -102,10 +124,12 @@ export default function ShowAllUsers() {
       );
       alert("✅ User updated successfully!");
       setEditingEmail(null);
-      fetchUsers();
+      setNewPassword("");
+      setShowOldPasswordInEdit({});
+      fetchUsers(); // Refresh to show updated data
     } catch (err) {
       console.error("❌ Failed to update user:", err);
-      alert("❌ Update failed.");
+      alert("❌ Update failed: " + (err.response?.data?.message || err.message));
     }
   };
 
@@ -146,18 +170,41 @@ export default function ShowAllUsers() {
     }
   };
 
-  const filteredUsers = users.filter(
+  // ✅ Filter users based on current user's role
+  const getFilteredUsersByRole = (usersList) => {
+    if (!currentUser) return usersList;
+
+    const userRole = currentUser.role?.toLowerCase();
+    
+    // Chairman sees all users
+    if (userRole === "chairman") {
+      return usersList;
+    }
+    
+    // Manager sees only users from their location
+    if (userRole === "manager") {
+      const managerLocation = currentUser.location;
+      return usersList.filter(u => u.location === managerLocation);
+    }
+    
+    // Other roles see no users (or you can return empty array)
+    return [];
+  };
+
+  const filteredUsers = getFilteredUsersByRole(users).filter(
     (u) =>
       u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
       u.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const isChairman = currentUser?.role?.toLowerCase() === "chairman";
+  const isManager = currentUser?.role?.toLowerCase() === "manager";
 
-  const inputField = (label, value, onChange) => (
+  const inputField = (label, value, onChange, type = "text") => (
     <div style={{ marginBottom: 8 }}>
       <small style={{ fontWeight: 600, color: colors.gray700 }}>{label}</small>
       <input
+        type={type}
         style={{
           width: "100%",
           padding: "6px 8px",
@@ -171,6 +218,20 @@ export default function ShowAllUsers() {
       />
     </div>
   );
+
+  const togglePasswordVisibility = (email) => {
+    setShowPassword((prev) => ({
+      ...prev,
+      [email]: !prev[email],
+    }));
+  };
+
+  const toggleOldPasswordInEdit = (email) => {
+    setShowOldPasswordInEdit((prev) => ({
+      ...prev,
+      [email]: !prev[email],
+    }));
+  };
 
   return (
     <section
@@ -208,6 +269,11 @@ export default function ShowAllUsers() {
             }}
           >
             👥 Users Management
+            {isManager && currentUser?.location && (
+              <span style={{ fontSize: 16, color: colors.orange500, marginLeft: 10 }}>
+                (Showing users from: {currentUser.location})
+              </span>
+            )}
           </h2>
           <input
             type="text"
@@ -238,6 +304,9 @@ export default function ShowAllUsers() {
               {filteredUsers.map((user) => {
                 const isEditing = editingEmail === user.email;
                 const isAssigning = assigningEmail === user.email;
+                const isPasswordVisible = showPassword[user.email];
+                const isOldPasswordVisible = showOldPasswordInEdit[user.email];
+                
                 return (
                   <div
                     key={user.email}
@@ -272,7 +341,7 @@ export default function ShowAllUsers() {
                             background:
                               user.role === "manager"
                                 ? "#60a5fa"
-                                : user.role === "frontdesk"
+                                : user.role === "mis-execuitve"
                                 ? "#facc15"
                                 : "#94a3b8",
                             color: "#fff",
@@ -354,6 +423,61 @@ export default function ShowAllUsers() {
                           })
                         )}
 
+                        {/* OLD PASSWORD VISIBLE IN EDIT MODE */}
+                        <div style={{ marginBottom: 8, marginTop: 12, padding: 10, backgroundColor: "#e0f2fe", borderRadius: 6 }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                            <small style={{ fontWeight: 600, color: colors.gray700 }}>
+                              🔐 Current Password
+                            </small>
+                            <button
+                              style={{
+                                background: "transparent",
+                                border: "none",
+                                cursor: "pointer",
+                                fontSize: 16,
+                                padding: 0,
+                              }}
+                              onClick={() => toggleOldPasswordInEdit(user.email)}
+                              title={isOldPasswordVisible ? "Hide current password" : "Show current password"}
+                            >
+                              {isOldPasswordVisible ? "🙈" : "👁️"}
+                            </button>
+                          </div>
+                          <div
+                            style={{
+                              padding: "6px 8px",
+                              backgroundColor: colors.white,
+                              borderRadius: 6,
+                              border: `1px solid ${colors.gray300}`,
+                              fontSize: 13,
+                              fontFamily: "monospace",
+                              color: colors.gray700,
+                            }}
+                          >
+                            {isOldPasswordVisible ? (editedUser.password || "No password set") : "••••••••"}
+                          </div>
+                        </div>
+
+                        {/* NEW PASSWORD CHANGE SECTION */}
+                        <div style={{ marginBottom: 8, marginTop: 12, padding: 10, backgroundColor: "#fef3c7", borderRadius: 6 }}>
+                          <small style={{ fontWeight: 600, color: colors.gray700, display: "block", marginBottom: 4 }}>
+                            🔑 Set New Password (leave blank to keep current)
+                          </small>
+                          <input
+                            type="text"
+                            placeholder="Enter new password..."
+                            style={{
+                              width: "100%",
+                              padding: "6px 8px",
+                              borderRadius: 6,
+                              border: `1px solid ${colors.gray300}`,
+                              fontSize: 13,
+                            }}
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                          />
+                        </div>
+
                         <div style={{ marginTop: 10 }}>
                           <button
                             style={{
@@ -363,6 +487,8 @@ export default function ShowAllUsers() {
                               border: "none",
                               borderRadius: 6,
                               marginRight: 6,
+                              cursor: "pointer",
+                              fontWeight: 600,
                             }}
                             onClick={handleSave}
                           >
@@ -375,8 +501,14 @@ export default function ShowAllUsers() {
                               padding: "6px 12px",
                               border: "none",
                               borderRadius: 6,
+                              cursor: "pointer",
+                              fontWeight: 600,
                             }}
-                            onClick={() => setEditingEmail(null)}
+                            onClick={() => {
+                              setEditingEmail(null);
+                              setNewPassword("");
+                              setShowOldPasswordInEdit({});
+                            }}
                           >
                             ✖ Cancel
                           </button>
@@ -385,16 +517,37 @@ export default function ShowAllUsers() {
                     ) : (
                       <>
                         <div style={{ fontSize: 14, color: colors.gray700 }}>
-                          <p><b>DOB:</b> {user.dob || "—"}</p>
-                          <p><b>DOJ:</b> {user.doj || "—"}</p>
-                          <p><b>Department:</b> {user.department || "—"}</p>
-                          <p><b>Location:</b> {user.location || "—"}</p>
-                          <p><b>Employee ID:</b> {user.employeeId || "—"}</p>
-                          <p><b>Salary:</b> {user.salary || "—"}</p>
-                          <p><b>Bank Account:</b> {user.bankAccount || "—"}</p>
-                          <p><b>PAN No:</b> {user.panNo || "—"}</p>
-                          <p><b>IFSC Code:</b> {user.ifscCode || "—"}</p>
-                          <p><b>Paid Leaves:</b> {user.paidLeaves || 0}</p>
+                          <p style={{ margin: "4px 0" }}><b>DOB:</b> {user.dob || "—"}</p>
+                          <p style={{ margin: "4px 0" }}><b>DOJ:</b> {user.doj || "—"}</p>
+                          <p style={{ margin: "4px 0" }}><b>Department:</b> {user.department || "—"}</p>
+                          <p style={{ margin: "4px 0" }}><b>Location:</b> {user.location || "—"}</p>
+                          <p style={{ margin: "4px 0" }}><b>Employee ID:</b> {user.employeeId || "—"}</p>
+                          <p style={{ margin: "4px 0" }}><b>Salary:</b> {user.salary || "—"}</p>
+                          <p style={{ margin: "4px 0" }}><b>Bank Account:</b> {user.bankAccount || "—"}</p>
+                          <p style={{ margin: "4px 0" }}><b>PAN No:</b> {user.panNo || "—"}</p>
+                          <p style={{ margin: "4px 0" }}><b>IFSC Code:</b> {user.ifscCode || "—"}</p>
+                          <p style={{ margin: "4px 0" }}><b>Paid Leaves:</b> {user.paidLeaves || 0}</p>
+                          
+                          {/* Password Display */}
+                          <p style={{ margin: "4px 0", display: "flex", alignItems: "center", gap: 8 }}>
+                            <b>Password:</b> 
+                            <span style={{ fontFamily: "monospace" }}>
+                              {isPasswordVisible ? (user.password || "—") : "••••••••"}
+                            </span>
+                            <button
+                              style={{
+                                background: "transparent",
+                                border: "none",
+                                cursor: "pointer",
+                                fontSize: 16,
+                                padding: 0,
+                              }}
+                              onClick={() => togglePasswordVisibility(user.email)}
+                              title={isPasswordVisible ? "Hide password" : "Show password"}
+                            >
+                              {isPasswordVisible ? "🙈" : "👁️"}
+                            </button>
+                          </p>
 
                           <button
                             style={{
@@ -403,11 +556,13 @@ export default function ShowAllUsers() {
                               padding: "6px 12px",
                               border: "none",
                               borderRadius: 6,
-                              marginTop: 6,
+                              marginTop: 10,
+                              cursor: "pointer",
+                              fontWeight: 600,
                             }}
                             onClick={() => handleEdit(user)}
                           >
-                            ✏ Edit
+                            ✏️ Edit
                           </button>
                         </div>
                       </>
@@ -435,7 +590,7 @@ export default function ShowAllUsers() {
                             >
                               <option value="">Select Role</option>
                               <option value="manager">Manager</option>
-                              <option value="frontdesk">Frontdesk</option>
+                              <option value="mis-execuitve">mis-execuitve</option>
                             </select>
                             {assignRole === "manager" && (
                               <select
@@ -462,6 +617,7 @@ export default function ShowAllUsers() {
                                 padding: "6px 10px",
                                 borderRadius: 6,
                                 border: "none",
+                                cursor: "pointer",
                               }}
                               onClick={saveAssignment}
                             >
@@ -474,6 +630,7 @@ export default function ShowAllUsers() {
                                 padding: "6px 10px",
                                 borderRadius: 6,
                                 border: "none",
+                                cursor: "pointer",
                               }}
                               onClick={() => setAssigningEmail(null)}
                             >
@@ -482,7 +639,7 @@ export default function ShowAllUsers() {
                           </div>
                         ) : user.role ? (
                           <div>
-                            <p>
+                            <p style={{ margin: "4px 0" }}>
                               <b>Current Role:</b> {user.role}
                               {user.role === "manager" && user.location && (
                                 <> ({user.location})</>
@@ -495,6 +652,7 @@ export default function ShowAllUsers() {
                                 padding: "6px 10px",
                                 borderRadius: 6,
                                 border: "none",
+                                cursor: "pointer",
                               }}
                               onClick={() => removeRole(user.email)}
                             >
@@ -509,6 +667,7 @@ export default function ShowAllUsers() {
                               padding: "6px 12px",
                               borderRadius: 6,
                               border: "none",
+                              cursor: "pointer",
                             }}
                             onClick={() => {
                               setAssigningEmail(user.email);

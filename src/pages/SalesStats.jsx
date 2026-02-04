@@ -6,7 +6,7 @@ const baseUrl =
         ? "http://localhost:5000"
         : "https://backend.vjcoverseas.com";
 
-function SalesStats({ employeeEmail, isChairman = false }) {
+function SalesStats({ employeeEmail, employeeSalary, isChairman = false }) {
     const [stats, setStats] = useState(null);
     const [salesEntries, setSalesEntries] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -25,14 +25,49 @@ function SalesStats({ employeeEmail, isChairman = false }) {
     
     // View period
     const [viewPeriod, setViewPeriod] = useState('current');
+    
+    // Real-time calculation toggle
+    const [useRealTimeCalc, setUseRealTimeCalc] = useState(false);
+    const [attendanceSummary, setAttendanceSummary] = useState(null);
+    const [currentMonth, setCurrentMonth] = useState(new Date().toISOString().slice(0, 7));
 
     useEffect(() => {
         if (employeeEmail) {
             fetchStats();
             fetchSalesEntries();
+            fetchAttendanceSummary(employeeEmail, currentMonth);
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [employeeEmail]);
+
+    // Recalculate when month or mode changes
+    useEffect(() => {
+        if (employeeEmail && salesEntries.length > 0 && useRealTimeCalc) {
+            const monthSales = calculateMonthSales(salesEntries, currentMonth);
+            // Update stats with month-specific sales
+            setStats(prev => ({
+                ...prev,
+                current_sales: monthSales
+            }));
+        } else if (employeeEmail && !useRealTimeCalc) {
+            // Fetch total sales when in simple mode
+            fetchStats();
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentMonth, useRealTimeCalc, salesEntries]);
+
+    const calculateMonthSales = (entries, month) => {
+        if (!entries || entries.length === 0) return 0;
+        
+        const [year, monthNum] = month.split('-');
+        const monthSales = entries.filter(entry => {
+            const entryDate = new Date(entry.sale_date);
+            return entryDate.getFullYear() === parseInt(year) && 
+                   (entryDate.getMonth() + 1) === parseInt(monthNum);
+        });
+        
+        return monthSales.reduce((sum, entry) => sum + parseFloat(entry.amount || 0), 0);
+    };
 
     const fetchStats = async () => {
         try {
@@ -57,6 +92,20 @@ function SalesStats({ employeeEmail, isChairman = false }) {
             setSalesEntries(res.data);
         } catch (err) {
             console.error('Failed to fetch sales entries', err);
+        }
+    };
+
+    const fetchAttendanceSummary = async (email, month) => {
+        try {
+            const res = await axios.post(
+                `${baseUrl}/get-attendance-summary`,
+                { email, month },
+                { withCredentials: true }
+            );
+            setAttendanceSummary(res.data);
+        } catch (err) {
+            console.error('Failed to fetch attendance summary', err);
+            setAttendanceSummary(null);
         }
     };
 
@@ -127,34 +176,99 @@ function SalesStats({ employeeEmail, isChairman = false }) {
 
     const target = parseFloat(stats?.target || 0);
     const current = parseFloat(stats?.current_sales || 0);
-    const percentage = target > 0 ? (current / target) * 100 : 0;
+    const baseSalary = parseFloat(employeeSalary || 0);
+
+    // Calculate salary with attendance integration
+    const calculateSalaryWithAttendance = () => {
+        if (!attendanceSummary || target === 0) return null;
+
+        const totalDays = attendanceSummary.totalDays || 0;
+        const sundays = attendanceSummary.sundays || 0;
+        const workDays = parseFloat(attendanceSummary.workDays) || 0;
+
+        if (totalDays === 0) return null;
+
+        // Calculate pro-rated salary
+        const workingDays = totalDays;
+        const perDaySalary = baseSalary / workingDays;
+        const proratedSalary = perDaySalary * workDays;
+
+        // Calculate adjusted target
+        const adjustedTarget = (target / workingDays) * workDays;
+
+        // Calculate achievement percentage
+        const percentage = (current / adjustedTarget) * 100;
+
+        // Determine salary percentage
+        let salaryPercentage = 0;
+        if (percentage >= 100) salaryPercentage = 100;
+        else if (percentage >= 75) salaryPercentage = 75;
+        else if (percentage >= 50) salaryPercentage = 50;
+        else if (percentage >= 25) salaryPercentage = 25;
+
+        const payable = proratedSalary * (salaryPercentage / 100);
+
+        return {
+            percentage: percentage.toFixed(1),
+            salaryPercentage,
+            payable: payable.toFixed(2),
+            proratedSalary: proratedSalary.toFixed(2),
+            adjustedTarget: adjustedTarget.toFixed(2),
+            originalTarget: target.toFixed(2),
+            attendanceData: {
+                totalDays,
+                sundays,
+                workDays: workDays.toFixed(2),
+                workingDays
+            }
+        };
+    };
+
+    // Calculate salary without attendance (simple mode)
+    const calculateSalarySimple = () => {
+        const percentage = target > 0 ? (current / target) * 100 : 0;
+        
+        let salaryPercentage = 0;
+        if (percentage >= 100) salaryPercentage = 100;
+        else if (percentage >= 75) salaryPercentage = 75;
+        else if (percentage >= 50) salaryPercentage = 50;
+        else if (percentage >= 25) salaryPercentage = 25;
+
+        const payable = baseSalary * (salaryPercentage / 100);
+
+        return {
+            percentage: percentage.toFixed(1),
+            salaryPercentage,
+            payable: payable.toFixed(2)
+        };
+    };
+
+    const salaryCalc = useRealTimeCalc ? calculateSalaryWithAttendance() : calculateSalarySimple();
+    const percentage = salaryCalc?.percentage || 0;
     const remaining = Math.max(0, target - current);
 
-    // Calculate salary eligibility
-    let salaryPercentage = 0;
+    // Salary status
     let salaryStatus = '';
     let statusColor = '';
 
-    if (percentage >= 100) {
-        salaryPercentage = 100;
-        salaryStatus = '✅ Full Salary Eligible';
-        statusColor = '#28a745';
-    } else if (percentage >= 75) {
-        salaryPercentage = 75;
-        salaryStatus = '⚠️ 75% Salary Eligible';
-        statusColor = '#ffc107';
-    } else if (percentage >= 50) {
-        salaryPercentage = 50;
-        salaryStatus = '⚠️ 50% Salary Eligible';
-        statusColor = '#fd7e14';
-    } else if (percentage >= 25) {
-        salaryPercentage = 25;
-        salaryStatus = '⚠️ 25% Salary Eligible';
-        statusColor = '#dc3545';
-    } else {
-        salaryPercentage = 0;
-        salaryStatus = '❌ No Salary Eligible';
-        statusColor = '#6c757d';
+    if (salaryCalc) {
+        const sp = salaryCalc.salaryPercentage;
+        if (sp >= 100) {
+            salaryStatus = '✅ Full Salary Eligible';
+            statusColor = '#28a745';
+        } else if (sp >= 75) {
+            salaryStatus = '⚠️ 75% Salary Eligible';
+            statusColor = '#ffc107';
+        } else if (sp >= 50) {
+            salaryStatus = '⚠️ 50% Salary Eligible';
+            statusColor = '#fd7e14';
+        } else if (sp >= 25) {
+            salaryStatus = '⚠️ 25% Salary Eligible';
+            statusColor = '#dc3545';
+        } else {
+            salaryStatus = '❌ No Salary Eligible';
+            statusColor = '#6c757d';
+        }
     }
 
     // Get comparison data
@@ -221,6 +335,57 @@ function SalesStats({ employeeEmail, isChairman = false }) {
                     )}
                 </div>
             </div>
+
+            {/* Real-time Calculation Toggle */}
+            <div style={styles.toggleCard}>
+                <div style={styles.toggleHeader}>
+                    <h4 style={styles.toggleTitle}>💡 Salary Calculation Mode</h4>
+                    <label style={styles.toggleContainer}>
+                        <input
+                            type="checkbox"
+                            checked={useRealTimeCalc}
+                            onChange={(e) => setUseRealTimeCalc(e.target.checked)}
+                        />
+                        <span style={styles.toggleLabel}>Real-time Mode</span>
+                    </label>
+                </div>
+                <p style={styles.toggleDescription}>
+                    {useRealTimeCalc 
+                        ? "✅ Real-time mode: Salary based on attendance + sales performance" 
+                        : "📊 Simple mode: Salary based on sales performance only"}
+                </p>
+                {useRealTimeCalc && !attendanceSummary && (
+                    <p style={styles.toggleWarning}>
+                        ⚠️ No attendance summary found for {currentMonth}. Please generate attendance summary first.
+                    </p>
+                )}
+            </div>
+
+            {/* Month Selector for Real-time Mode */}
+            {useRealTimeCalc && (
+                <div style={styles.monthSelector}>
+                    <label style={styles.label}>Select Month:</label>
+                    <input
+                        type="month"
+                        value={currentMonth}
+                        onChange={async (e) => {
+                            setCurrentMonth(e.target.value);
+                            await fetchAttendanceSummary(employeeEmail, e.target.value);
+                            // Calculate sales for selected month
+                            const monthSales = calculateMonthSales(salesEntries, e.target.value);
+                            setStats(prev => ({
+                                ...prev,
+                                current_sales: monthSales
+                            }));
+                        }}
+                        style={styles.input}
+                    />
+                    <p style={styles.monthNote}>
+                        📊 Sales for {new Date(currentMonth + '-01').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}: 
+                        <strong> ₹{parseFloat(stats?.current_sales || 0).toLocaleString('en-IN')}</strong>
+                    </p>
+                </div>
+            )}
 
             {/* Chairman Edit Target */}
             {editMode && isChairman && (
@@ -388,7 +553,7 @@ function SalesStats({ employeeEmail, isChairman = false }) {
                 </div>
                 <div style={styles.statCard}>
                     <div style={styles.statLabel}>Achievement</div>
-                    <div style={styles.statValue}>{percentage.toFixed(1)}%</div>
+                    <div style={styles.statValue}>{percentage}%</div>
                 </div>
             </div>
 
@@ -403,10 +568,63 @@ function SalesStats({ employeeEmail, isChairman = false }) {
                             backgroundColor: percentage >= 75 ? '#28a745' : percentage >= 50 ? '#ffc107' : '#dc3545'
                         }}
                     >
-                        {percentage > 10 && <span style={styles.progressText}>{percentage.toFixed(1)}%</span>}
+                        {percentage > 10 && <span style={styles.progressText}>{percentage}%</span>}
                     </div>
                 </div>
             </div>
+
+            {/* Salary Calculation Card */}
+            {salaryCalc && (
+                <div style={{...styles.salaryCard, borderColor: statusColor}}>
+                    <h4 style={styles.salaryCardTitle}>💰 Salary Calculation</h4>
+                    
+                    <div style={styles.salaryRow}>
+                        <span style={styles.salaryLabel}>Base Salary:</span>
+                        <span style={styles.salaryValue}>₹ {baseSalary.toLocaleString('en-IN')}</span>
+                    </div>
+
+                    {useRealTimeCalc && salaryCalc.proratedSalary && (
+                        <>
+                            <div style={styles.salaryRow}>
+                                <span style={styles.salaryLabel}>Work Days:</span>
+                                <span style={styles.salaryValue}>{salaryCalc.attendanceData?.workDays || 0}</span>
+                            </div>
+                            <div style={styles.salaryRow}>
+                                <span style={styles.salaryLabel}>Pro-rated Salary:</span>
+                                <span style={styles.salaryValue}>
+                                    ₹ {parseFloat(salaryCalc.proratedSalary).toLocaleString('en-IN')}
+                                </span>
+                            </div>
+                            <div style={styles.salaryRow}>
+                                <span style={styles.salaryLabel}>Adjusted Target:</span>
+                                <span style={{...styles.salaryValue, color: '#e74c3c'}}>
+                                    ₹ {parseFloat(salaryCalc.adjustedTarget).toLocaleString('en-IN')}
+                                </span>
+                            </div>
+                        </>
+                    )}
+
+                    <div style={styles.salaryRow}>
+                        <span style={styles.salaryLabel}>Salary Percentage:</span>
+                        <span style={{...styles.salaryValue, color: statusColor}}>
+                            {salaryCalc.salaryPercentage}%
+                        </span>
+                    </div>
+
+                    <div style={{...styles.salaryRow, borderTop: '2px solid #e9ecef', marginTop: '10px', paddingTop: '15px'}}>
+                        <span style={{fontSize: '1.3rem', fontWeight: '700', color: '#2c3e50'}}>Net Payable:</span>
+                        <span style={{fontSize: '1.6rem', fontWeight: '700', color: statusColor}}>
+                            ₹ {parseFloat(salaryCalc.payable).toLocaleString('en-IN')}
+                        </span>
+                    </div>
+
+                    <div style={{textAlign: 'center', marginTop: '15px'}}>
+                        <span style={{...styles.salaryStatus, color: statusColor}}>
+                            {salaryStatus}
+                        </span>
+                    </div>
+                </div>
+            )}
 
             {/* Visual Chart */}
             <div style={styles.chartContainer}>
@@ -463,21 +681,6 @@ function SalesStats({ employeeEmail, isChairman = false }) {
                 </div>
             )}
 
-            {/* Salary Eligibility */}
-            <div style={{...styles.salaryCard, borderColor: statusColor}}>
-                <div style={styles.salaryHeader}>
-                    <span style={{...styles.salaryStatus, color: statusColor}}>
-                        {salaryStatus}
-                    </span>
-                </div>
-                <div style={styles.salaryDetails}>
-                    <div style={styles.salaryRow}>
-                        <span>Salary Percentage:</span>
-                        <strong style={{color: statusColor}}>{salaryPercentage}%</strong>
-                    </div>
-                </div>
-            </div>
-
             {/* Sales Entries Table */}
             {salesEntries.length > 0 && (
                 <div style={styles.entriesSection}>
@@ -524,15 +727,20 @@ function SalesStats({ employeeEmail, isChairman = false }) {
             {/* Salary Rules */}
             <div style={styles.rulesCard}>
                 <h4 style={styles.rulesTitle}>📋 Salary Eligibility Rules</h4>
+                {useRealTimeCalc && (
+                    <p style={styles.rulesNote}>
+                        <strong>Real-time Mode:</strong> Salary = Pro-rated Salary (based on attendance) × Achievement Percentage
+                    </p>
+                )}
                 <ul style={styles.rulesList}>
                     <li style={styles.ruleItem}>
-                        <span style={{color: '#28a745'}}>✓</span> 100% Target = 100% Salary
+                        <span style={{color: '#28a745'}}>✓</span> 100% Target = 100% Salary {useRealTimeCalc && '(of pro-rated)'}
                     </li>
                     <li style={styles.ruleItem}>
-                        <span style={{color: '#ffc107'}}>⚠</span> 75-99% Target = 75% Salary
+                        <span style={{color: '#ffc107'}}>⚠</span> 75-99% Target = 75% Salary {useRealTimeCalc && '(of pro-rated)'}
                     </li>
                     <li style={styles.ruleItem}>
-                        <span style={{color: '#fd7e14'}}>⚠</span> 50-74% Target = 50% Salary
+                        <span style={{color: '#fd7e14'}}>⚠</span> 50-74% Target = 50% Salary {useRealTimeCalc && '(of pro-rated)'}
                     </li>
                     <li style={styles.ruleItem}>
                         <span style={{color: '#dc3545'}}>✗</span> Below 25% Target = No Salary
@@ -590,6 +798,81 @@ const styles = {
         fontSize: '0.95rem',
         transition: 'background-color 0.2s'
     },
+    toggleCard: {
+        backgroundColor: '#f0f9ff',
+        border: '3px solid #3498db',
+        borderRadius: '12px',
+        padding: '20px',
+        marginBottom: '25px'
+    },
+    toggleHeader: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '10px'
+    },
+    toggleTitle: {
+        fontSize: '1.2rem',
+        fontWeight: '700',
+        color: '#2c3e50',
+        margin: 0
+    },
+    toggleContainer: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px',
+        cursor: 'pointer'
+    },
+    toggleLabel: {
+        fontSize: '1rem',
+        fontWeight: '600',
+        color: '#3498db'
+    },
+    toggleDescription: {
+        fontSize: '0.95rem',
+        color: '#495057',
+        margin: '5px 0 0 0'
+    },
+    toggleWarning: {
+        fontSize: '0.9rem',
+        color: '#e74c3c',
+        backgroundColor: '#fee',
+        padding: '10px',
+        borderRadius: '6px',
+        marginTop: '10px',
+        marginBottom: 0
+    },
+    monthSelector: {
+        backgroundColor: '#fff3cd',
+        border: '2px solid #ffc107',
+        borderRadius: '12px',
+        padding: '20px',
+        marginBottom: '25px'
+    },
+    monthNote: {
+        fontSize: '1rem',
+        color: '#856404',
+        marginTop: '10px',
+        marginBottom: 0,
+        padding: '10px',
+        backgroundColor: '#fff',
+        borderRadius: '6px'
+    },
+    label: {
+        display: 'block',
+        fontWeight: '600',
+        color: '#495057',
+        marginBottom: '8px',
+        fontSize: '0.95rem'
+    },
+    input: {
+        width: '100%',
+        padding: '12px',
+        border: '2px solid #dee2e6',
+        borderRadius: '8px',
+        fontSize: '1rem',
+        boxSizing: 'border-box'
+    },
     editForm: {
         backgroundColor: '#e3f2fd',
         border: '2px solid #2196f3',
@@ -619,22 +902,6 @@ const styles = {
     },
     formGroup: {
         marginBottom: '15px'
-    },
-    label: {
-        display: 'block',
-        fontWeight: '600',
-        color: '#495057',
-        marginBottom: '8px',
-        fontSize: '0.95rem'
-    },
-    input: {
-        width: '100%',
-        padding: '12px',
-        border: '2px solid #dee2e6',
-        borderRadius: '8px',
-        fontSize: '1rem',
-        boxSizing: 'border-box',
-        transition: 'border-color 0.2s'
     },
     saveButton: {
         padding: '12px 24px',
@@ -761,6 +1028,40 @@ const styles = {
         fontWeight: '700',
         fontSize: '0.9rem'
     },
+    salaryCard: {
+        backgroundColor: '#fff',
+        border: '3px solid',
+        borderRadius: '12px',
+        padding: '20px',
+        marginBottom: '25px'
+    },
+    salaryCardTitle: {
+        fontSize: '1.2rem',
+        fontWeight: '700',
+        color: '#2c3e50',
+        marginTop: 0,
+        marginBottom: '15px'
+    },
+    salaryRow: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: '10px 0'
+    },
+    salaryLabel: {
+        fontSize: '1rem',
+        color: '#6c757d',
+        fontWeight: '500'
+    },
+    salaryValue: {
+        fontSize: '1.1rem',
+        color: '#2c3e50',
+        fontWeight: '600'
+    },
+    salaryStatus: {
+        fontSize: '1.3rem',
+        fontWeight: '700'
+    },
     chartContainer: {
         backgroundColor: '#fff',
         border: '2px solid #e9ecef',
@@ -852,29 +1153,6 @@ const styles = {
         fontWeight: '600',
         transition: 'width 0.5s ease-in-out'
     },
-    salaryCard: {
-        backgroundColor: '#fff',
-        border: '3px solid',
-        borderRadius: '12px',
-        padding: '20px',
-        marginBottom: '25px'
-    },
-    salaryHeader: {
-        marginBottom: '15px'
-    },
-    salaryStatus: {
-        fontSize: '1.3rem',
-        fontWeight: '700'
-    },
-    salaryDetails: {
-        fontSize: '1rem'
-    },
-    salaryRow: {
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: '10px 0'
-    },
     entriesSection: {
         marginBottom: '25px'
     },
@@ -936,6 +1214,14 @@ const styles = {
         color: '#2c3e50',
         marginBottom: '15px',
         marginTop: 0
+    },
+    rulesNote: {
+        fontSize: '0.9rem',
+        color: '#856404',
+        backgroundColor: '#fff',
+        padding: '10px',
+        borderRadius: '6px',
+        marginBottom: '15px'
     },
     rulesList: {
         listStyle: 'none',

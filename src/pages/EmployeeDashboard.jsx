@@ -282,8 +282,8 @@ function EmployeeDashboard() {
     };
 
     // Determine if MIS Executive role (for attendance chat logs)
-    const isMISExecutive = profile?.role?.toLowerCase().includes('mis executive') || 
-                          profile?.role?.toLowerCase() === 'mis executive';
+    const isMISExecutive = profile?.role?.toLowerCase().includes('mis-execuitve') || 
+                          profile?.role?.toLowerCase() === 'mis-execuitve';
 
     return (
         <div style={styles.page}>
