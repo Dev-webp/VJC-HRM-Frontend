@@ -1,0 +1,688 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import axios from 'axios';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  LineChart, Line, PieChart, Pie, Cell
+} from 'recharts';
+
+// ─── CONFIG ──────────────────────────────────────────────────────────────────
+const baseUrl = window.location.hostname === 'localhost'
+  ? 'http://localhost:5000'
+  : 'https://backend.vjcoverseas.com';
+
+const OFFICE_START     = '10:00:00';
+const LATE_GRACE_LIMIT = '10:15:00';
+const LOGOUT_CUTOFF    = '19:00:00';
+const MAX_LATES        = 6;
+
+// ─── LIGHT THEME ─────────────────────────────────────────────────────────────
+const C = {
+  bg:      '#f8fafc',
+  surface: '#ffffff',
+  surf2:   '#f1f5f9',
+  border:  '#e2e8f0',
+  text:    '#0f172a',
+  muted:   '#64748b',
+  accent:  '#0ea5e9',
+  full:    '#16a34a',
+  half:    '#d97706',
+  absent:  '#dc2626',
+  holiday: '#2563eb',
+  leave:   '#7c3aed',
+};
+
+const EMP_COLORS = [
+  '#0ea5e9','#16a34a','#f97316','#ec4899','#8b5cf6',
+  '#eab308','#06b6d4','#84cc16','#ef4444','#a855f7',
+  '#14b8a6','#6366f1','#f43f5e','#f59e0b','#10b981',
+];
+
+// ─── UTILS ───────────────────────────────────────────────────────────────────
+function parseT(t) {
+  if (!t) return null;
+  const p = t.split('.')[0].split(':');
+  return new Date(Date.UTC(1970, 0, 1, +p[0] || 0, +p[1] || 0, 0));
+}
+function diffMs(a, b) {
+  const ta = parseT(a), tb = parseT(b);
+  if (!ta || !tb || tb < ta) return 0;
+  return tb - ta;
+}
+function toHours(ms) { return ms / 3600000; }
+function fmtHM(ms) {
+  const min = Math.floor(ms / 60000);
+  return `${Math.floor(min / 60)}h ${min % 60}m`;
+}
+function nowYM() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+function nextYM(ym) {
+  const [y, m] = ym.split('-').map(Number);
+  return `${m === 12 ? y + 1 : y}-${String(m === 12 ? 1 : m + 1).padStart(2, '0')}`;
+}
+function monthDays(ym) {
+  const [y, m] = ym.split('-').map(Number);
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return Array.from({ length: last }, (_, i) => {
+    const d = new Date(Date.UTC(y, m - 1, i + 1));
+    return { date: d, iso: d.toISOString().slice(0, 10) };
+  });
+}
+function fmtTime(t) {
+  if (!t) return '-';
+  try {
+    const [h, m] = t.split(':');
+    const d = new Date(); d.setHours(+h, +m, 0);
+    return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+  } catch { return t; }
+}
+
+// ─── POLICY ──────────────────────────────────────────────────────────────────
+function calcNet(log) {
+  const { office_in, office_out, break_in, break_out, break_in_2, break_out_2,
+          lunch_in, lunch_out, extra_break_ins = [], extra_break_outs = [] } = log || {};
+  if (!office_in || !office_out) return 0;
+  const tIn = parseT(office_in), tOut = parseT(office_out);
+  const actualIn  = tIn  < parseT(OFFICE_START)  ? OFFICE_START  : office_in;
+  const actualOut = tOut > parseT(LOGOUT_CUTOFF) ? LOGOUT_CUTOFF : office_out;
+  let gross = diffMs(actualIn, actualOut), brk = 0;
+  if (break_in   && break_out)   brk += diffMs(break_in,   break_out);
+  if (break_in_2 && break_out_2) brk += diffMs(break_in_2, break_out_2);
+  if (lunch_in   && lunch_out)   brk += diffMs(lunch_in,   lunch_out);
+  const ins = Array.isArray(extra_break_ins) ? extra_break_ins : [];
+  const outs = Array.isArray(extra_break_outs) ? extra_break_outs : [];
+  for (let i = 0; i < Math.min(ins.length, outs.length); i++)
+    if (ins[i] && outs[i]) brk += diffMs(ins[i], outs[i]);
+  return Math.max(0, gross - brk);
+}
+
+function getLateInfo(log) {
+  const t = parseT(log?.office_in);
+  if (!t) return { late: false, grace: false, beyond: false };
+  const s = parseT(OFFICE_START), g = parseT(LATE_GRACE_LIMIT);
+  if (t <= s) return { late: false, grace: false, beyond: false };
+  if (t <= g) return { late: true, grace: true, beyond: false };
+  return { late: true, grace: false, beyond: true };
+}
+
+function buildLateStats(byDate, days) {
+  let count = 0; const exceeded = [];
+  for (const { iso } of days) {
+    const l = byDate.get(iso);
+    if (l) { const li = getLateInfo(l); if (li.late && li.grace) { count++; if (count > MAX_LATES) exceeded.push(iso); } }
+  }
+  return { count, exceeded };
+}
+
+function classifyDay(iso, weekday, log, holidays, lStats, byDate) {
+  const netH = toHours(calcNet(log || {}));
+  if (weekday === 1) { const t = parseT(log?.office_in), c = parseT('14:00:00'); if (t && c && t > c) return 'absent'; }
+  if (weekday === 0) {
+    const dt = new Date(iso + 'T00:00:00Z');
+    const satS = new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate() - 1)).toISOString().slice(0, 10);
+    const monS = new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate() + 1)).toISOString().slice(0, 10);
+    const satL = byDate.get(satS) || {}, monL = byDate.get(monS) || {};
+    const satOk = parseT(satL.office_out) >= parseT(LOGOUT_CUTOFF) || satL.leave_type?.toLowerCase().includes('paid') || satL.leave_type?.toLowerCase().includes('half');
+    const monOk = parseT(monL.office_in) && parseT(monL.office_in) <= parseT(LATE_GRACE_LIMIT);
+    return (satOk && monOk) || holidays.has(iso) ? 'holiday' : 'absent';
+  }
+  if (holidays.has(iso)) return 'holiday';
+  if (log?.leave_type?.toLowerCase().includes('earned') && netH >= 4) return 'fullday';
+  if (log?.leave_type?.toLowerCase().includes('earned')) return 'paidleave';
+  if (log?.leave_type && !log.leave_type.toLowerCase().includes('earned')) return 'absent';
+  if (!log?.office_in || !log?.office_out) return 'absent';
+  const outT = parseT(log.office_out), cutT = parseT(LOGOUT_CUTOFF);
+  const li = getLateInfo(log), exc = lStats.exceeded.includes(iso);
+  if (outT >= cutT && netH >= 4 && netH < 8) return 'halfday';
+  if (outT < cutT && netH >= 8) return 'halfday';
+  if (outT < cutT && netH < 4) return 'absent';
+  if ((li.late && li.grace && exc) || (li.late && li.beyond)) return netH >= 8 ? 'halfday' : 'absent';
+  if (netH < 4) return 'absent';
+  if (netH < 8) return 'halfday';
+  return 'fullday';
+}
+
+function buildSummary(logs, holidays, ym) {
+  if (!ym) return { fullDays: 0, halfDays: 0, absentDays: 0, holidayDays: 0, paidDays: 0, attPct: '0.0', avgNet: '0.0', lateCount: 0 };
+  const days = monthDays(ym);
+  const todayIS = new Date().toISOString().slice(0, 10);
+  const valid = days.filter(d => d.iso <= todayIS);
+  const byDate = new Map((logs || []).map(l => [l.date, l]));
+  const ls = buildLateStats(byDate, days);
+  let full = 0, half = 0, absent = 0, holiday = 0, paid = 0, totalMs = 0;
+  for (const { date, iso } of valid) {
+    const log = byDate.get(iso);
+    totalMs += calcNet(log || {});
+    const b = classifyDay(iso, date.getDay(), log, holidays, ls, byDate);
+    if (b === 'fullday') full++;
+    else if (b === 'halfday') half++;
+    else if (b === 'paidleave') paid++;
+    else if (b === 'holiday') holiday++;
+    else absent++;
+  }
+  const extraFull = Math.floor(half / 2);
+  full += extraFull;
+  const remHalf = half % 2;
+  const workDays = valid.filter(d => d.date.getDay() !== 0 && !holidays.has(d.iso)).length;
+  const attPct = workDays > 0 ? (((full + remHalf * 0.5 + paid) / workDays) * 100).toFixed(1) : '0.0';
+  const avgNet = valid.length > 0 ? (toHours(totalMs) / valid.length).toFixed(1) : '0.0';
+  return { fullDays: full, halfDays: remHalf, absentDays: absent, holidayDays: holiday, paidDays: paid, attPct, avgNet, lateCount: ls.count };
+}
+
+// ─── FIXED WIDTH BAR CHART (no ResponsiveContainer) ──────────────────────────
+function OverallBar({ data }) {
+  if (!data.length) return <div style={{ padding: 40, color: C.muted, textAlign: 'center' }}>No data yet</div>;
+  const w = Math.max(600, data.length * 60);
+  return (
+    <div style={{ width: '100%', overflowX: 'auto' }}>
+      <BarChart width={w} height={320} data={data} margin={{ top: 10, right: 20, left: 0, bottom: 60 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+        <XAxis dataKey="shortName" tick={{ fill: C.muted, fontSize: 11 }} angle={-35} textAnchor="end" interval={0} />
+        <YAxis tick={{ fill: C.muted, fontSize: 11 }} />
+        <Tooltip
+          contentStyle={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8 }}
+          labelFormatter={(_, pl) => pl?.[0]?.payload?.fullName || ''}
+        />
+        <Legend wrapperStyle={{ fontSize: 12 }} />
+        <Bar dataKey="Full"   stackId="a" fill={C.full}    name="Full Day"   />
+        <Bar dataKey="Half"   stackId="a" fill={C.half}    name="Half Day"   />
+        <Bar dataKey="Leave"  stackId="a" fill={C.leave}   name="Paid Leave" />
+        <Bar dataKey="Absent" stackId="a" fill={C.absent}  name="Absent" radius={[4,4,0,0]} />
+      </BarChart>
+    </div>
+  );
+}
+
+function AttLine({ data }) {
+  if (!data.length) return <div style={{ padding: 40, color: C.muted, textAlign: 'center' }}>No data yet</div>;
+  const w = Math.max(600, data.length * 60);
+  return (
+    <div style={{ width: '100%', overflowX: 'auto' }}>
+      <LineChart width={w} height={260} data={data} margin={{ top: 10, right: 20, left: 0, bottom: 60 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+        <XAxis dataKey="shortName" tick={{ fill: C.muted, fontSize: 11 }} angle={-35} textAnchor="end" interval={0} />
+        <YAxis domain={[0, 100]} tick={{ fill: C.muted, fontSize: 11 }} unit="%" />
+        <Tooltip
+          contentStyle={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8 }}
+          formatter={v => [`${v}%`, 'Attendance']}
+          labelFormatter={(_, pl) => pl?.[0]?.payload?.fullName || ''}
+        />
+        <Line type="monotone" dataKey="att" name="Attendance %" stroke={C.accent}
+          strokeWidth={2.5} dot={{ r: 5, fill: C.accent }} activeDot={{ r: 7 }} />
+      </LineChart>
+    </div>
+  );
+}
+
+// ─── INDIVIDUAL PIE (fixed 180x180 svg) ──────────────────────────────────────
+function EmpPie({ s, name, color }) {
+  const slices = [
+    { name: 'Full',    value: s.fullDays,    color: C.full    },
+    { name: 'Half',    value: s.halfDays,    color: C.half    },
+    { name: 'Absent',  value: s.absentDays,  color: C.absent  },
+    { name: 'Leave',   value: s.paidDays,    color: C.leave   },
+    { name: 'Holiday', value: s.holidayDays, color: C.holiday },
+  ].filter(d => d.value > 0);
+
+  const pieData = slices.length > 0 ? slices : [{ name: 'No Data', value: 1, color: '#e2e8f0' }];
+
+  return (
+    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14,
+      padding: '16px 18px', width: 210, flexShrink: 0,
+      boxShadow: '0 1px 6px rgba(0,0,0,0.07)', borderTop: `4px solid ${color}` }}>
+      <div style={{ fontWeight: 700, color: C.text, fontSize: 13, marginBottom: 2,
+        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
+      <div style={{ color: color, fontSize: 22, fontWeight: 800 }}>{s.attPct}%</div>
+      <div style={{ color: C.muted, fontSize: 10, marginBottom: 8 }}>Attendance</div>
+
+      {/* Fixed 174x160 pie — always renders */}
+      <PieChart width={174} height={160}>
+        <Pie data={pieData} dataKey="value" cx={87} cy={75}
+          innerRadius={38} outerRadius={62} paddingAngle={slices.length > 1 ? 3 : 0} startAngle={90} endAngle={-270}>
+          {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+        </Pie>
+        <Tooltip contentStyle={{ background: '#fff', border: `1px solid ${C.border}`, fontSize: 11, borderRadius: 6 }} />
+      </PieChart>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 10px' }}>
+        {slices.length > 0 ? slices.map(d => (
+          <div key={d.name} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: C.muted }}>
+            <div style={{ width: 7, height: 7, borderRadius: '50%', background: d.color, flexShrink: 0 }} />
+            {d.name}: <b style={{ color: C.text }}>{d.value}</b>
+          </div>
+        )) : <div style={{ color: C.muted, fontSize: 10 }}>No attendance recorded</div>}
+      </div>
+    </div>
+  );
+}
+
+// ─── INDIVIDUAL HOURS BAR ────────────────────────────────────────────────────
+function EmpHoursBar({ logs, name, color }) {
+  const data = [...(logs || [])]
+    .filter(l => l.office_in && l.office_out)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-20)
+    .map(l => ({ date: l.date.slice(5), hrs: +toHours(calcNet(l)).toFixed(2) }));
+
+  if (!data.length) return (
+    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12,
+      padding: 20, height: 230, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      color: C.muted, fontSize: 13 }}>No logged days found for this month</div>
+  );
+
+  const w = Math.max(400, data.length * 36);
+  return (
+    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12,
+      padding: 20, boxShadow: '0 1px 6px rgba(0,0,0,0.07)' }}>
+      <div style={{ color: C.text, fontWeight: 700, fontSize: 13, marginBottom: 10 }}>
+        {name} — <span style={{ color: C.muted, fontWeight: 400, fontSize: 11 }}>Last {data.length} logged days</span>
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <BarChart width={w} height={200} data={data} margin={{ top: 5, right: 10, left: 0, bottom: 30 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+          <XAxis dataKey="date" tick={{ fill: C.muted, fontSize: 9 }} angle={-35} textAnchor="end" />
+          <YAxis tick={{ fill: C.muted, fontSize: 10 }} domain={[0, 10]} />
+          <Tooltip contentStyle={{ background: '#fff', border: `1px solid ${C.border}`, fontSize: 11, borderRadius: 6 }}
+            formatter={v => [`${v}h`, 'Hours']} />
+          <Bar dataKey="hrs" name="Hours" fill={color} radius={[4, 4, 0, 0]} />
+        </BarChart>
+      </div>
+    </div>
+  );
+}
+
+// ─── LOG TABLE ───────────────────────────────────────────────────────────────
+function LogTable({ logs }) {
+  const sorted = [...logs].sort((a, b) => b.date.localeCompare(a.date));
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+        <thead>
+          <tr style={{ background: C.surf2 }}>
+            {['Date','Login','B.In','B.Out','L.In','L.Out','Logout','Net Hrs','Leave'].map(h => (
+              <th key={h} style={{ padding: '9px 12px', color: C.muted, textAlign: 'left',
+                borderBottom: `2px solid ${C.border}`, fontWeight: 600, fontSize: 11, whiteSpace: 'nowrap' }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((l, i) => {
+            const net = calcNet(l), netH = toHours(net);
+            const clr = netH >= 8 ? C.full : netH >= 4 ? C.half : netH > 0 ? C.absent : C.muted;
+            return (
+              <tr key={l.date} style={{ background: i % 2 ? C.surf2 : C.surface }}>
+                <td style={{ padding: '6px 12px', borderBottom: `1px solid ${C.border}`, fontWeight: 600, color: C.text }}>{l.date}</td>
+                {[l.office_in, l.break_in, l.break_out, l.lunch_in, l.lunch_out, l.office_out].map((t, idx) => (
+                  <td key={idx} style={{ padding: '6px 12px', borderBottom: `1px solid ${C.border}`, fontFamily: 'monospace', color: C.muted }}>{fmtTime(t)}</td>
+                ))}
+                <td style={{ padding: '6px 12px', borderBottom: `1px solid ${C.border}` }}>
+                  <span style={{ background: clr + '18', color: clr, padding: '2px 8px', borderRadius: 20, fontFamily: 'monospace', fontWeight: 700 }}>
+                    {net > 0 ? fmtHM(net) : '-'}
+                  </span>
+                </td>
+                <td style={{ padding: '6px 12px', borderBottom: `1px solid ${C.border}`, color: C.muted, fontSize: 11 }}>{l.leave_type || '-'}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ─── SMALL HELPERS ───────────────────────────────────────────────────────────
+function Card({ label, value, color, sub }) {
+  return (
+    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12,
+      padding: '14px 18px', minWidth: 120, boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+      borderTop: `4px solid ${color || C.accent}` }}>
+      <div style={{ color: C.muted, fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 3 }}>{label}</div>
+      <div style={{ color: color || C.text, fontSize: 22, fontWeight: 800, fontFamily: 'monospace' }}>{value}</div>
+      {sub && <div style={{ color: C.muted, fontSize: 10, marginTop: 2 }}>{sub}</div>}
+    </div>
+  );
+}
+
+function Sec({ children }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '24px 0 12px' }}>
+      <div style={{ width: 4, height: 20, background: C.accent, borderRadius: 2 }} />
+      <h2 style={{ color: C.text, fontSize: 15, fontWeight: 700, margin: 0 }}>{children}</h2>
+    </div>
+  );
+}
+
+// ─── MAIN ────────────────────────────────────────────────────────────────────
+export default function ChairmanDashboard() {
+  const [employees,     setEmployees]   = useState([]);
+  const [allLogs,       setAllLogs]     = useState({});
+  const [holidays,      setHolidays]    = useState(new Map());
+  const [selectedMonth, setMonth]       = useState(() => nowYM());
+  const [loading,       setLoading]     = useState(true);
+  const [logsReady,     setLogsReady]   = useState(false);
+  const [error,         setError]       = useState('');
+  const [activeTab,     setActiveTab]   = useState('overview');
+  const [selectedEmp,   setSelectedEmp] = useState(null);
+
+  // Load employees
+  useEffect(() => {
+    setLoading(true);
+    axios.get(`${baseUrl}/admin/employees`, { withCredentials: true })
+      .then(r => { setEmployees(Array.isArray(r.data) ? r.data : []); })
+      .catch(() => { setError('❌ Failed to load employees. Make sure you are logged in as chairman.'); setLoading(false); });
+  }, []);
+
+  // Load holidays
+  useEffect(() => {
+    if (!selectedMonth) return;
+    axios.get(`${baseUrl}/holidays?month=${selectedMonth}`, { withCredentials: true })
+      .then(r => { const m = new Map(); (r.data || []).forEach(h => { if (h.date) m.set(h.date, h); }); setHolidays(m); })
+      .catch(() => {});
+  }, [selectedMonth]);
+
+  // Load all logs
+  useEffect(() => {
+    if (!employees.length || !selectedMonth) return;
+    setLogsReady(false);
+    setLoading(true);
+    const next = nextYM(selectedMonth);
+    Promise.all(
+      employees.map(emp =>
+        Promise.all([
+          axios.get(`${baseUrl}/admin/attendance?employee_id=${emp.id}&month=${selectedMonth}`, { withCredentials: true })
+            .then(r => Array.isArray(r.data) ? r.data : []).catch(() => []),
+          axios.get(`${baseUrl}/admin/attendance?employee_id=${emp.id}&month=${next}`, { withCredentials: true })
+            .then(r => Array.isArray(r.data) ? r.data : []).catch(() => []),
+        ]).then(([a, b]) => ({ id: emp.id, logs: [...a, ...b] }))
+      )
+    ).then(results => {
+      const map = {};
+      results.forEach(r => { map[r.id] = r.logs; });
+      setAllLogs(map);
+      setLoading(false);
+      setLogsReady(true);
+    });
+  }, [employees, selectedMonth]);
+
+  // Summaries
+  const summaries = useMemo(() => {
+    if (!logsReady) return [];
+    return employees.map(emp => ({
+      ...emp,
+      s: buildSummary(allLogs[emp.id] || [], holidays, selectedMonth),
+    }));
+  }, [employees, allLogs, holidays, selectedMonth, logsReady]);
+
+  // Chart data
+  const chartData = useMemo(() =>
+    summaries.map(e => ({
+      shortName: (e.name || '').split(' ')[0],
+      fullName:  e.name || '',
+      Full:      e.s.fullDays,
+      Half:      e.s.halfDays,
+      Leave:     e.s.paidDays,
+      Absent:    e.s.absentDays,
+      att:       parseFloat(e.s.attPct),
+    })), [summaries]);
+
+  // Org stats
+  const org = useMemo(() => {
+    if (!summaries.length) return { n: 0, avgA: '0.0', top: '-', bot: '-', absent: 0 };
+    const n = summaries.length;
+    const avgA = (summaries.reduce((a, e) => a + parseFloat(e.s.attPct), 0) / n).toFixed(1);
+    const top  = [...summaries].sort((a, b) => parseFloat(b.s.attPct) - parseFloat(a.s.attPct))[0];
+    const bot  = [...summaries].sort((a, b) => b.s.absentDays - a.s.absentDays)[0];
+    return { n, avgA, top: top?.name || '-', bot: bot?.name || '-', absent: summaries.reduce((a, e) => a + e.s.absentDays, 0) };
+  }, [summaries]);
+
+  const empIdx  = summaries.findIndex(e => e.id === selectedEmp);
+  const empData = empIdx >= 0 ? summaries[empIdx] : null;
+  const empLogs = (allLogs[selectedEmp] || []).filter(l => l.date?.startsWith(selectedMonth));
+  const empClr  = empIdx >= 0 ? EMP_COLORS[empIdx % EMP_COLORS.length] : C.accent;
+
+  return (
+    <div style={{ background: C.bg, minHeight: '100vh', color: C.text,
+      fontFamily: "'Segoe UI', Arial, sans-serif", paddingBottom: 60 }}>
+
+      {/* HEADER */}
+      <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`,
+        padding: '16px 28px', display: 'flex', alignItems: 'center',
+        justifyContent: 'space-between', flexWrap: 'wrap', gap: 10,
+        boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 10,
+            background: `linear-gradient(135deg, ${C.accent}, #6366f1)`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🏛️</div>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 18 }}>Chairman Dashboard</div>
+            <div style={{ color: C.muted, fontSize: 11 }}>Full Attendance Overview · All Employees</div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ color: C.muted, fontSize: 12 }}>Month:</span>
+          <input type="month" value={selectedMonth}
+            onChange={e => { setMonth(e.target.value); setSelectedEmp(null); setLogsReady(false); }}
+            style={{ background: C.surf2, border: `1px solid ${C.border}`, color: C.text,
+              borderRadius: 8, padding: '5px 10px', fontSize: 13, outline: 'none' }} />
+        </div>
+      </div>
+
+      {error && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', margin: '14px 28px',
+          borderRadius: 8, padding: '10px 14px', color: '#dc2626', fontSize: 13 }}>{error}</div>
+      )}
+
+      <div style={{ padding: '18px 28px' }}>
+
+        {/* STAT CARDS */}
+        {!loading && summaries.length > 0 && (
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 20 }}>
+            <Card label="Employees"      value={org.n}          color={C.accent} />
+            <Card label="Avg Attendance" value={`${org.avgA}%`} color={C.full} />
+            <Card label="Top Performer"  value={(org.top || '-').split(' ')[0]} sub={org.top} color={C.full} />
+            <Card label="Most Absences"  value={(org.bot || '-').split(' ')[0]} sub={org.bot} color={C.absent} />
+            <Card label="Total Absences" value={org.absent}     color={C.half} />
+          </div>
+        )}
+
+        {/* TABS */}
+        <div style={{ display: 'flex', gap: 2, marginBottom: 18, borderBottom: `2px solid ${C.border}` }}>
+          {[['overview','📊 Overview'],['employees','👥 All Employees'],['individual','🔍 Individual']].map(([id, label]) => (
+            <button key={id} onClick={() => setActiveTab(id)} style={{
+              background:  activeTab === id ? C.accent : 'transparent',
+              color:       activeTab === id ? '#fff'   : C.muted,
+              border: 'none', borderRadius: '7px 7px 0 0',
+              padding: '8px 18px', fontWeight: activeTab === id ? 700 : 400,
+              fontSize: 13, cursor: 'pointer',
+            }}>{label}</button>
+          ))}
+        </div>
+
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: 80, color: C.muted, fontSize: 15 }}>
+            ⏳ Loading attendance data for all employees…
+          </div>
+        ) : (
+          <>
+            {/* ── OVERVIEW ── */}
+            {activeTab === 'overview' && (
+              <div>
+                <Sec>Attendance Breakdown — All Employees</Sec>
+                <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12,
+                  padding: '18px 16px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', overflowX: 'auto' }}>
+                  <OverallBar data={chartData} />
+                </div>
+
+                <Sec>Attendance % Comparison</Sec>
+                <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12,
+                  padding: '18px 16px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', overflowX: 'auto' }}>
+                  <AttLine data={chartData} />
+                </div>
+
+                <Sec>Individual Breakdown</Sec>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
+                  {summaries.map((e, i) => (
+                    <EmpPie key={e.id} name={e.name} s={e.s} color={EMP_COLORS[i % EMP_COLORS.length]} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── ALL EMPLOYEES ── */}
+            {activeTab === 'employees' && (
+              <div>
+                <Sec>All Employees · {selectedMonth}</Sec>
+                <div style={{ background: C.surface, border: `1px solid ${C.border}`,
+                  borderRadius: 12, overflowX: 'auto', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ background: C.surf2 }}>
+                        {['#','Name','Att %','Full','Half','Absent','Leave','Holiday','Late','Avg Net',''].map(h => (
+                          <th key={h} style={{ padding: '10px 12px', color: C.muted, textAlign: 'left',
+                            borderBottom: `2px solid ${C.border}`, fontWeight: 600, fontSize: 11,
+                            textTransform: 'uppercase', letterSpacing: 0.5, whiteSpace: 'nowrap' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {summaries.map((e, i) => {
+                        const attF = parseFloat(e.s.attPct);
+                        const attClr = attF >= 80 ? C.full : attF >= 60 ? C.half : C.absent;
+                        const col = EMP_COLORS[i % EMP_COLORS.length];
+                        return (
+                          <tr key={e.id}
+                            style={{ background: i % 2 ? C.surf2 : C.surface }}
+                            onMouseEnter={ev => ev.currentTarget.style.background = '#e0f2fe'}
+                            onMouseLeave={ev => ev.currentTarget.style.background = i % 2 ? C.surf2 : C.surface}>
+                            <td style={{ padding: '8px 12px', color: C.muted, borderBottom: `1px solid ${C.border}` }}>{i + 1}</td>
+                            <td style={{ padding: '8px 12px', borderBottom: `1px solid ${C.border}` }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <div style={{ width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
+                                  background: `linear-gradient(135deg,${col},${EMP_COLORS[(i+4)%EMP_COLORS.length]})`,
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  fontSize: 12, fontWeight: 800, color: '#fff' }}>
+                                  {(e.name || '?')[0].toUpperCase()}
+                                </div>
+                                <div>
+                                  <div style={{ color: C.text, fontWeight: 600 }}>{e.name}</div>
+                                  <div style={{ color: C.muted, fontSize: 10 }}>{e.department || e.role || ''}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td style={{ padding: '8px 12px', borderBottom: `1px solid ${C.border}` }}>
+                              <span style={{ background: attClr + '18', color: attClr,
+                                padding: '2px 10px', borderRadius: 20, fontWeight: 700, fontFamily: 'monospace' }}>
+                                {e.s.attPct}%
+                              </span>
+                            </td>
+                            {[[e.s.fullDays, C.full],[e.s.halfDays, C.half],[e.s.absentDays, C.absent],
+                              [e.s.paidDays, C.leave],[e.s.holidayDays, C.holiday]].map(([v, c], idx) => (
+                              <td key={idx} style={{ padding: '8px 12px', color: c, fontWeight: 700,
+                                borderBottom: `1px solid ${C.border}`, fontFamily: 'monospace' }}>{v}</td>
+                            ))}
+                            <td style={{ padding: '8px 12px', borderBottom: `1px solid ${C.border}`,
+                              fontFamily: 'monospace', color: e.s.lateCount > MAX_LATES ? C.absent : C.muted }}>
+                              {e.s.lateCount}/{MAX_LATES}
+                            </td>
+                            <td style={{ padding: '8px 12px', borderBottom: `1px solid ${C.border}`,
+                              fontFamily: 'monospace', color: C.muted }}>{e.s.avgNet}h</td>
+                            <td style={{ padding: '8px 12px', borderBottom: `1px solid ${C.border}` }}>
+                              <button onClick={() => { setSelectedEmp(e.id); setActiveTab('individual'); }}
+                                style={{ background: C.accent, border: 'none', color: '#fff',
+                                  borderRadius: 6, padding: '4px 12px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>
+                                View →
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* ── INDIVIDUAL ── */}
+            {activeTab === 'individual' && (
+              <div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
+                  {summaries.map((e, i) => {
+                    const col = EMP_COLORS[i % EMP_COLORS.length];
+                    const sel = selectedEmp === e.id;
+                    return (
+                      <button key={e.id} onClick={() => setSelectedEmp(e.id)} style={{
+                        background: sel ? col : C.surface,
+                        color:      sel ? '#fff' : C.muted,
+                        border: `1.5px solid ${sel ? col : C.border}`,
+                        borderRadius: 20, padding: '6px 16px', fontSize: 13,
+                        fontWeight: sel ? 700 : 400, cursor: 'pointer',
+                        boxShadow: sel ? `0 2px 8px ${col}44` : 'none',
+                      }}>{e.name}</button>
+                    );
+                  })}
+                </div>
+
+                {!selectedEmp ? (
+                  <div style={{ color: C.muted, textAlign: 'center', padding: 60, fontSize: 14,
+                    background: C.surface, borderRadius: 12, border: `1px solid ${C.border}` }}>
+                    👆 Select an employee above to view their records
+                  </div>
+                ) : empData ? (
+                  <div>
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 18 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: C.surface,
+                        border: `1px solid ${C.border}`, borderRadius: 12, padding: '10px 16px',
+                        boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+                        <div style={{ width: 44, height: 44, borderRadius: '50%', flexShrink: 0,
+                          background: `linear-gradient(135deg, ${empClr}, #6366f1)`,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 20, fontWeight: 800, color: '#fff' }}>
+                          {(empData.name || '?')[0].toUpperCase()}
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: 14 }}>{empData.name}</div>
+                          <div style={{ color: C.muted, fontSize: 11 }}>{empData.department || empData.role || 'Employee'}</div>
+                        </div>
+                      </div>
+                      <Card label="Attendance"  value={`${empData.s.attPct}%`} color={empClr} />
+                      <Card label="Full Days"   value={empData.s.fullDays}     color={C.full} />
+                      <Card label="Half Days"   value={empData.s.halfDays}     color={C.half} />
+                      <Card label="Absent"      value={empData.s.absentDays}   color={C.absent} />
+                      <Card label="Late Logins" value={`${empData.s.lateCount}/${MAX_LATES}`}
+                        color={empData.s.lateCount > MAX_LATES ? C.absent : C.muted} />
+                      <Card label="Avg Net/Day" value={`${empData.s.avgNet}h`} color={C.accent} />
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 20, alignItems: 'flex-start' }}>
+                      <EmpPie name={empData.name} s={empData.s} color={empClr} />
+                      <div style={{ flex: 1, minWidth: 300 }}>
+                        <EmpHoursBar logs={empLogs} name={empData.name} color={empClr} />
+                      </div>
+                    </div>
+
+                    <Sec>Complete Log · {selectedMonth}</Sec>
+                    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12 }}>
+                      {empLogs.length > 0
+                        ? <LogTable logs={empLogs} />
+                        : <div style={{ color: C.muted, padding: 40, textAlign: 'center' }}>No logs found for {selectedMonth}.</div>}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* LEGEND */}
+      <div style={{ display: 'flex', gap: 16, padding: '0 28px 20px', flexWrap: 'wrap' }}>
+        {[['Full Day',C.full],['Half Day',C.half],['Absent',C.absent],['Holiday',C.holiday],['Paid Leave',C.leave]].map(([l,c]) => (
+          <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: C.muted }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: c }} />{l}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

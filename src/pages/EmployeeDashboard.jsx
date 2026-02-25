@@ -8,7 +8,8 @@ import SalarySlips from "./SalarySlips";
 import PayrollSlip from "./PayrollSlip";
 import AttendanceChatLogs from "./AttendanceChatLogs";
 import SalesStats from "./SalesStats";
-
+import AttendanceAnalytics from './Attendanceanalytics.jsx';
+import Fulldata from "./Fulldata.jsx";
 const baseUrl =
     window.location.hostname === "localhost"
         ? "http://localhost:5000"
@@ -437,6 +438,11 @@ function EmployeeDashboard() {
                                 💬 Chat Logs
                             </button>
                         )}
+                          {isMISExecutive && (
+                            <button onClick={() => setActiveTab('fulldata')} style={{ ...styles.tabButton, ...(activeTab === 'fulldata' ? styles.tabButtonActive : {}) }}>
+                                📊 Full Data
+                            </button>
+                        )}
                     </div>
 
                     {/* Tab Content */}
@@ -471,9 +477,15 @@ function EmployeeDashboard() {
                                         </div>
                                     </div>
                                 </div>
+
+                                {/* Attendance Analytics Section */}
+                                <div style={styles.sectionCard}>
+                                   
+                                    <AttendanceAnalytics />
+                                </div>
                             </div>
                         )}
-
+                        
                         {activeTab === 'attendance' && (
                             <div style={styles.sectionCard}><AttendanceDashboard /></div>
                         )}
@@ -501,6 +513,11 @@ function EmployeeDashboard() {
                                 <AttendanceChatLogs />
                             </div>
                         )}
+                         {activeTab === 'fulldata' && isMISExecutive && (
+                            <div style={styles.sectionCard}>
+                                <Fulldata />
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
@@ -519,7 +536,7 @@ function EmployeeDashboard() {
                             <div style={styles.instructionSection}>
                                 <h4 style={styles.instructionTitle}>🎯 Overview Tab</h4>
                                 <p style={styles.instructionText}>
-                                    View your quick profile summary including your employee ID, role, and department.
+                                    View your quick profile summary including your employee ID, role, department, and attendance analytics at a glance.
                                 </p>
                             </div>
                             
@@ -1073,14 +1090,8 @@ const styles = {
         color: '#1e293b',
     },
     
-    sectionCard: {
-        backgroundColor: '#fff',
-        borderRadius: '16px',
-        padding: '28px',
-        marginBottom: '24px',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
-        border: '1px solid #e2e8f0',
-    },
+    
+   
     
     toast: {
         base: {

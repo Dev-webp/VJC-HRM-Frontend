@@ -5,7 +5,7 @@ import SalaryUpload from "./SalarySlipUpload";
 import UserManagement from "./UserManagement";
 import Payroll from "./Payroll";
 import AttendanceChatLogs from "./AttendanceChatLogs";
-
+import Fulldata from "./Fulldata.jsx";
 // CRITICAL: ONLY importing the component. No logic remains here.
 import LeaveRequestsSection from "./LeaveRequestsSection"; 
 
@@ -73,7 +73,7 @@ const navItems = {
   LEAVE_REQUESTS: { label: "📝 Leave Requests", component: LeaveRequestsSection }, 
   PAYROLL: { label: "💰 Payroll Processing", component: Payroll },
   SALARY_UPLOAD: { label: "📤 Salary Slip Upload", component: SalaryUpload },
-
+  FULL_DATA: { label: "📊 Full Data", component: Fulldata },
 };
 
 // Component to render based on active tab (Simplified)
