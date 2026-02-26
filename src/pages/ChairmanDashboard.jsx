@@ -20,39 +20,45 @@ const BASE =
     : "https://backend.vjcoverseas.com";
 
 const SECTIONS = [
-  { title: null, items: [{ id: "DASHBOARD", label: "Executive Dashboard", emoji: "🏛️" }] },
   {
-    title: "👥 People Management",
+    title: null,
+    items: [{ id: "DASHBOARD", label: "Executive Dashboard", emoji: "🏛️" }],
+  },
+  {
+    title: "People Management",
     items: [
-      { id: "SHOW_USERS", label: "All Employees", emoji: "👥" },
-      { id: "CREATE_USER", label: "Add Employee", emoji: "👤" },
-      { id: "OFFER_LETTER", label: "Offer Letters", emoji: "✉️" },
+      { id: "SHOW_USERS",     label: "All Employees",  emoji: "👥" },
+      { id: "CREATE_USER",    label: "Add Employee",   emoji: "👤" },
+      { id: "OFFER_LETTER",   label: "Offer Letters",  emoji: "✉️" },
       { id: "LEAVE_REQUESTS", label: "Leave Requests", emoji: "📝", badge: true },
     ],
   },
   {
-    title: "💰 Finance Control",
+    title: "Finance Control",
     items: [
-      { id: "PAYROLL", label: "Payroll", emoji: "💰" },
-      { id: "SALARY_UPLOAD", label: "Upload Slips", emoji: "📤" },
-      { id: "AUTO_SALARY_SLIPS", label: "Auto Slips", emoji: "🤖" },
-      { id: "SALES_MANAGEMENT", label: "Sales", emoji: "📈" },
+      { id: "PAYROLL",           label: "Payroll",      emoji: "💰" },
+      { id: "SALARY_UPLOAD",     label: "Upload Slips", emoji: "📤" },
+      { id: "AUTO_SALARY_SLIPS", label: "Auto Slips",   emoji: "🤖" },
+      { id: "SALES_MANAGEMENT",  label: "Sales",        emoji: "📈" },
     ],
   },
-  { title: "⚙️ Admin Tools", items: [{ id: "MARK_ABSENT", label: "Holiday Planner", emoji: "📅" }] },
+  {
+    title: "Admin Tools",
+    items: [{ id: "MARK_ABSENT", label: "Holiday Planner", emoji: "📅" }],
+  },
 ];
 
 export default function ChairmanDashboard() {
-  const [tab, setTab] = useState("DASHBOARD");
-  const [leaves, setLeaves] = useState([]);
-  const [toast, setToast] = useState(null);
-  const [live, setLive] = useState(false);
-  const [now, setNow] = useState(new Date());
-  const [notifPerm, setNotifPerm] = useState("default");
+  const [tab, setTab]             = useState("DASHBOARD");
+  const [leaves, setLeaves]       = useState([]);
+  const [toast, setToast]         = useState(null);
+  const [live, setLive]           = useState(false);
+  const [now, setNow]             = useState(new Date());
+  const [collapsed, setCollapsed] = useState(false);
 
   const socketRef = useRef(null);
-  const audioRef = useRef(null);
-  const soundTs = useRef(0);
+  const audioRef  = useRef(null);
+  const soundTs   = useRef(0);
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
@@ -60,18 +66,15 @@ export default function ChairmanDashboard() {
   }, []);
 
   useEffect(() => {
-    if ("Notification" in window && Notification.permission === "default") {
-      Notification.requestPermission().then(setNotifPerm);
-    } else if ("Notification" in window) setNotifPerm(Notification.permission);
+    if ("Notification" in window && Notification.permission === "default")
+      Notification.requestPermission();
   }, []);
 
   const fetchLeaves = useCallback(async () => {
     try {
       const r = await axios.get(`${BASE}/all-leave-requests`, { withCredentials: true });
       setLeaves(r.data.map((x) => ({ ...x, remarksInput: "" })));
-    } catch (e) {
-      console.error("Failed to fetch leaves:", e);
-    }
+    } catch (e) { console.error(e); }
   }, []);
 
   const showToast = useCallback((data) => {
@@ -81,28 +84,21 @@ export default function ChairmanDashboard() {
       audioRef.current.play().catch(() => {});
       soundTs.current = t;
     }
-    setToast(`🔔 New leave request from ${data.employee_name || "Employee"}`);
+    setToast(`New leave request from ${data.employee_name || "Employee"}`);
     setTimeout(() => setToast(null), 5000);
   }, []);
 
-  const showDesktopNotif = useCallback(
-    (data) => {
-      if ("Notification" in window && Notification.permission === "granted") {
-        const notif = new Notification("🔔 New Leave Request", {
-          body: `${data.employee_name || "Employee"} requests leave`,
-          icon: "/logo192.png",
-          tag: "leave-request",
-        });
-        setTimeout(() => notif.close(), 8000);
-        notif.onclick = () => {
-          window.focus();
-          setTab("LEAVE_REQUESTS");
-          notif.close();
-        };
-      }
-    },
-    [setTab]
-  );
+  const showDesktopNotif = useCallback((data) => {
+    if ("Notification" in window && Notification.permission === "granted") {
+      const notif = new Notification("New Leave Request", {
+        body: `${data.employee_name || "Employee"} requests leave`,
+        icon: "/logo192.png",
+        tag: "leave-request",
+      });
+      setTimeout(() => notif.close(), 8000);
+      notif.onclick = () => { window.focus(); setTab("LEAVE_REQUESTS"); notif.close(); };
+    }
+  }, []);
 
   useEffect(() => {
     fetchLeaves();
@@ -112,14 +108,10 @@ export default function ChairmanDashboard() {
       withCredentials: true,
     });
     socketRef.current = socket;
-    socket.on("connect", () => setLive(true));
-    socket.on("disconnect", () => setLive(false));
-    socket.on("newLeaveRequest", (data) => {
-      showToast(data);
-      showDesktopNotif(data);
-      fetchLeaves();
-    });
-    socket.on("leaveActionTaken", () => fetchLeaves());
+    socket.on("connect",          () => setLive(true));
+    socket.on("disconnect",       () => setLive(false));
+    socket.on("newLeaveRequest",  (data) => { showToast(data); showDesktopNotif(data); fetchLeaves(); });
+    socket.on("leaveActionTaken", fetchLeaves);
     return () => socket.disconnect();
   }, [fetchLeaves, showToast, showDesktopNotif]);
 
@@ -128,123 +120,211 @@ export default function ChairmanDashboard() {
     [leaves]
   );
 
+  const greeting = now.getHours() < 12 ? "Good Morning" : now.getHours() < 17 ? "Good Afternoon" : "Good Evening";
   const activeItem = SECTIONS.flatMap((s) => s.items).find((i) => i.id === tab);
-  const greeting =
-    now.getHours() < 12
-      ? "Good Morning"
-      : now.getHours() < 17
-      ? "Good Afternoon"
-      : "Good Evening";
 
   return (
     <>
       <style>{CSS}</style>
+      <link
+        href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Lora:wght@600;700&display=swap"
+        rel="stylesheet"
+      />
       <audio ref={audioRef} src="/new-request.mp3" preload="auto" />
-      {toast && <div className="toast">{toast}</div>}
 
-      <div className="shell">
+      {toast && (
+        <div className="toast-notif">
+          <span className="toast-icon">🔔</span>
+          <span>{toast}</span>
+        </div>
+      )}
+
+      <div className={`shell ${collapsed ? "shell--col" : ""}`}>
+
+        {/* ═══════════ SIDEBAR ═══════════ */}
         <aside className="sidebar">
+
+          {/* Brand */}
           <div className="brand">
-            <img src="/logo192.png" alt="VJC" className="brand-img" />
-            <div>
-              <div className="brand-name">VJC Overseas</div>
-              <div className="brand-sub">CHAIRMAN PORTAL</div>
+            <div className="brand-logo">
+              <img src="/logo192.png" alt="VJC" className="brand-img" />
             </div>
+            {!collapsed && (
+              <div className="brand-text">
+                <div className="brand-name">VJC Overseas</div>
+                <div className="brand-sub">Chairman Portal</div>
+              </div>
+            )}
+            <button className="toggle-btn" onClick={() => setCollapsed(c => !c)}>
+              {collapsed ? "»" : "«"}
+            </button>
           </div>
+
+          {/* Connection status */}
+          {!collapsed && (
+            <div className="status-strip">
+              <span className={`s-dot ${live ? "s-dot--live" : "s-dot--off"}`} />
+              <span className="s-txt">{live ? "Connected" : "Offline"}</span>
+              <span className="s-time">
+                {now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              </span>
+            </div>
+          )}
+
+          {/* Navigation */}
           <nav className="nav">
-            {SECTIONS.map((sec) => (
-              <div key={sec.title}>
-                {sec.title && <div className="nav-section-title">{sec.title}</div>}
+            {SECTIONS.map((sec, si) => (
+              <div key={si} className="nav-group">
+                {sec.title && !collapsed && (
+                  <div className="nav-section-title">{sec.title}</div>
+                )}
                 {sec.items.map((item) => (
                   <button
                     key={item.id}
                     className={`nav-item ${tab === item.id ? "nav-item--active" : ""}`}
                     onClick={() => setTab(item.id)}
+                    title={collapsed ? item.label : ""}
                   >
-                    <span>{item.emoji}</span>
-                    <span>{item.label}</span>
-                    {item.badge && pending > 0 && <span className="nav-count">{pending}</span>}
+                    <span className="ni-emoji">{item.emoji}</span>
+                    {!collapsed && <span className="ni-label">{item.label}</span>}
+                    {item.badge && pending > 0 && (
+                      <span className="ni-badge">{pending}</span>
+                    )}
                   </button>
                 ))}
               </div>
             ))}
           </nav>
 
-          <div className="sidebar-footer">
-            <div className="sf-avatar">VM</div>
-            <div>
-              <div className="sf-name">Dr. V. Mani</div>
-              <div className="sf-role">Chairman & CEO</div>
-            </div>
-            <div className={`sf-dot ${live ? "sf-dot--live" : "sf-dot--off"}`} />
+          {/* User footer */}
+          <div className="sb-foot">
+            <div className="foot-ava">VM</div>
+            {!collapsed && (
+              <div className="foot-info">
+                <div className="foot-name">Dr. V. Mani</div>
+                <div className="foot-role">Chairman & CEO</div>
+              </div>
+            )}
           </div>
         </aside>
 
-        <div className="body">
+        {/* ═══════════ MAIN BODY ═══════════ */}
+        <div className="main-body">
+
+          {/* Topbar */}
           <header className="topbar">
             <div className="tb-left">
-              <div className="tb-title">{activeItem?.label || "Dashboard"}</div>
-              <div className="tb-date">
-                {now.toLocaleDateString("en-IN", {
-                  weekday: "short",
-                  day: "numeric",
-                  month: "short",
-                  year: "numeric",
-                })}
-              </div>
+              <span className="tb-indicator" />
+              <span className="tb-title">{activeItem?.label || "Dashboard"}</span>
             </div>
             <div className="tb-right">
               {pending > 0 && (
-                <div className="tb-badge" onClick={() => setTab("LEAVE_REQUESTS")}>
-                  {pending} Pending
-                </div>
+                <button className="pending-pill" onClick={() => setTab("LEAVE_REQUESTS")}>
+                  🔴 {pending} Pending Leaves
+                </button>
               )}
-              <div className="tb-greet">{greeting}, Dr. Mani</div>
-              <div className="tb-time">
-                {now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-              </div>
+              <span className="tb-greet">{greeting}, Dr. Mani</span>
+              <span className="tb-date">
+                {now.toLocaleDateString("en-IN", {
+                  weekday: "short", day: "numeric", month: "short", year: "numeric",
+                })}
+              </span>
             </div>
           </header>
 
+          {/* Page content */}
           <main className="content">
+
             {tab === "DASHBOARD" ? (
-              <div className="stack-dash">
-                <div className="hero-centered">
-                  <h1>Welcome Back, Dr. Mani 👋</h1>
-                  <p>
-                    {pending > 0
-                      ? `${pending} leave requests awaiting review.`
-                      : "All systems running smoothly and efficiently."}
-                  </p>
-                </div>
+              <div className="dash">
 
-               
-
-                <div className="stack-section">
-                  <h3>📊 Recent Attendance Logs</h3>
-                  <div style={{ marginTop: 16 }}>
-                    <AttendanceChatLogs />
+                {/* ── 1. Hero banner ── */}
+                <div className="hero">
+                  <div className="hero-left">
+                    <div className="hero-eyebrow">Executive Overview</div>
+                    <h1 className="hero-title">Welcome Back, Dr. Mani 👋</h1>
+                    <p className="hero-sub">
+                      {pending > 0
+                        ? `You have ${pending} leave request${pending > 1 ? "s" : ""} awaiting your review.`
+                        : "All systems running smoothly. Have a great day."}
+                    </p>
+                    {pending > 0 && (
+                      <button className="hero-btn" onClick={() => setTab("LEAVE_REQUESTS")}>
+                        Review Now →
+                      </button>
+                    )}
+                  </div>
+                  <div className="hero-stats">
+                    <div className="hstat">
+                      <div className="hstat-val">{pending}</div>
+                      <div className="hstat-lbl">Pending Leaves</div>
+                    </div>
+                    <div className="hstat-sep" />
+                    <div className="hstat">
+                      <div className={`hstat-val ${live ? "c-green" : "c-red"}`}>
+                        {live ? "●" : "●"}
+                      </div>
+                      <div className="hstat-lbl">{live ? "Live" : "Offline"}</div>
+                    </div>
+                    <div className="hstat-sep" />
+                    <div className="hstat">
+                      <div className="hstat-val hstat-sm">
+                        {now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </div>
+                      <div className="hstat-lbl">Local Time</div>
+                    </div>
                   </div>
                 </div>
 
-                <div className="stack-section">
-                  <h3>📁 Full Employee Data</h3>
-                  <div style={{ marginTop: 16 }}>
-                    <Fulldata />
-                  </div>
+                {/* ── 2. Quick Actions ── */}
+                <div className="section-head">Quick Actions</div>
+                <div className="quick-row">
+                  {[
+                    { id: "SHOW_USERS",      label: "All Employees",  emoji: "👥", color: "#2563eb" },
+                    { id: "LEAVE_REQUESTS",  label: "Leave Requests", emoji: "📝", color: "#f59e0b", count: pending },
+                    { id: "PAYROLL",         label: "Payroll",        emoji: "💰", color: "#10b981" },
+                    { id: "SALES_MANAGEMENT",label: "Sales",          emoji: "📈", color: "#8b5cf6" },
+                  ].map((q) => (
+                    <button
+                      key={q.id}
+                      className="qcard"
+                      onClick={() => setTab(q.id)}
+                      style={{ "--qc": q.color }}
+                    >
+                      <div className="qcard-head">
+                        <span className="qcard-emoji">{q.emoji}</span>
+                        {q.count > 0 && <span className="qcard-badge">{q.count}</span>}
+                      </div>
+                      <div className="qcard-label">{q.label}</div>
+                      <div className="qcard-arrow">→</div>
+                    </button>
+                  ))}
                 </div>
+
+                {/* ── 3. Attendance Logs ── */}
+                <div className="section-head">📊 Recent Attendance Logs</div>
+                <div className="panel">
+                  <AttendanceChatLogs />
+                </div>
+
+                {/* ── 4. Full Employee Data ── */}
+                <div className="section-head">📁 Full Employee Data</div>
+                <div className="panel">
+                  <Fulldata />
+                </div>
+
               </div>
             ) : (
-              <div className="page-container">
-                {tab === "SHOW_USERS" && <ShowAllUsers />}
-                {tab === "CREATE_USER" && <CreateUser />}
-                {tab === "OFFER_LETTER" && <Offerletter />}
-                {tab === "SALES_MANAGEMENT" && <SalesManagement />}
-                {tab === "PAYROLL" && <Payroll />}
-                {tab === "SALARY_UPLOAD" && <SalaryUpload />}
-                {tab === "MARK_ABSENT" && <Markabsent />}
+              <div className="page-wrap">
+                {tab === "SHOW_USERS"        && <ShowAllUsers />}
+                {tab === "CREATE_USER"       && <CreateUser />}
+                {tab === "OFFER_LETTER"      && <Offerletter />}
+                {tab === "SALES_MANAGEMENT"  && <SalesManagement />}
+                {tab === "PAYROLL"           && <Payroll />}
+                {tab === "SALARY_UPLOAD"     && <SalaryUpload />}
+                {tab === "MARK_ABSENT"       && <Markabsent />}
                 {tab === "AUTO_SALARY_SLIPS" && <Chairmanautosalaryslips />}
-                {tab === "LEAVE_REQUESTS" && (
+                {tab === "LEAVE_REQUESTS"    && (
                   <LeaveRequestsSection leaveRequests={leaves} onRefresh={fetchLeaves} />
                 )}
               </div>
@@ -255,50 +335,324 @@ export default function ChairmanDashboard() {
     </>
   );
 }
+
+/* ════════════════════════════════════════════
+   STYLES  —  Clean white executive theme
+════════════════════════════════════════════ */
 const CSS = `
-*{font-family:"Times New Roman",Times,serif;box-sizing:border-box}
-body{margin:0;background:#f8fafc;color:#1e293b;overflow:hidden}
-.shell{display:flex;height:100vh;width:100vw}
-.sidebar{width:260px;background:linear-gradient(180deg,#1e3a8a 0%,#1e40af 100%);color:#fff;display:flex;flex-direction:column}
-.brand{padding:28px 20px;display:flex;align-items:center;gap:14px;border-bottom:1px solid rgba(255,255,255,0.1)}
-.brand-img{width:44px;height:44px;border-radius:12px;background:rgba(255,255,255,0.25);padding:4px}
-.brand-name{font-weight:800;font-size:18px}
-.brand-sub{font-size:11px;color:#93c5fd;text-transform:uppercase}
-.nav{flex:1;padding:20px}
-.nav-item{display:flex;align-items:center;gap:10px;width:100%;padding:10px 14px;border:none;border-radius:12px;color:#bfdbfe;background:transparent;font-weight:600;cursor:pointer;margin-bottom:6px;transition:0.25s}
-.nav-item:hover{background:rgba(255,255,255,0.1);color:#fff;transform:translateX(4px)}
-.nav-item--active{background:linear-gradient(135deg,#f97316,#fb923c);color:#fff;transform:translateX(6px)}
-.nav-count{margin-left:auto;background:rgba(255,255,255,0.9);color:#f97316;font-size:11px;font-weight:800;padding:3px 8px;border-radius:10px}
-.sidebar-footer{padding:20px;border-top:1px solid rgba(255,255,255,0.15);display:flex;align-items:center;gap:10px}
-.sf-avatar{width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#f97316,#fb923c);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px}
-.sf-name{font-size:14px;font-weight:700}
-.sf-role{font-size:11px;color:#93c5fd}
-.sf-dot{width:9px;height:9px;border-radius:50%;margin-left:auto}
-.sf-dot--live{background:#10b981;box-shadow:0 0 8px #10b981;animation:pulse 2s infinite}
-.sf-dot--off{background:#f87171}
-.body{flex:1;display:flex;flex-direction:column}
-.topbar{height:80px;padding:0 40px;display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,0.8);backdrop-filter:blur(20px);border-bottom:1px solid rgba(0,0,0,0.05)}
-.tb-left{display:flex;align-items:center;gap:16px}
-.tb-title{font-size:24px;font-weight:800;background:linear-gradient(135deg,#1e3a8a,#f97316);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-.tb-right{display:flex;align-items:center;gap:20px}
-.tb-badge{background:linear-gradient(135deg,#ffedd5,#fed7aa);color:#f97316;padding:6px 16px;border-radius:25px;font-weight:700;cursor:pointer;border:1px solid rgba(249,115,22,0.3)}
-.tb-badge:hover{transform:scale(1.05)}
-.tb-greet{font-weight:700}
-.tb-time{font-weight:600;color:#64748b;min-width:70px;text-align:right}
-.content{flex:1;overflow-y:auto;padding:30px 40px}
-.stack-dash{display:flex;flex-direction:column;gap:40px;align-items:center;width:100%}
-.hero-centered{background:linear-gradient(135deg,#1e3a8a 0%,#2563eb 50%,#f97316 100%);padding:50px 70px;border-radius:36px;color:#fff;text-align:center;box-shadow:0 15px 35px rgba(0,0,0,0.1);max-width:900px;width:100%}
-.hero-centered h1{font-size:34px;margin-bottom:12px}
-.hero-centered p{font-size:17px;opacity:0.95}
-.stack-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:24px;max-width:1000px;width:100%}
-.stack-card{background:rgba(255,255,255,0.9);backdrop-filter:blur(10px);padding:28px;border-radius:24px;text-align:center;box-shadow:0 8px 25px rgba(0,0,0,0.05);transition:0.3s}
-.stack-card:hover{transform:translateY(-6px)}
-.sc-icon{font-size:28px;margin-bottom:10px}
-.sc-val{font-size:22px;font-weight:800}
-.sc-label{font-size:14px;color:#64748b}
-/* ▶ Updated full-width sections */
-.stack-section{background:#fff;padding:40px;border-radius:28px;width:100%;box-shadow:0 8px 20px rgba(0,0,0,0.05)}
-.stack-section h3{font-size:20px;font-weight:800;color:#1e293b;margin-bottom:20px}
-.toast{position:fixed;top:20px;right:20px;background:linear-gradient(135deg,#f97316,#fb923c);color:#fff;padding:14px 20px;border-radius:16px;font-weight:600;box-shadow:0 10px 20px rgba(249,115,22,0.3)}
-@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.6;transform:scale(1.3)}}
+  :root {
+    --sb-w:   250px;
+    --sb-col:  66px;
+    --tb-h:    62px;
+    --white:   #ffffff;
+    --bg:      #f1f5fb;
+    --border:  #e2e8f0;
+    --navy:    #1e3a8a;
+    --blue:    #2563eb;
+    --orange:  #f97316;
+    --text:    #0f172a;
+    --text2:   #475569;
+    --text3:   #94a3b8;
+    --green:   #16a34a;
+    --red:     #dc2626;
+    --radius:  14px;
+    --shadow:  0 2px 10px rgba(0,0,0,0.07);
+    --shadowL: 0 8px 30px rgba(0,0,0,0.1);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+  }
+
+  /* Shell */
+  .shell { display: flex; height: 100vh; width: 100vw; overflow: hidden; }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    width: var(--sb-w);
+    min-width: var(--sb-w);
+    height: 100vh;
+    background: var(--navy);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    transition: width .26s cubic-bezier(.4,0,.2,1), min-width .26s cubic-bezier(.4,0,.2,1);
+    overflow: hidden;
+    position: relative;
+    z-index: 20;
+    box-shadow: 2px 0 12px rgba(0,0,0,0.1);
+  }
+  .shell--col .sidebar { width: var(--sb-col); min-width: var(--sb-col); }
+
+  .brand {
+    display: flex; align-items: center; gap: 10px;
+    padding: 18px 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    flex-shrink: 0; min-height: 68px;
+  }
+  .brand-logo {
+    width: 36px; height: 36px; border-radius: 9px;
+    background: rgba(255,255,255,0.15);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .brand-img { width: 26px; height: 26px; border-radius: 5px; }
+  .brand-text { flex: 1; overflow: hidden; }
+  .brand-name {
+    font-family: 'Lora', serif; font-size: 15px; font-weight: 700;
+    color: #fff; white-space: nowrap;
+  }
+  .brand-sub {
+    font-size: 9px; font-weight: 700; letter-spacing: 2px;
+    text-transform: uppercase; color: rgba(255,255,255,0.45); margin-top: 2px;
+  }
+  .toggle-btn {
+    width: 26px; height: 26px; border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 7px; background: rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.65); cursor: pointer; font-size: 13px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; transition: .2s;
+  }
+  .toggle-btn:hover { background: rgba(255,255,255,0.18); color: #fff; }
+
+  .status-strip {
+    display: flex; align-items: center; gap: 7px;
+    padding: 8px 14px; border-bottom: 1px solid rgba(255,255,255,0.07); flex-shrink: 0;
+  }
+  .s-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .s-dot--live { background: #4ade80; box-shadow: 0 0 6px #4ade80; animation: blink 2s infinite; }
+  .s-dot--off  { background: #f87171; }
+  .s-txt  { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.55); }
+  .s-time { font-size: 11px; color: rgba(255,255,255,0.3); margin-left: auto; font-variant-numeric: tabular-nums; }
+
+  .nav { flex: 1; padding: 10px 8px; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; }
+  .nav::-webkit-scrollbar { display: none; }
+  .nav-group { margin-bottom: 4px; }
+  .nav-section-title {
+    font-size: 9px; font-weight: 700; letter-spacing: 2px;
+    text-transform: uppercase; color: rgba(255,255,255,0.3); padding: 12px 10px 5px;
+  }
+  .nav-item {
+    position: relative; display: flex; align-items: center; gap: 10px;
+    width: 100%; padding: 10px 10px; border: none; border-radius: 10px;
+    background: transparent; color: rgba(255,255,255,0.58);
+    font-family: 'Plus Jakarta Sans', sans-serif; font-size: 13px; font-weight: 500;
+    cursor: pointer; margin-bottom: 2px; transition: all .17s ease;
+    text-align: left; white-space: nowrap; overflow: hidden;
+  }
+  .nav-item:hover { background: rgba(255,255,255,0.1); color: #fff; }
+  .nav-item--active {
+    background: rgba(255,255,255,0.14); color: #fff; font-weight: 700;
+  }
+  .nav-item--active::after {
+    content: ''; position: absolute; right: 0; top: 50%;
+    transform: translateY(-50%); width: 3px; height: 55%;
+    background: var(--orange); border-radius: 4px 0 0 4px;
+  }
+  .ni-emoji { font-size: 16px; flex-shrink: 0; }
+  .ni-label { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+  .ni-badge {
+    background: var(--orange); color: #fff; font-size: 10px;
+    font-weight: 800; padding: 2px 7px; border-radius: 20px;
+    flex-shrink: 0; margin-left: auto;
+  }
+
+  .sb-foot {
+    padding: 12px 10px; border-top: 1px solid rgba(255,255,255,0.1);
+    display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+  }
+  .foot-ava {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: linear-gradient(135deg,var(--orange),#ea580c);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 800; color: #fff; flex-shrink: 0;
+  }
+  .foot-info { overflow: hidden; }
+  .foot-name { font-size: 13px; font-weight: 700; color: #fff; white-space: nowrap; }
+  .foot-role { font-size: 10px; color: rgba(255,255,255,0.38); }
+
+  /* ── MAIN BODY ── */
+  .main-body {
+    flex: 1; display: flex; flex-direction: column;
+    min-width: 0; overflow: hidden; background: var(--bg);
+  }
+
+  /* Topbar */
+  .topbar {
+    height: var(--tb-h); padding: 0 26px;
+    background: var(--white); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    flex-shrink: 0; gap: 16px; box-shadow: var(--shadow);
+  }
+  .tb-left { display: flex; align-items: center; gap: 10px; }
+  .tb-indicator {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: linear-gradient(135deg,var(--navy),var(--blue));
+  }
+  .tb-title {
+    font-family: 'Lora', serif; font-size: 20px; font-weight: 700; color: var(--text);
+  }
+  .tb-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .pending-pill {
+    background: #fff7ed; border: 1px solid #fed7aa; color: var(--orange);
+    padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 700;
+    cursor: pointer; font-family: 'Plus Jakarta Sans', sans-serif; transition: .2s; white-space: nowrap;
+  }
+  .pending-pill:hover { background: #ffedd5; }
+  .tb-greet { font-size: 13px; font-weight: 600; color: var(--text2); white-space: nowrap; }
+  .tb-date {
+    font-size: 12px; color: var(--text3); background: var(--bg);
+    border: 1px solid var(--border); padding: 5px 12px; border-radius: 20px; white-space: nowrap;
+  }
+
+  /* Content scroll area */
+  .content {
+    flex: 1; overflow-y: auto; overflow-x: hidden; padding: 24px 26px;
+    scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+  }
+  .content::-webkit-scrollbar { width: 5px; }
+  .content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* ── DASHBOARD — all sections in one vertical column ── */
+  .dash { display: flex; flex-direction: column; gap: 20px; width: 100%; }
+
+  /* Hero */
+  .hero {
+    background: linear-gradient(118deg, var(--navy) 0%, var(--blue) 65%, #1d4ed8 100%);
+    border-radius: var(--radius); padding: 30px 34px;
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 20px; flex-wrap: wrap; box-shadow: var(--shadowL);
+    position: relative; overflow: hidden;
+  }
+  .hero::after {
+    content: ''; position: absolute; top: -70px; right: -30px;
+    width: 280px; height: 280px;
+    background: radial-gradient(circle, rgba(255,255,255,0.06), transparent 70%);
+    border-radius: 50%; pointer-events: none;
+  }
+  .hero-left { flex: 1; min-width: 200px; position: relative; z-index: 1; }
+  .hero-eyebrow {
+    font-size: 10px; font-weight: 700; letter-spacing: 3px;
+    text-transform: uppercase; color: rgba(255,255,255,0.55); margin-bottom: 8px;
+  }
+  .hero-title {
+    font-family: 'Lora', serif; font-size: clamp(20px, 2.4vw, 30px);
+    font-weight: 700; color: #fff; line-height: 1.25; margin-bottom: 8px;
+  }
+  .hero-sub {
+    font-size: 13px; color: rgba(255,255,255,0.72);
+    max-width: 420px; line-height: 1.6; margin-bottom: 18px;
+  }
+  .hero-btn {
+    background: var(--orange); color: #fff; border: none;
+    padding: 10px 22px; border-radius: 10px;
+    font-family: 'Plus Jakarta Sans', sans-serif; font-size: 13px; font-weight: 700;
+    cursor: pointer; transition: .2s; box-shadow: 0 4px 14px rgba(249,115,22,.4);
+  }
+  .hero-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(249,115,22,.5); }
+
+  .hero-stats {
+    display: flex; align-items: center;
+    background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 12px; padding: 14px 20px;
+    flex-shrink: 0; position: relative; z-index: 1;
+  }
+  .hstat { text-align: center; padding: 0 18px; }
+  .hstat-sep { width: 1px; height: 34px; background: rgba(255,255,255,0.18); }
+  .hstat-val {
+    font-family: 'Lora', serif; font-size: 24px; font-weight: 700;
+    color: #fff; font-variant-numeric: tabular-nums;
+  }
+  .hstat-sm  { font-size: 18px; }
+  .c-green   { color: #4ade80; }
+  .c-red     { color: #f87171; }
+  .hstat-lbl { font-size: 10px; color: rgba(255,255,255,0.5); margin-top: 3px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+
+  /* Section heading */
+  .section-head {
+    font-size: 12px; font-weight: 700; color: var(--text2);
+    text-transform: uppercase; letter-spacing: 1.2px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .section-head::before {
+    content: ''; width: 3px; height: 16px;
+    background: var(--orange); border-radius: 3px; display: inline-block;
+  }
+
+  /* Quick row — 4 cards in a row */
+  .quick-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+  @media (max-width: 860px) { .quick-row { grid-template-columns: repeat(2,1fr); } }
+
+  .qcard {
+    background: var(--white); border: 1.5px solid var(--border);
+    border-radius: var(--radius); padding: 16px 14px 12px;
+    cursor: pointer; text-align: left;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    transition: all .2s ease; position: relative; overflow: hidden;
+  }
+  .qcard:hover {
+    border-color: var(--qc);
+    box-shadow: 0 6px 22px rgba(0,0,0,0.1);
+    transform: translateY(-3px);
+  }
+  .qcard::after {
+    content: ''; position: absolute;
+    bottom: 0; left: 0; right: 0; height: 3px;
+    background: var(--qc); transform: scaleX(0);
+    transition: .2s; transform-origin: left;
+  }
+  .qcard:hover::after { transform: scaleX(1); }
+  .qcard-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+  .qcard-emoji { font-size: 26px; }
+  .qcard-badge {
+    background: var(--orange); color: #fff; font-size: 10px;
+    font-weight: 800; padding: 2px 7px; border-radius: 20px;
+  }
+  .qcard-label { font-size: 13px; font-weight: 700; color: var(--text); }
+  .qcard-arrow { font-size: 14px; color: var(--text3); margin-top: 5px; display: block; transition: .18s; }
+  .qcard:hover .qcard-arrow { color: var(--qc); transform: translateX(4px); }
+
+  /* Panels — full width, stacked vertically */
+  .panel {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    width: 100%;
+    box-shadow: var(--shadow);
+    overflow: auto;
+  }
+
+  /* Inner pages */
+  .page-wrap { width: 100%; }
+
+  /* Toast */
+  .toast-notif {
+    position: fixed; top: 18px; right: 22px;
+    display: flex; align-items: center; gap: 10px;
+    background: #fff; border: 1px solid var(--border);
+    border-left: 4px solid var(--orange);
+    padding: 12px 18px; border-radius: 12px;
+    font-size: 13px; font-weight: 600; color: var(--text);
+    box-shadow: var(--shadowL); z-index: 9999;
+    animation: slideIn .3s ease;
+  }
+  .toast-icon { font-size: 16px; }
+
+  @keyframes blink {
+    0%,100% { opacity:1; transform:scale(1); }
+    50%      { opacity:.4; transform:scale(1.3); }
+  }
+  @keyframes slideIn {
+    from { transform: translateX(18px); opacity: 0; }
+    to   { transform: translateX(0);    opacity: 1; }
+  }
 `;
