@@ -20,7 +20,7 @@ const HALF_SLOT_B_END     = "19:00:00";
 const LOGOUT_CUTOFF       = "19:00:00";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TIME UTILITIES — matching AttendanceDashboard
+// TIME UTILITIES
 // ─────────────────────────────────────────────────────────────────────────────
 function parseTime(timeStr) {
   if (!timeStr) return null;
@@ -48,7 +48,7 @@ function millisToHours(ms) { return ms / (1000 * 60 * 60); }
 const fmt = (t) => (t ? String(t).slice(0, 5) : "-");
 
 // ─────────────────────────────────────────────────────────────────────────────
-// NET WORK MILLIS — exact copy of AttendanceDashboard.calculateNetWorkMillis
+// NET WORK MILLIS
 // ─────────────────────────────────────────────────────────────────────────────
 function calculateNetWorkMillis(log) {
   const {
@@ -59,13 +59,11 @@ function calculateNetWorkMillis(log) {
   } = log || {};
   if (!office_in || !office_out) return 0;
 
-  // Clamp login: if before office start, treat as office start
   const loginTime = parseTime(office_in);
   const officeStartTime = parseTime(OFFICE_START);
   let actualOfficeIn = office_in;
   if (loginTime && officeStartTime && loginTime < officeStartTime) actualOfficeIn = OFFICE_START;
 
-  // Clamp logout: cap at 7 PM
   const officeOutTime = parseTime(office_out);
   const cutoffTime = parseTime(LOGOUT_CUTOFF);
   let adjustedOfficeOut = office_out;
@@ -85,7 +83,7 @@ function calculateNetWorkMillis(log) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LATE LOGIN EVALUATION — exact copy of AttendanceDashboard.evaluateLateLogin
+// LATE LOGIN EVALUATION
 // ─────────────────────────────────────────────────────────────────────────────
 function evaluateLateLogin(log) {
   const { office_in } = log || {};
@@ -100,7 +98,7 @@ function evaluateLateLogin(log) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HALF DAY SLOT CHECK — exact copy of AttendanceDashboard.qualifiesHalfDayPresentBySlot
+// HALF DAY SLOT CHECK
 // ─────────────────────────────────────────────────────────────────────────────
 function qualifiesHalfDayBySlot(log) {
   const { office_in, office_out } = log || {};
@@ -120,7 +118,7 @@ function qualifiesHalfDayBySlot(log) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MONTHLY LATE STATS — exact copy of AttendanceDashboard.buildMonthlyLateStats
+// MONTHLY LATE STATS
 // ─────────────────────────────────────────────────────────────────────────────
 function buildMonthlyLateStats(logsByDate, daysInMonth) {
   let permittedLateCount = 0;
@@ -144,7 +142,7 @@ function buildMonthlyLateStats(logsByDate, daysInMonth) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DAY CLASSIFICATION — exact port of AttendanceDashboard.classifyDayPolicy
+// DAY CLASSIFICATION
 // ─────────────────────────────────────────────────────────────────────────────
 function classifyDayPolicy({ isoDate, weekday, log, holidaysMap, monthlyLateStats, leaveStatus, logsByDate }) {
   const netMillis = calculateNetWorkMillis(log || {});
@@ -153,7 +151,6 @@ function classifyDayPolicy({ isoDate, weekday, log, holidaysMap, monthlyLateStat
   const lateInfo  = evaluateLateLogin(log);
   const isExceededLate = monthlyLateStats.exceededDates?.includes(isoDate);
 
-  // Monday after 2 PM → full absent
   if (weekday === 1) {
     const officeInTime = parseTime(log?.office_in);
     const cutoffTime   = parseTime("14:00:00");
@@ -168,7 +165,8 @@ function classifyDayPolicy({ isoDate, weekday, log, holidaysMap, monthlyLateStat
     const currentMonth = dateObj.getUTCMonth();
     const nextDay      = new Date(dateObj);
     nextDay.setUTCDate(nextDay.getUTCDate() + 1);
-    const isMonthEndSunday = nextDay.getUTCMonth() !== currentMonth;
+    const isMonthEndSunday   = nextDay.getUTCMonth() !== currentMonth;
+    const isMonthStartSunday = dateObj.getUTCDate() === 1;
 
     const saturdayDate = new Date(dateObj);
     saturdayDate.setUTCDate(saturdayDate.getUTCDate() - 1);
@@ -190,21 +188,33 @@ function classifyDayPolicy({ isoDate, weekday, log, holidaysMap, monthlyLateStat
       (logoutSatTime && cutoffLogoutTime && logoutSatTime >= cutoffLogoutTime) ||
       (saturdayLog.leave_type &&
         (saturdayLog.leave_type.toLowerCase().includes("paid") ||
-         saturdayLog.leave_type.toLowerCase().includes("half")));
+         saturdayLog.leave_type.toLowerCase().includes("half") ||
+         saturdayLog.leave_type.toLowerCase().includes("earned")));
 
-    const monConditionMet = loginMondayTime && lateGraceTime && loginMondayTime <= lateGraceTime;
+    const monLoggedInOnTime = loginMondayTime && lateGraceTime && loginMondayTime <= lateGraceTime;
+    const monIsEarnedLeave  = mondayLog.leave_type && mondayLog.leave_type.toLowerCase().includes("earned");
+    const monConditionMet   = monLoggedInOnTime || monIsEarnedLeave;
 
-    if (satConditionMet && monConditionMet) {
-      if (holidaysMap.has(isoDate)) {
-        return { bucket: "holiday", reason: `Paid Holiday: ${holidaysMap.get(isoDate).name}`, netHHMM: "0h 0m", netHours: 0, flags: ["paid_holiday"] };
+    if (isMonthStartSunday) {
+      if (monConditionMet) {
+        if (holidaysMap.has(isoDate)) {
+          return { bucket: "holiday", reason: `Paid Holiday: ${holidaysMap.get(isoDate).name}`, netHHMM: "0h 0m", netHours: 0, flags: ["paid_holiday"] };
+        }
+        return { bucket: "holiday", reason: "Sunday Holiday (Month starts on Sunday — only Monday checked)", netHHMM: "0h 0m", netHours: 0, flags: ["sunday_special_holiday", "month_start_sunday"] };
       }
-      return {
-        bucket: "holiday",
-        reason: isMonthEndSunday
-          ? "Sunday Holiday (Month-end Sat ≥7PM & Mon ≤10:15AM)"
-          : "Sunday Holiday (Weekend Sat ≥7PM & Mon ≤10:15AM)",
-        netHHMM: "0h 0m", netHours: 0, flags: ["sunday_special_holiday"],
-      };
+    } else {
+      if (satConditionMet && monConditionMet) {
+        if (holidaysMap.has(isoDate)) {
+          return { bucket: "holiday", reason: `Paid Holiday: ${holidaysMap.get(isoDate).name}`, netHHMM: "0h 0m", netHours: 0, flags: ["paid_holiday"] };
+        }
+        return {
+          bucket: "holiday",
+          reason: isMonthEndSunday
+            ? "Sunday Holiday (Month-end Sat ≥7PM or Leave & Mon ≤10:15AM or Earned Leave)"
+            : "Sunday Holiday (Weekend Sat ≥7PM or Leave & Mon ≤10:15AM or Earned Leave)",
+          netHHMM: "0h 0m", netHours: 0, flags: ["sunday_special_holiday"],
+        };
+      }
     }
 
     if (holidaysMap.has(isoDate)) {
@@ -213,39 +223,30 @@ function classifyDayPolicy({ isoDate, weekday, log, holidaysMap, monthlyLateStat
 
     return {
       bucket: "absent",
-      reason: `Sunday Absent (Sat:${satConditionMet ? "✅" : "❌"} Mon:${monConditionMet ? "✅" : "❌"})`,
+      reason: isMonthStartSunday
+        ? `Sunday Absent (Month-start Sunday, Mon:${monConditionMet ? "✅" : "❌"})`
+        : `Sunday Absent (Sat:${satConditionMet ? "✅" : "❌"} Mon:${monConditionMet ? "✅" : "❌"})`,
       netHHMM: "0h 0m", netHours: 0, flags: ["sunday_absent"],
     };
   }
 
-  // Earned leave + worked >4h → full day + earned leave
   if (log?.leave_type?.toLowerCase().includes("earned") && netHours >= 4) {
     return { bucket: "fullday_and_earned_leave", reason: "Earned Leave (Half-Day) + Worked > 4h = Full Day", netHHMM, netHours, flags: ["earned_leave_fullday_override"] };
   }
-
-  // Paid holidays (non-Sunday)
   if (holidaysMap.has(isoDate)) {
     return { bucket: "holiday", reason: `Paid Holiday: ${holidaysMap.get(isoDate).name}`, netHHMM: "0h 0m", netHours: 0, flags: ["paid_holiday"] };
   }
-
-  // Pending/rejected leave + no attendance
   if (leaveStatus && (leaveStatus === "Pending" || leaveStatus === "Rejected")) {
     if (!log || !log.office_in || !log.office_out) {
       return { bucket: "absent", reason: `Leave ${leaveStatus.toLowerCase()} - treated as absent with grace`, netHHMM: "0h 0m", netHours: 0, flags: ["grace_absent", `leave_${leaveStatus.toLowerCase()}`] };
     }
   }
-
-  // Earned/paid leave
   if (log?.leave_type?.toLowerCase().includes("earned")) {
     return { bucket: "paidleave", reason: `Paid Leave: ${log.leave_type}`, netHHMM: "0h 0m", netHours: 0, flags: ["paid_leave"] };
   }
-
-  // Other (unpaid) leave
   if (log?.leave_type && !log.leave_type.toLowerCase().includes("earned")) {
     return { bucket: "absent", reason: `${log.leave_type} (unpaid)`, netHHMM: "0h 0m", netHours: 0, flags: ["unpaid_leave"] };
   }
-
-  // No attendance at all
   if (!log?.office_in || !log?.office_out) {
     return { bucket: "absent", reason: "No attendance log", netHHMM: "0h 0m", netHours: 0, flags: [] };
   }
@@ -255,26 +256,20 @@ function classifyDayPolicy({ isoDate, weekday, log, holidaysMap, monthlyLateStat
   const logoutBefore = logoutTime && logoutCutoff && logoutTime < logoutCutoff;
   const logoutAfter  = logoutTime && logoutCutoff && logoutTime >= logoutCutoff;
 
-  // Logout at/after 7 PM, 4–8h worked → half day
   if (logoutAfter && netHours >= 4 && netHours < 8) {
     return { bucket: "halfday", reason: "Worked 4–8 hours and logged out at/after 7 PM (Half Day)", netHHMM, netHours, flags: ["logout_after7pm_halfday"] };
   }
-
-  // Logout before 7 PM
   if (logoutBefore) {
     if (netHours >= 8) return { bucket: "halfday", reason: "Worked >8h but logged out before 7 PM (Half Day)", netHHMM, netHours, flags: ["early_logout_halfday"] };
     if (netHours < 4)  return { bucket: "absent",  reason: "Worked <4h + logout before 7 PM (Absent)",        netHHMM, netHours, flags: ["early_logout_absent"] };
   }
-
-  // Late exceeded or beyond grace
   if ((lateInfo.isLate && lateInfo.isWithinGrace && isExceededLate) || (lateInfo.isLate && lateInfo.isBeyondGrace)) {
-    if (netHours >= 8) return { bucket: "halfday", reason: "Late beyond limit (Half Day)",          netHHMM, netHours, flags: ["late_exceeded_or_beyond_grace"] };
-    return {            bucket: "absent",  reason: "Late beyond limit + <8h (Absent)",              netHHMM, netHours, flags: ["absent_late_less_than_8h"] };
+    if (netHours >= 8) return { bucket: "halfday", reason: "Late beyond limit (Half Day)",     netHHMM, netHours, flags: ["late_exceeded_or_beyond_grace"] };
+    return {            bucket: "absent",  reason: "Late beyond limit + <8h (Absent)",         netHHMM, netHours, flags: ["absent_late_less_than_8h"] };
   }
-
   if (netHours < 4) return { bucket: "absent",  reason: "Worked <4h (Absent)", netHHMM, netHours, flags: ["lt4h"] };
   if (netHours < 8) {
-    if (qualifiesHalfDayBySlot(log)) return { bucket: "halfday", reason: "Half-Day slot satisfied",  netHHMM, netHours, flags: ["half_day_slot_present"] };
+    if (qualifiesHalfDayBySlot(log)) return { bucket: "halfday", reason: "Half-Day slot satisfied", netHHMM, netHours, flags: ["half_day_slot_present"] };
     return { bucket: "halfday", reason: "Worked 4–8h", netHHMM, netHours, flags: ["ge4_lt8_no_slot"] };
   }
   return { bucket: "fullday", reason: "Full Day Present", netHHMM, netHours, flags: [] };
@@ -295,29 +290,20 @@ function getMonthDays(yearMonth) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FULL ANALYSIS FOR ONE USER
-// Returns dayResults + summary counts matching the dashboard's calculateTotalDays
 // ─────────────────────────────────────────────────────────────────────────────
 function analyzeUser(user, month, holidaysMap = new Map()) {
   const daysInMonth = getMonthDays(month);
-
   const logsByDate = new Map();
   (user.attendance || []).forEach((l) => { if (l?.date) logsByDate.set(l.date, l); });
-
   const monthlyLateStats = buildMonthlyLateStats(logsByDate, daysInMonth);
 
   const dayResults = daysInMonth.map(({ iso, weekday, dow, day, date }) => {
     const log = logsByDate.get(iso);
-    const cls = classifyDayPolicy({
-      isoDate: iso, weekday, log,
-      holidaysMap, monthlyLateStats,
-      leaveStatus: log?.leave_status || null,
-      logsByDate,
-    });
+    const cls = classifyDayPolicy({ isoDate: iso, weekday, log, holidaysMap, monthlyLateStats, leaveStatus: log?.leave_status || null, logsByDate });
     const netMs = calculateNetWorkMillis(log || {});
     return { iso, weekday, dow, day, date, log, netMs, ...cls };
   });
 
-  // Counts — only up to today (matches dashboard)
   const todayISO = new Date().toISOString().slice(0, 10);
   let fullDays = 0, halfDays = 0, paidLeaves = 0, absentDays = 0, holidayDays = 0;
   let totalNetMillis = 0, workDayCount = 0, lateCount = 0;
@@ -336,18 +322,16 @@ function analyzeUser(user, month, holidaysMap = new Map()) {
     if (evaluateLateLogin(d.log).isLate) lateCount++;
   }
 
-  // Pair half-days: 2 halves = 1 full (matches dashboard)
   const extraFullFromHalfs = Math.floor(halfDays / 2);
-  fullDays   += extraFullFromHalfs;
-  halfDays    = halfDays % 2;
-
+  fullDays  += extraFullFromHalfs;
+  halfDays   = halfDays % 2;
   const avgNetMillis = workDayCount > 0 ? Math.round(totalNetMillis / workDayCount) : null;
 
   return { dayResults, logsByDate, monthlyLateStats, fullDays, halfDays, paidLeaves, absentDays, holidayDays, lateCount, totalNetMillis, avgNetMillis, workDayCount };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BUCKET → COLOURS (matching AttendanceDashboard CSS exactly)
+// BUCKET COLOURS
 // ─────────────────────────────────────────────────────────────────────────────
 const BUCKET_COLORS = {
   fullday:                  { bg: "#b9f6ca", color: "#1B5E20", label: "Full Day ✅" },
@@ -358,7 +342,6 @@ const BUCKET_COLORS = {
   absent:                   { bg: "#ffcdd2", color: "#B71C1C", label: "Absent ❌" },
 };
 
-// Hex RGB for XLSX (no #)
 const BUCKET_XL = {
   fullday:                  { bg: "B9F6CA", font: "1B5E20" },
   fullday_and_earned_leave: { bg: "F3E5F5", font: "6A1B9A" },
@@ -406,9 +389,7 @@ function downloadAttendanceExcel(userLogs, month, holidaysMap = new Map()) {
     ws[ref] = { t: typeof value === "number" ? "n" : value == null ? "z" : "s", v: value ?? "", s: style };
   }
 
-  // ══════════════════════════════════
   // SHEET 1: OVERVIEW
-  // ══════════════════════════════════
   (() => {
     const ws = {};
     ws["!merges"] = [];
@@ -416,40 +397,36 @@ function downloadAttendanceExcel(userLogs, month, holidaysMap = new Map()) {
     const FX = FL.length;
     const totalCols = FX + dates.length * 2;
 
-    // Row 0: DOW
     FL.forEach((label, c) => { wc(ws, 0, c, label, { ...cs(C.gold, C.black, true), border: hb }); });
     dates.forEach((d, i) => {
       const col = FX + i * 2;
       const isSpecial = d.weekday === 0 || holidaysMap.has(d.iso);
       const bg = isSpecial ? BUCKET_XL.holiday.bg : C.gold;
       const fg = isSpecial ? BUCKET_XL.holiday.font : C.black;
-      wc(ws, 0, col,     d.dow, { ...cs(bg, fg, true), border: hb });
-      wc(ws, 0, col + 1, "",    { ...cs(bg, fg, true), border: hb });
+      wc(ws, 0, col, d.dow, { ...cs(bg, fg, true), border: hb });
+      wc(ws, 0, col + 1, "", { ...cs(bg, fg, true), border: hb });
       ws["!merges"].push({ s: { r: 0, c: col }, e: { r: 0, c: col + 1 } });
     });
 
-    // Row 1: day numbers
     FL.forEach((_, c) => { wc(ws, 1, c, "", { ...cs(C.subHeaderBg, C.navy, true), border: hb }); });
     dates.forEach((d, i) => {
       const col = FX + i * 2;
       const isSpecial = d.weekday === 0 || holidaysMap.has(d.iso);
       const bg = isSpecial ? BUCKET_XL.holiday.bg : C.subHeaderBg;
-      wc(ws, 1, col,     d.day, { ...cs(bg, C.navy, true), border: hb });
-      wc(ws, 1, col + 1, "",    { ...cs(bg, C.navy, true), border: hb });
+      wc(ws, 1, col, d.day, { ...cs(bg, C.navy, true), border: hb });
+      wc(ws, 1, col + 1, "", { ...cs(bg, C.navy, true), border: hb });
       ws["!merges"].push({ s: { r: 1, c: col }, e: { r: 1, c: col + 1 } });
     });
 
-    // Row 2: IN/OUT
     FL.forEach((_, c) => { wc(ws, 2, c, "", { ...cs(C.inOutHdr, C.navy, true), border: hb }); });
     dates.forEach((d, i) => {
       const col = FX + i * 2;
       const isSpecial = d.weekday === 0 || holidaysMap.has(d.iso);
       const bg = isSpecial ? BUCKET_XL.holiday.bg : C.inOutHdr;
-      wc(ws, 2, col,     "IN",  { ...cs(bg, C.navy, true), border: hb });
+      wc(ws, 2, col, "IN",  { ...cs(bg, C.navy, true), border: hb });
       wc(ws, 2, col + 1, "OUT", { ...cs(isSpecial ? BUCKET_XL.holiday.bg : C.logoutBg, isSpecial ? C.navy : C.logoutFont, true), border: hb });
     });
 
-    // Data rows
     filteredUsers.forEach((user, idx) => {
       const { dayResults, fullDays, halfDays, paidLeaves, absentDays, lateCount, avgNetMillis } = analyzeUser(user, month, holidaysMap);
       const excelRow = idx + 3;
@@ -458,16 +435,15 @@ function downloadAttendanceExcel(userLogs, month, holidaysMap = new Map()) {
       wc(ws, excelRow, 0, idx + 1,                             cs(rowBg, C.navy, true));
       wc(ws, excelRow, 1, user.name || user.email,             cs(rowBg, C.navy, true, true));
       wc(ws, excelRow, 2, user.designation || user.role || "", cs(rowBg, "374151", false, true));
-      wc(ws, excelRow, 3, lateCount,   cs(lateCount > 0 ? C.lateBg : rowBg, C.black, lateCount > 0));
-      wc(ws, excelRow, 4, fullDays,    cs(fullDays > 0 ? BUCKET_XL.fullday.bg : rowBg, fullDays > 0 ? BUCKET_XL.fullday.font : C.black, fullDays > 0));
-      wc(ws, excelRow, 5, halfDays,    cs(halfDays > 0 ? BUCKET_XL.halfday.bg : rowBg, halfDays > 0 ? BUCKET_XL.halfday.font : C.black, halfDays > 0));
-      wc(ws, excelRow, 6, paidLeaves,  cs(paidLeaves > 0 ? BUCKET_XL.paidleave.bg : rowBg, paidLeaves > 0 ? BUCKET_XL.paidleave.font : C.black, paidLeaves > 0));
-      wc(ws, excelRow, 7, absentDays,  cs(absentDays > 0 ? BUCKET_XL.absent.bg : rowBg, absentDays > 0 ? BUCKET_XL.absent.font : C.black, absentDays > 0));
+      wc(ws, excelRow, 3, lateCount,  cs(lateCount > 0 ? C.lateBg : rowBg, C.black, lateCount > 0));
+      wc(ws, excelRow, 4, fullDays,   cs(fullDays > 0 ? BUCKET_XL.fullday.bg : rowBg, fullDays > 0 ? BUCKET_XL.fullday.font : C.black, fullDays > 0));
+      wc(ws, excelRow, 5, halfDays,   cs(halfDays > 0 ? BUCKET_XL.halfday.bg : rowBg, halfDays > 0 ? BUCKET_XL.halfday.font : C.black, halfDays > 0));
+      wc(ws, excelRow, 6, paidLeaves, cs(paidLeaves > 0 ? BUCKET_XL.paidleave.bg : rowBg, paidLeaves > 0 ? BUCKET_XL.paidleave.font : C.black, paidLeaves > 0));
+      wc(ws, excelRow, 7, absentDays, cs(absentDays > 0 ? BUCKET_XL.absent.bg : rowBg, absentDays > 0 ? BUCKET_XL.absent.font : C.black, absentDays > 0));
       wc(ws, excelRow, 8, avgNetMillis !== null ? fmtHrsMin(avgNetMillis) : "-",
         cs(avgNetMillis !== null && avgNetMillis < 28800000 ? BUCKET_XL.absent.bg : rowBg,
            avgNetMillis !== null && avgNetMillis < 28800000 ? BUCKET_XL.absent.font : C.black));
 
-      // Day cells
       dayResults.forEach((d, i) => {
         const col = FX + i * 2;
         const xl  = BUCKET_XL[d.bucket] || BUCKET_XL.absent;
@@ -476,25 +452,24 @@ function downloadAttendanceExcel(userLogs, month, holidaysMap = new Map()) {
 
         if (d.bucket === "holiday") {
           const label = holidaysMap.has(d.iso) ? "HOL" : (d.weekday === 0 ? "SUN" : "HOL");
-          wc(ws, excelRow, col,     label, cs(xl.bg, xl.font, true));
-          wc(ws, excelRow, col + 1, "-",   cs(xl.bg, xl.font));
+          wc(ws, excelRow, col, label, cs(xl.bg, xl.font, true));
+          wc(ws, excelRow, col + 1, "-", cs(xl.bg, xl.font));
           return;
         }
         if (d.bucket === "paidleave") {
-          wc(ws, excelRow, col,     "PL", cs(xl.bg, xl.font, true));
-          wc(ws, excelRow, col + 1, "-",  cs(xl.bg, xl.font));
+          wc(ws, excelRow, col, "PL", cs(xl.bg, xl.font, true));
+          wc(ws, excelRow, col + 1, "-", cs(xl.bg, xl.font));
           return;
         }
         if (d.bucket === "absent") {
           const lbl = d.flags?.includes("lt4h") ? "<4h" : d.flags?.includes("sunday_absent") ? "SUN" : "A";
-          wc(ws, excelRow, col,     lbl, cs(xl.bg, xl.font, true));
+          wc(ws, excelRow, col, lbl, cs(xl.bg, xl.font, true));
           wc(ws, excelRow, col + 1, "-", cs(xl.bg, xl.font));
           return;
         }
-        // fullday / halfday / fullday_and_earned_leave — show times
         const loginVal  = log?.office_in  ? fmt(log.office_in)  : "?";
         const logoutVal = hasLogout ? fmt(log.office_out) : "No Out";
-        wc(ws, excelRow, col,     loginVal,  cs(xl.bg, xl.font, d.bucket === "halfday"));
+        wc(ws, excelRow, col, loginVal, cs(xl.bg, xl.font, d.bucket === "halfday"));
         wc(ws, excelRow, col + 1, logoutVal, cs(hasLogout ? C.logoutBg : C.noOutBg, hasLogout ? C.logoutFont : C.noOutFont));
       });
     });
@@ -507,7 +482,6 @@ function downloadAttendanceExcel(userLogs, month, holidaysMap = new Map()) {
     ws["!rows"] = [{ hpt: 22 }, { hpt: 18 }, { hpt: 16 }, ...filteredUsers.map(() => ({ hpt: 18 }))];
     ws["!ref"]  = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: filteredUsers.length + 2, c: totalCols - 1 } });
 
-    // Legend
     const legendRow = filteredUsers.length + 4;
     wc(ws, legendRow - 1, 0, "📌 LEGEND — Colours match your Attendance Dashboard calendar", { ...cs(C.subHeaderBg, C.navy, true, true), border: mb });
     const legs = [
@@ -521,22 +495,17 @@ function downloadAttendanceExcel(userLogs, month, holidaysMap = new Map()) {
       ["🔺 No Logout",                        C.noOutBg,              C.noOutFont],
     ];
     legs.forEach(([label, bg, font], i) => { wc(ws, legendRow, i, label, { ...cs(bg, font, true, true), border: mb }); });
-
     XLSX.utils.book_append_sheet(wb, ws, "📊 Overview");
   })();
 
-  // ══════════════════════════════════
   // SHEET PER EMPLOYEE
-  // ══════════════════════════════════
   filteredUsers.forEach((user) => {
     const ws = {};
     ws["!merges"] = [];
     let row = 0;
     const COLS = 19;
-
     const { dayResults, monthlyLateStats, fullDays, halfDays, paidLeaves, absentDays, totalNetMillis, avgNetMillis, workDayCount } = analyzeUser(user, month, holidaysMap);
 
-    // Title
     const tRef = XLSX.utils.encode_cell({ r: row, c: 0 });
     ws[tRef] = {
       t: "s",
@@ -546,7 +515,6 @@ function downloadAttendanceExcel(userLogs, month, holidaysMap = new Map()) {
     ws["!merges"].push({ s: { r: row, c: 0 }, e: { r: row, c: COLS - 1 } });
     row++;
 
-    // Legend
     const legs = [
       { t: "Full Day 🟢 (8h+)",        bg: BUCKET_XL.fullday.bg,    f: BUCKET_XL.fullday.font },
       { t: "Half Day 🌓 (4–8h)",       bg: BUCKET_XL.halfday.bg,    f: BUCKET_XL.halfday.font },
@@ -562,95 +530,76 @@ function downloadAttendanceExcel(userLogs, month, holidaysMap = new Map()) {
     });
     row++;
 
-    // Headers
     const hdrs = ["Date","Day","Status","Login","Break IN","Break OUT","Lunch IN","Lunch OUT","Break2 IN","Break2 OUT","Extra Breaks IN","Extra Breaks OUT","Logout","Gross Work","Break Deducted","Net Work Hrs","Late?","Classification","Remarks"];
     const hS = { font: { bold: true, color: { rgb: C.white }, name: "Arial", sz: 10 }, fill: { fgColor: { rgb: C.navyDark } }, alignment: { horizontal: "center", vertical: "center", wrapText: true }, border: mb };
     hdrs.forEach((h, c) => { const ref = XLSX.utils.encode_cell({ r: row, c }); ws[ref] = { t: "s", v: h, s: hS }; });
     row++;
 
-    // Daily rows
     let totalGrossMs = 0;
     dayResults.forEach((d) => {
       const { iso, dow, bucket, reason, log } = d;
       const isLate = evaluateLateLogin(log).isLate;
       const netMs  = d.netMs;
-
-      // Gross / deduct
       let grossMs = 0, deductMs = 0;
       if (log?.office_in && log?.office_out) {
         const lT = parseTime(log.office_in), oT = parseTime(OFFICE_START);
         const aI = (lT && oT && lT < oT) ? OFFICE_START : log.office_in;
         const ouT = parseTime(log.office_out), cT = parseTime(LOGOUT_CUTOFF);
         const aO = (ouT && cT && ouT > cT) ? LOGOUT_CUTOFF : log.office_out;
-        grossMs   = diffMillis(aI, aO);
-        deductMs  = Math.max(0, grossMs - netMs);
+        grossMs  = diffMillis(aI, aO);
+        deductMs = Math.max(0, grossMs - netMs);
         totalGrossMs += grossMs;
       }
-
-      const xl     = BUCKET_XL[bucket] || BUCKET_XL.absent;
-      const rowBg  = row % 2 === 0 ? C.rowWhite : C.rowAlt;
-      const base   = (bg, f, b, al) => cs(bg ?? rowBg, f ?? C.black, b ?? false, al ?? false);
-
-      const logoutVal = log?.office_out ? fmt(log.office_out)
-        : (bucket === "absent" || bucket === "holiday" || bucket === "paidleave") ? "-"
-        : "No Out";
-      const logoutSt = log?.office_out
-        ? cs(C.logoutBg, C.logoutFont, false)
-        : (bucket === "absent" || bucket === "holiday" || bucket === "paidleave")
-          ? base() : cs(C.noOutBg, C.noOutFont, true);
-
+      const xl    = BUCKET_XL[bucket] || BUCKET_XL.absent;
+      const rowBg = row % 2 === 0 ? C.rowWhite : C.rowAlt;
+      const base  = (bg, f, b, al) => cs(bg ?? rowBg, f ?? C.black, b ?? false, al ?? false);
+      const logoutVal = log?.office_out ? fmt(log.office_out) : (bucket === "absent" || bucket === "holiday" || bucket === "paidleave") ? "-" : "No Out";
+      const logoutSt  = log?.office_out ? cs(C.logoutBg, C.logoutFont, false) : (bucket === "absent" || bucket === "holiday" || bucket === "paidleave") ? base() : cs(C.noOutBg, C.noOutFont, true);
       const eI = (log?.extra_break_ins  || []).join(" | ") || "-";
       const eO = (log?.extra_break_outs || []).join(" | ") || "-";
-
-      // Net cell colours
       let netBg = rowBg, netFont = C.black, netBold = false;
       if (netMs > 0) {
-        if      (netMs < 14400000)  { netBg = xl.bg; netFont = xl.font; netBold = true; }   // <4h → absent colour
-        else if (netMs < 28800000)  { netBg = BUCKET_XL.halfday.bg; netFont = BUCKET_XL.halfday.font; netBold = true; } // 4–8h → half colour
-        else                        { netBg = BUCKET_XL.fullday.bg; netFont = BUCKET_XL.fullday.font; }
+        if      (netMs < 14400000) { netBg = xl.bg; netFont = xl.font; netBold = true; }
+        else if (netMs < 28800000) { netBg = BUCKET_XL.halfday.bg; netFont = BUCKET_XL.halfday.font; netBold = true; }
+        else                       { netBg = BUCKET_XL.fullday.bg; netFont = BUCKET_XL.fullday.font; }
       }
-
-      wc(ws, row, 0,  iso,                                   base());
-      wc(ws, row, 1,  dow,                                   base(bucket === "holiday" ? xl.bg : rowBg, bucket === "holiday" ? xl.font : C.black, bucket === "holiday"));
+      wc(ws, row, 0,  iso,                                    base());
+      wc(ws, row, 1,  dow,                                    base(bucket === "holiday" ? xl.bg : rowBg, bucket === "holiday" ? xl.font : C.black, bucket === "holiday"));
       wc(ws, row, 2,  BUCKET_COLORS[bucket]?.label || bucket, cs(xl.bg, xl.font, true));
-      wc(ws, row, 3,  log ? fmt(log.office_in)  : "-",       base(isLate ? C.lateBg : null, isLate ? C.black : null, isLate));
-      wc(ws, row, 4,  log ? fmt(log.break_in)   : "-",       base(C.breakBg, C.black));
-      wc(ws, row, 5,  log ? fmt(log.break_out)  : "-",       base(C.breakBg, C.black));
-      wc(ws, row, 6,  log ? fmt(log.lunch_in)   : "-",       base(C.breakBg, C.black));
-      wc(ws, row, 7,  log ? fmt(log.lunch_out)  : "-",       base(C.breakBg, C.black));
-      wc(ws, row, 8,  log ? fmt(log.break_in_2) : "-",       base(C.breakBg, C.black));
-      wc(ws, row, 9,  log ? fmt(log.break_out_2): "-",       base(C.breakBg, C.black));
-      wc(ws, row, 10, eI,                                    base(C.breakBg, C.black));
-      wc(ws, row, 11, eO,                                    base(C.breakBg, C.black));
-      wc(ws, row, 12, logoutVal,                             logoutSt);
-      wc(ws, row, 13, grossMs > 0 ? fmtHrsMin(grossMs) : "-",  base());
+      wc(ws, row, 3,  log ? fmt(log.office_in)  : "-",        base(isLate ? C.lateBg : null, isLate ? C.black : null, isLate));
+      wc(ws, row, 4,  log ? fmt(log.break_in)   : "-",        base(C.breakBg, C.black));
+      wc(ws, row, 5,  log ? fmt(log.break_out)  : "-",        base(C.breakBg, C.black));
+      wc(ws, row, 6,  log ? fmt(log.lunch_in)   : "-",        base(C.breakBg, C.black));
+      wc(ws, row, 7,  log ? fmt(log.lunch_out)  : "-",        base(C.breakBg, C.black));
+      wc(ws, row, 8,  log ? fmt(log.break_in_2) : "-",        base(C.breakBg, C.black));
+      wc(ws, row, 9,  log ? fmt(log.break_out_2): "-",        base(C.breakBg, C.black));
+      wc(ws, row, 10, eI,                                     base(C.breakBg, C.black));
+      wc(ws, row, 11, eO,                                     base(C.breakBg, C.black));
+      wc(ws, row, 12, logoutVal,                              logoutSt);
+      wc(ws, row, 13, grossMs > 0 ? fmtHrsMin(grossMs) : "-", base());
       wc(ws, row, 14, deductMs > 0 ? `-${fmtHrsMin(deductMs)}` : (grossMs > 0 ? "None" : "-"), base(C.breakBg, C.black));
-      wc(ws, row, 15, netMs > 0 ? fmtHrsMin(netMs) : "-",   cs(netBg, netFont, netBold));
-      wc(ws, row, 16, isLate ? "⚠️ LATE" : (bucket === "holiday" || bucket === "absent") ? "—" : "✅ OK",
-        cs(isLate ? C.lateBg : rowBg, isLate ? C.black : C.black));
+      wc(ws, row, 15, netMs > 0 ? fmtHrsMin(netMs) : "-",    cs(netBg, netFont, netBold));
+      wc(ws, row, 16, isLate ? "⚠️ LATE" : (bucket === "holiday" || bucket === "absent") ? "—" : "✅ OK", cs(isLate ? C.lateBg : rowBg, C.black));
       wc(ws, row, 17, BUCKET_COLORS[bucket]?.label || bucket, cs(xl.bg, xl.font, true));
       wc(ws, row, 18, reason || log?.paid_leave_reason || log?.reason || "-", { ...cs(rowBg, C.remarkFont, false, true) });
       row++;
     });
-
     row++;
 
-    // Monthly summary — matches dashboard calculateTotalDays
     const totalDeductMs = Math.max(0, totalGrossMs - totalNetMillis);
     const sRows = [
-      ["📋 MONTHLY SUMMARY (matches your Dashboard)",    "",                                          C.navyDark,                     C.gold],
-      ["📅 Work Days Recorded",                          workDayCount,                                C.navy,                         C.white],
+      ["📋 MONTHLY SUMMARY (matches your Dashboard)",    "",                                          C.navyDark, C.gold],
+      ["📅 Work Days Recorded",                          workDayCount,                                C.navy,     C.white],
       [`⏰ Late Logins (grace ≤${MAX_PERMITTED_LATES})`, `${monthlyLateStats.permittedLateCount}/${MAX_PERMITTED_LATES} (${monthlyLateStats.remaining} left)`, C.navy, C.white],
-      ["🟢 Full Days (incl. paired halves)",             fullDays,                                    BUCKET_XL.fullday.bg,           BUCKET_XL.fullday.font],
-      ["🌓 Half Days (unpaired)",                        halfDays,                                    halfDays > 0 ? BUCKET_XL.halfday.bg : C.navy, halfDays > 0 ? BUCKET_XL.halfday.font : C.white],
-      ["🟣 Paid Leaves",                                 paidLeaves,                                  paidLeaves > 0 ? BUCKET_XL.paidleave.bg : C.navy, paidLeaves > 0 ? BUCKET_XL.paidleave.font : C.white],
-      ["❌ Absent Days",                                 absentDays,                                  absentDays > 0 ? BUCKET_XL.absent.bg : C.navy, absentDays > 0 ? BUCKET_XL.absent.font : C.white],
-      ["⏱ Total Gross Work Hours",                       fmtHrsMin(totalGrossMs),                     C.navy,                         C.white],
-      ["☕ Total Break + Lunch Deducted",                 `-${fmtHrsMin(totalDeductMs)}`,              C.breakBg,                      C.black],
-      ["🕐 Total Net Work Hours",                        fmtHrsMin(totalNetMillis),                   C.navy,                         C.gold],
+      ["🟢 Full Days (incl. paired halves)",             fullDays,  BUCKET_XL.fullday.bg,  BUCKET_XL.fullday.font],
+      ["🌓 Half Days (unpaired)",                        halfDays,  halfDays > 0 ? BUCKET_XL.halfday.bg : C.navy,    halfDays > 0 ? BUCKET_XL.halfday.font : C.white],
+      ["🟣 Paid Leaves",                                 paidLeaves, paidLeaves > 0 ? BUCKET_XL.paidleave.bg : C.navy, paidLeaves > 0 ? BUCKET_XL.paidleave.font : C.white],
+      ["❌ Absent Days",                                 absentDays, absentDays > 0 ? BUCKET_XL.absent.bg : C.navy,   absentDays > 0 ? BUCKET_XL.absent.font : C.white],
+      ["⏱ Total Gross Work Hours",                       fmtHrsMin(totalGrossMs), C.navy, C.white],
+      ["☕ Total Break + Lunch Deducted",                 `-${fmtHrsMin(totalDeductMs)}`, C.breakBg, C.black],
+      ["🕐 Total Net Work Hours",                        fmtHrsMin(totalNetMillis), C.navy, C.gold],
       ["📊 Avg Daily Net Work",                          avgNetMillis !== null ? fmtHrsMin(avgNetMillis) : "-", avgNetMillis !== null && avgNetMillis < 28800000 ? BUCKET_XL.absent.bg : C.navy, avgNetMillis !== null && avgNetMillis < 28800000 ? BUCKET_XL.absent.font : C.gold],
     ];
-
     sRows.forEach(([label, value, vBg, vFont]) => {
       const lSt = { font: { bold: true, color: { rgb: C.white }, name: "Arial", sz: 10 }, fill: { fgColor: { rgb: C.totalRowBg } }, alignment: { horizontal: "right", vertical: "center" }, border: mb };
       const vSt = { font: { bold: true, color: { rgb: vFont }, name: "Arial", sz: 11 }, fill: { fgColor: { rgb: vBg } }, alignment: { horizontal: "center", vertical: "center" }, border: mb };
@@ -661,12 +610,11 @@ function downloadAttendanceExcel(userLogs, month, holidaysMap = new Map()) {
       row++;
     });
 
-    // Late rule warning
     if (monthlyLateStats.permittedLateCount > MAX_PERMITTED_LATES) {
       const ref = XLSX.utils.encode_cell({ r: row, c: 0 });
       ws[ref] = {
         t: "s",
-        v: `🔶  LATE RULE: ${user.name || user.email} used ${monthlyLateStats.permittedLateCount} grace late logins (max ${MAX_PERMITTED_LATES}). Dates marked Half Day due to exceeded limit: ${monthlyLateStats.exceededDates.join(", ")}`,
+        v: `🔶  LATE RULE: ${user.name || user.email} used ${monthlyLateStats.permittedLateCount} grace late logins (max ${MAX_PERMITTED_LATES}). Exceeded dates: ${monthlyLateStats.exceededDates.join(", ")}`,
         s: { font: { bold: true, color: { rgb: "7C3E00" }, name: "Arial", sz: 11 }, fill: { fgColor: { rgb: C.lateBg } }, alignment: { horizontal: "left", vertical: "center", wrapText: true }, border: mb },
       };
       ws["!merges"].push({ s: { r: row, c: 0 }, e: { r: row, c: COLS - 1 } });
@@ -675,7 +623,7 @@ function downloadAttendanceExcel(userLogs, month, holidaysMap = new Map()) {
 
     ws["!cols"] = [
       { wch: 12 }, { wch: 5 }, { wch: 14 }, { wch: 8 }, { wch: 9 }, { wch: 9 },
-      { wch: 9  }, { wch: 9 }, { wch: 9  }, { wch: 9 },
+      { wch: 9 }, { wch: 9 }, { wch: 9 }, { wch: 9 },
       { wch: 18 }, { wch: 18 }, { wch: 9 },
       { wch: 11 }, { wch: 16 }, { wch: 13 },
       { wch: 10 }, { wch: 14 }, { wch: 36 },
@@ -688,7 +636,7 @@ function downloadAttendanceExcel(userLogs, month, holidaysMap = new Map()) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// MODULE-LEVEL COMPONENTS
+// MODULE-LEVEL COMPONENTS (unchanged)
 // ═════════════════════════════════════════════════════════════════════════════
 
 function HistoryRow({ date, historyLogs }) {
@@ -787,12 +735,11 @@ function LogTable({
             const chF     = changedFields[log.date] || {};
             const rowBg   = saved ? "#d1fae5" : idx % 2 === 0 ? "#fff" : "#f8faff";
 
-            // Net colour
             let netBg = "inherit", netColor = "#374151", netBold = false;
             if (netMs > 0) {
-              if (netMs < 14400000)      { netBg = BUCKET_COLORS.absent.bg;   netColor = BUCKET_COLORS.absent.color;   netBold = true; }
-              else if (netMs < 28800000) { netBg = BUCKET_COLORS.halfday.bg;  netColor = BUCKET_COLORS.halfday.color;  netBold = true; }
-              else                       { netBg = BUCKET_COLORS.fullday.bg;  netColor = BUCKET_COLORS.fullday.color; }
+              if (netMs < 14400000)      { netBg = BUCKET_COLORS.absent.bg;  netColor = BUCKET_COLORS.absent.color;  netBold = true; }
+              else if (netMs < 28800000) { netBg = BUCKET_COLORS.halfday.bg; netColor = BUCKET_COLORS.halfday.color; netBold = true; }
+              else                       { netBg = BUCKET_COLORS.fullday.bg; netColor = BUCKET_COLORS.fullday.color; }
             }
 
             return (
@@ -903,11 +850,11 @@ function LogModal({
             <div style={CS.modalName}>{user.name || user.email}</div>
             <div style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
               {[
-                [`🟢 Full: ${summary.fullDays}`,         summary.fullDays > 0 ? BUCKET_COLORS.fullday.bg   : "rgba(255,255,255,.15)", summary.fullDays > 0 ? BUCKET_COLORS.fullday.color   : "#fff"],
-                [`🌓 Half: ${summary.halfDays}`,          summary.halfDays > 0 ? BUCKET_COLORS.halfday.bg   : "rgba(255,255,255,.15)", summary.halfDays > 0 ? BUCKET_COLORS.halfday.color   : "#fff"],
-                [`❌ Absent: ${summary.absentDays}`,     summary.absentDays > 0 ? BUCKET_COLORS.absent.bg  : "rgba(255,255,255,.15)", summary.absentDays > 0 ? BUCKET_COLORS.absent.color  : "#fff"],
-                [`🟣 PL: ${summary.paidLeaves}`,         summary.paidLeaves > 0 ? BUCKET_COLORS.paidleave.bg : "rgba(255,255,255,.15)", summary.paidLeaves > 0 ? BUCKET_COLORS.paidleave.color : "#fff"],
-                [`⏰ Late: ${summary.lateCount}`,        summary.lateCount > 0 ? "#ffa040"                 : "rgba(255,255,255,.15)", "#000"],
+                [`🟢 Full: ${summary.fullDays}`,    summary.fullDays > 0 ? BUCKET_COLORS.fullday.bg : "rgba(255,255,255,.15)",    summary.fullDays > 0 ? BUCKET_COLORS.fullday.color : "#fff"],
+                [`🌓 Half: ${summary.halfDays}`,    summary.halfDays > 0 ? BUCKET_COLORS.halfday.bg : "rgba(255,255,255,.15)",    summary.halfDays > 0 ? BUCKET_COLORS.halfday.color : "#fff"],
+                [`❌ Absent: ${summary.absentDays}`, summary.absentDays > 0 ? BUCKET_COLORS.absent.bg : "rgba(255,255,255,.15)", summary.absentDays > 0 ? BUCKET_COLORS.absent.color : "#fff"],
+                [`🟣 PL: ${summary.paidLeaves}`,    summary.paidLeaves > 0 ? BUCKET_COLORS.paidleave.bg : "rgba(255,255,255,.15)", summary.paidLeaves > 0 ? BUCKET_COLORS.paidleave.color : "#fff"],
+                [`⏰ Late: ${summary.lateCount}`,   summary.lateCount > 0 ? "#ffa040" : "rgba(255,255,255,.15)", "#000"],
                 [`⏱ Avg: ${summary.avgNetMillis !== null ? fmtHrsMin(summary.avgNetMillis) : "-"}`,
                   summary.avgNetMillis !== null && summary.avgNetMillis < 28800000 ? BUCKET_COLORS.absent.bg : "rgba(255,255,255,.15)",
                   summary.avgNetMillis !== null && summary.avgNetMillis < 28800000 ? BUCKET_COLORS.absent.color : "#fff"],
@@ -971,11 +918,17 @@ export default function AttendanceChatLogs() {
   const [changedFields, setChangedFields]   = useState({});
   const [activeInputId, setActiveInputId]   = useState(null);
 
-  const scrollObj = useRef({ saved: 0, needRestore: false }).current;
   const todayDate      = new Date();
   const todayStr       = todayDate.toISOString().slice(0, 10);
+  const currentMonth   = todayStr.slice(0, 7);
   const formattedToday = todayDate.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
-  const month          = todayStr.slice(0, 7);
+
+  // ── Single month selector — controls cards view, modal AND download ──
+  const [selectedMonth, setSelectedMonth]     = useState(currentMonth);
+  const [downloadLoading, setDownloadLoading] = useState(false);
+  const month = selectedMonth;
+
+  const scrollObj = useRef({ saved: 0, needRestore: false }).current;
 
   useEffect(() => {
     axios.get(`${baseUrl}/me`, { withCredentials: true })
@@ -983,7 +936,6 @@ export default function AttendanceChatLogs() {
       .catch(console.error);
   }, []);
 
-  // Fetch holidays — same endpoint as AttendanceDashboard
   useEffect(() => {
     axios.get(`${baseUrl}/holidays?month=${month}`, { withCredentials: true })
       .then((res) => {
@@ -1135,7 +1087,38 @@ export default function AttendanceChatLogs() {
           <button style={CS.btnToggle} onClick={() => setShowCards((v) => !v)}>
             {showCards ? "👁 Hide Cards" : "👥 Show Cards"}
           </button>
-          <button style={CS.btnExcel} onClick={() => downloadAttendanceExcel(userLogs, month, holidaysMap)}>⬇️ Excel</button>
+
+          {/* ── Month selector — controls view + download ── */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,.12)", border: "1px solid rgba(255,255,255,.2)", borderRadius: 10, padding: "6px 12px" }}>
+            <span style={{ color: "rgba(255,255,255,.7)", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap" }}>📅 Month:</span>
+            <input
+              type="month"
+              value={selectedMonth}
+              max={currentMonth}
+              onChange={(e) => { setSelectedMonth(e.target.value); setExpandedEmail(null); }}
+              style={{ background: "transparent", border: "none", color: "#fff", fontSize: 13, fontWeight: 700, outline: "none", cursor: "pointer" }}
+            />
+          </div>
+          <button
+            style={{ ...CS.btnExcel, opacity: downloadLoading ? 0.7 : 1 }}
+            onClick={async () => {
+              setDownloadLoading(true);
+              try {
+                const [attRes, holRes] = await Promise.all([
+                  axios.get(`${baseUrl}/all-attendance?month=${selectedMonth}`, { withCredentials: true }),
+                  axios.get(`${baseUrl}/holidays?month=${selectedMonth}`, { withCredentials: true }),
+                ]);
+                const logsForMonth = Object.entries(attRes.data || {}).map(([email, u]) => ({ email, ...u }));
+                const holMap = new Map();
+                (holRes.data || []).forEach((h) => { if (h.date && h.name) holMap.set(h.date, { name: h.name, isPaid: h.is_paid }); });
+                downloadAttendanceExcel(logsForMonth, selectedMonth, holMap);
+              } catch { alert("Failed to fetch data for selected month"); }
+              setDownloadLoading(false);
+            }}
+            disabled={downloadLoading}
+          >
+            {downloadLoading ? "⏳ Loading…" : "⬇️ Excel"}
+          </button>
         </div>
       </div>
 
@@ -1222,7 +1205,7 @@ const CS = {
   statCard: { background: "rgba(255,255,255,.12)", borderRadius: 12, padding: "10px 18px", textAlign: "center", border: "1px solid rgba(255,255,255,.18)", minWidth: 72 },
   statVal: { fontSize: 22, fontWeight: 900 },
   statLbl: { fontSize: 10, color: "rgba(255,255,255,.7)", marginTop: 3, fontWeight: 600, textTransform: "uppercase" },
-  headerActions: { display: "flex", gap: 10 },
+  headerActions: { display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" },
   btnToggle: { background: "rgba(255,255,255,.15)", border: "1px solid rgba(255,255,255,.25)", color: "#fff", padding: "9px 18px", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer" },
   btnExcel: { background: "#10b981", border: "none", color: "#fff", padding: "9px 18px", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 12px rgba(16,185,129,.4)" },
   errorBar: { background: "#fef2f2", border: "1px solid #fecaca", borderLeft: "4px solid #ef4444", borderRadius: 10, padding: "12px 18px", marginBottom: 16, fontSize: 13, fontWeight: 600, color: "#dc2626" },

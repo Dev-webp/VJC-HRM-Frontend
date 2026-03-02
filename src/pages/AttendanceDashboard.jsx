@@ -224,6 +224,7 @@ function classifyDayPolicy({ isoDate, weekday, log, holidaysMap, monthlyLateStat
     }
   }
 // Sunday special condition check (Cross-month logs fix)
+// Sunday special condition check (Cross-month logs fix)
 if (weekday === 0) {
   const dateObj = new Date(isoDate + "T00:00:00Z");
   
@@ -232,69 +233,101 @@ if (weekday === 0) {
   const nextDay = new Date(dateObj);
   nextDay.setUTCDate(nextDay.getUTCDate() + 1);
   const isMonthEndSunday = nextDay.getUTCMonth() !== currentMonth;
-  
-  // Previous Saturday (always same month)
+
+  // --- Month-START detection: is this Sunday the 1st? ---
+  const isMonthStartSunday = dateObj.getUTCDate() === 1;
+
+  // Previous Saturday (always same month unless Sunday is 1st)
   const saturdayDate = new Date(dateObj);
   saturdayDate.setUTCDate(saturdayDate.getUTCDate() - 1);
   const saturdayStr = saturdayDate.toISOString().slice(0, 10);
 
-  // Next Monday (might be NEXT MONTH!)
+  // Next Monday (might be next month)
   const mondayDate = new Date(dateObj);
   mondayDate.setUTCDate(mondayDate.getUTCDate() + 1);
   const mondayStr = mondayDate.toISOString().slice(0, 10);
 
-  // 🔍 DEBUG: Check if logs exist for cross-month
-  console.log(`SUNDAY ${isoDate}: Sat=${saturdayStr} (${logsByDate.has(saturdayStr)?'✅':'❌'}), Mon=${mondayStr} (${logsByDate.has(mondayStr)?'✅':'❌'})`);
+  console.log(`SUNDAY ${isoDate}: Sat=${saturdayStr} (${logsByDate.has(saturdayStr)?'✅':'❌'}), Mon=${mondayStr} (${logsByDate.has(mondayStr)?'✅':'❌'}), MonthStart=${isMonthStartSunday}`);
 
   const saturdayLog = logsByDate.get(saturdayStr) || {};
-  const mondayLog = logsByDate.get(mondayStr) || {}; // This fails if Monday is next month!
+  const mondayLog   = logsByDate.get(mondayStr)   || {};
 
-  const logoutSatTime = parseTime(saturdayLog.office_out);
+  const logoutSatTime   = parseTime(saturdayLog.office_out);
   const cutoffLogoutTime = parseTime(LOGOUT_CUTOFF);
   const loginMondayTime = parseTime(mondayLog.office_in);
-  const lateGraceTime = parseTime(LATE_GRACE_LIMIT);
+  const lateGraceTime   = parseTime(LATE_GRACE_LIMIT);
 
-  // Saturday condition
-  const satConditionMet =
-    (logoutSatTime && cutoffLogoutTime && logoutSatTime >= cutoffLogoutTime) ||
-    (saturdayLog.leave_type &&
-      (saturdayLog.leave_type.toLowerCase().includes("paid") ||
-       saturdayLog.leave_type.toLowerCase().includes("half")));
+  // ── Saturday condition ──
+  // Original: sat logged out >= 7PM OR sat has paid/half leave_type
+  const satLoggedOut   = logoutSatTime && cutoffLogoutTime && logoutSatTime >= cutoffLogoutTime;
+  const satIsPaidLeave = saturdayLog.leave_type &&
+    (saturdayLog.leave_type.toLowerCase().includes("paid") ||
+     saturdayLog.leave_type.toLowerCase().includes("half") ||
+     saturdayLog.leave_type.toLowerCase().includes("earned")); // ← NEW: earned leave on sat counts
 
-  // Monday condition  
-  const monConditionMet =
-    loginMondayTime && lateGraceTime && loginMondayTime <= lateGraceTime;
+  const satConditionMet = satLoggedOut || satIsPaidLeave;
 
-  // BOTH conditions required for Sunday holiday
-  if (satConditionMet && monConditionMet) {
-    if (holidaysMap.has(isoDate)) {
-      return { bucket: 'holiday', reason: `Paid Holiday: ${holidaysMap.get(isoDate).name}`, netHHMM: '00:00', netHours: 0, flags: ['paid_holiday'] };
+  // ── Monday condition ──
+  // Original: monday logged in on time
+  // NEW: monday earned leave also satisfies the condition
+  const monLoggedInOnTime = loginMondayTime && lateGraceTime && loginMondayTime <= lateGraceTime;
+  const monIsEarnedLeave  = mondayLog.leave_type &&
+    mondayLog.leave_type.toLowerCase().includes("earned"); // ← NEW: earned leave on mon counts
+
+  const monConditionMet = monLoggedInOnTime || monIsEarnedLeave;
+
+  // ── SPECIAL CASE: Month starts on Sunday → only check Monday ──
+  if (isMonthStartSunday) {
+    // No Saturday to check — Sunday is holiday if Monday condition is met
+    if (monConditionMet) {
+      if (holidaysMap.has(isoDate)) {
+        return { bucket: 'holiday', reason: `Paid Holiday: ${holidaysMap.get(isoDate).name}`, netHHMM: '00:00', netHours: 0, flags: ['paid_holiday'] };
+      }
+      return {
+        bucket: 'holiday',
+        reason: 'Sunday Holiday (Month starts on Sunday — only Monday checked)',
+        netHHMM: '00:00',
+        netHours: 0,
+        flags: ['sunday_special_holiday', 'month_start_sunday'],
+      };
     }
-    return { 
-      bucket: 'holiday', 
-      reason: isMonthEndSunday 
-        ? 'Sunday Holiday (Month-end Sat ≥7PM & Mon ≤10:15AM)' 
-        : 'Sunday Holiday (Weekend Sat ≥7PM & Mon ≤10:15AM)', 
-      netHHMM: '00:00', 
-      netHours: 0, 
-      flags: ['sunday_special_holiday'] 
-    };
+    // If Monday condition not met either, fall through to absent below
+  } else {
+    // ── NORMAL CASE: Both Saturday and Monday conditions required ──
+    // NEW CASE 1: Sat has logs (worked) + Mon is earned leave → Sunday present
+    // NEW CASE 2: Sat is paid/earned leave + Mon has logs (worked) → Sunday present
+    // These are already covered by the updated satConditionMet / monConditionMet above.
+    if (satConditionMet && monConditionMet) {
+      if (holidaysMap.has(isoDate)) {
+        return { bucket: 'holiday', reason: `Paid Holiday: ${holidaysMap.get(isoDate).name}`, netHHMM: '00:00', netHours: 0, flags: ['paid_holiday'] };
+      }
+      return {
+        bucket: 'holiday',
+        reason: isMonthEndSunday
+          ? 'Sunday Holiday (Month-end Sat ≥7PM & Mon ≤10:15AM or Earned Leave)'
+          : 'Sunday Holiday (Weekend Sat ≥7PM or Leave & Mon ≤10:15AM or Earned Leave)',
+        netHHMM: '00:00',
+        netHours: 0,
+        flags: ['sunday_special_holiday'],
+      };
+    }
   }
 
-  // Holiday list override
+  // Holiday list override (even if sat/mon conditions not met)
   if (holidaysMap.has(isoDate)) {
     return { bucket: 'holiday', reason: `Paid Holiday: ${holidaysMap.get(isoDate).name}`, netHHMM: '00:00', netHours: 0, flags: ['paid_holiday'] };
   }
 
-  return { 
-    bucket: 'absent', 
-    reason: `Sunday Absent (Sat:${satConditionMet?'✅':'❌'} Mon:${monConditionMet?'✅':'❌'})`, 
-    netHHMM: '00:00', 
-    netHours: 0, 
-    flags: ['sunday_absent'] 
+  return {
+    bucket: 'absent',
+    reason: isMonthStartSunday
+      ? `Sunday Absent (Month-start Sunday, Mon:${monConditionMet?'✅':'❌'})`
+      : `Sunday Absent (Sat:${satConditionMet?'✅':'❌'} Mon:${monConditionMet?'✅':'❌'})`,
+    netHHMM: '00:00',
+    netHours: 0,
+    flags: ['sunday_absent'],
   };
 }
-
 // ---- ALL YOUR ORIGINAL CODE BELOW (UNCHANGED) ----
 if (log?.leave_type?.toLowerCase().includes('earned') && netHours >= 4) {
   return { bucket: 'fullday_and_earned_leave', reason: 'Earned Leave (Half-Day) + Worked > 4h = Full Day', netHHMM, netHours, flags: ['earned_leave_fullday_override'] };
