@@ -876,7 +876,7 @@ function fetchAttendance() {
           );
         })}
       </div>
-    
+
       <div className="legend" aria-label="Legend for attendance calendar colors">
         <div className="legend-item">
           <span className="legend-color" style={{ backgroundColor: '#90caf9' }} /> Sunday &amp; Holiday

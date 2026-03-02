@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
-// Dynamic baseUrl switch for localhost/production
 const baseUrl = window.location.hostname === 'localhost'
   ? 'http://localhost:5000'
   : 'https://backend.vjcoverseas.com';
@@ -17,13 +16,7 @@ const styles = {
   tableWrapper: { overflowX: 'auto', marginTop: 20 },
   table: { width: '100%', borderCollapse: 'collapse' },
   tableHeader: { backgroundColor: '#e67e22', color: 'white', textAlign: 'left', padding: 12, borderRadius: '8px 8px 0 0' },
-  tableRow: {
-    backgroundColor: '#fff',
-    boxShadow: '0 2px 5px rgba(230,126,34,0.07)',
-    borderRadius: 8,
-    transition: 'background 0.23s',
-    cursor: 'pointer'
-  },
+  tableRow: { backgroundColor: '#fff', boxShadow: '0 2px 5px rgba(230,126,34,0.07)', borderRadius: 8, transition: 'background 0.23s', cursor: 'pointer' },
   tableRowHover: { backgroundColor: '#ffecd6' },
   tableCell: { padding: 15, border: 'none' },
   remarksInput: { padding: 8, width: '100%', boxSizing: 'border-box', border: '1px solid #f39c12', borderRadius: 4, backgroundColor: '#fff8f1' },
@@ -34,18 +27,16 @@ const styles = {
   radioGroup: { display: 'flex', gap: 15, marginBottom: 15, alignItems: 'center' }
 };
 
-function diffDays(start, end) {
-  const startDate = new Date(start);
-  const endDate = new Date(end);
-  return Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 3600 * 24)) + 1;
+// ── Helpers ──────────────────────────────────────────────
+function toBoolean(value) {
+  if (typeof value === 'string') return value.toLowerCase() === 'true';
+  return Boolean(value);
 }
 
-// Ensure half_day is boolean even if backend sends string "true"/"false"
-function toBoolean(value) {
-  if (typeof value === 'string') {
-    return value.toLowerCase() === 'true';
-  }
-  return Boolean(value);
+function diffDays(start, end) {
+  const s = new Date(start);
+  const e = new Date(end);
+  return Math.floor((e.getTime() - s.getTime()) / (1000 * 3600 * 24)) + 1;
 }
 
 function calculateApprovedEarnedLeaveThisMonth(requests) {
@@ -57,17 +48,13 @@ function calculateApprovedEarnedLeaveThisMonth(requests) {
     if (req.leave_type === 'Earned Leave' && req.status?.toLowerCase() === 'approved') {
       const start = new Date(req.start_date);
       if (start.getMonth() === month && start.getFullYear() === year) {
-        const halfDay = toBoolean(req.half_day);
-        if (halfDay) {
-          used += 0.5;
-        } else {
-          used += diffDays(req.start_date, req.end_date);
-        }
+        used += toBoolean(req.half_day) ? 0.5 : diffDays(req.start_date, req.end_date);
       }
     }
   }
   return used;
 }
+// ─────────────────────────────────────────────────────────
 
 export default function LeaveApplication({ onMessage }) {
   const [leaveType, setLeaveType] = useState('Casual Leave');
@@ -78,7 +65,7 @@ export default function LeaveApplication({ onMessage }) {
   const [userRole, setUserRole] = useState('');
   const [paidLeaves, setPaidLeaves] = useState(0);
   const [dayType, setDayType] = useState('full');
-  const [hoverIdx, setHoverIdx] = useState(-1); // for hover effect
+  const [hoverIdx, setHoverIdx] = useState(-1);
 
   useEffect(() => {
     async function fetchData() {
@@ -109,19 +96,13 @@ export default function LeaveApplication({ onMessage }) {
     if (!isHalfDay && new Date(leaveEnd) < new Date(leaveStart))
       return onMessage('❌ End date cannot be before start date');
 
-    let totalDays;
-    if (isHalfDay) {
-      totalDays = 0.5;
-    } else {
-      const rawDays = diffDays(leaveStart, leaveEnd);
-      totalDays = rawDays > 0 ? rawDays : 0;
-    }
+    const totalDays = isHalfDay ? 0.5 : Math.max(diffDays(leaveStart, leaveEnd), 0);
 
     if (isEarnedLeave) {
       if (totalDays > remainingPaidLeaves)
         return onMessage(`❌ Only ${remainingPaidLeaves} paid leave day(s) available this month`);
       if (!isHalfDay && diffDays(leaveStart, leaveEnd) !== 1)
-        return onMessage('❌ Earned Leave (Full Day) must be applied for a single day (start = end)');
+        return onMessage('❌ Earned Leave (Full Day) must be a single day (start = end)');
     }
 
     try {
@@ -130,9 +111,10 @@ export default function LeaveApplication({ onMessage }) {
         start_date: leaveStart,
         end_date: isHalfDay ? leaveStart : leaveEnd,
         reason: leaveReason,
-        half_day: isHalfDay,
-        full_day: !isHalfDay
+        half_day: isHalfDay,        // true only for earned half day
+        full_day: !isHalfDay        // true for everything else
       }, { withCredentials: true });
+
       onMessage('✅ Leave request submitted');
       setLeaveStart('');
       setLeaveEnd('');
@@ -165,12 +147,20 @@ export default function LeaveApplication({ onMessage }) {
   const takeAction = async (idx, action) => {
     const req = leaveRequests[idx];
     if (!req.remarksInput.trim()) return onMessage('❌ Add remarks to proceed');
+
+    // ── KEY FIX: always send half_day and full_day from the original request ──
+    const halfDay = toBoolean(req.half_day);
+    const fullDay = toBoolean(req.full_day);
+
     try {
       await axios.post(`${baseUrl}/leave-action`, {
         id: req.id,
         action,
         remarks: req.remarksInput,
+        half_day: halfDay,
+        full_day: fullDay,
       }, { withCredentials: true });
+
       onMessage(`✅ Leave ${action}d`);
       await refreshRequests();
     } catch {
@@ -193,15 +183,14 @@ export default function LeaveApplication({ onMessage }) {
     switch ((status || '').toLowerCase()) {
       case 'approved': return styles.approved;
       case 'rejected': return styles.rejected;
-      case 'pending': return styles.pending;
-      default: return {};
+      case 'pending':  return styles.pending;
+      default:         return {};
     }
   };
 
   const getLeaveDayType = (req) => {
-    const halfDay = toBoolean(req.half_day);
     if (req.leave_type === 'Earned Leave') {
-      return halfDay ? 'Half Day' : 'Full Day';
+      return toBoolean(req.half_day) ? 'Half Day' : 'Full Day';
     }
     return '-';
   };
@@ -213,18 +202,15 @@ export default function LeaveApplication({ onMessage }) {
           <h3 style={styles.sectionTitle}>Apply for Leave</h3>
           <div style={styles.formContainer}>
             <p>
-              <strong>Fixed Paid Leaves (per month):</strong> {paidLeaves} <br />
+              <strong>Fixed Paid Leaves (per month):</strong> {paidLeaves}<br />
               <strong>Remaining Paid Leaves This Month:</strong> {remainingPaidLeaves}
             </p>
+
             <div style={styles.formGroup}>
               <label style={styles.label}>Type</label>
               <select
                 value={leaveType}
-                onChange={e => {
-                  setLeaveType(e.target.value);
-                  setDayType('full');
-                  setLeaveEnd('');
-                }}
+                onChange={e => { setLeaveType(e.target.value); setDayType('full'); setLeaveEnd(''); }}
                 style={styles.input}
               >
                 <option>Casual Leave</option>
@@ -233,37 +219,25 @@ export default function LeaveApplication({ onMessage }) {
                 <option>Work From Home</option>
               </select>
             </div>
+
             {isEarnedLeave && (
               <div style={styles.radioGroup}>
                 <label style={styles.label}>
-                  <input
-                    type="radio"
-                    name="dayType"
-                    value="full"
-                    checked={dayType === 'full'}
-                    onChange={() => setDayType('full')}
-                  /> Full Day
+                  <input type="radio" name="dayType" value="full" checked={dayType === 'full'} onChange={() => setDayType('full')} />
+                  {' '}Full Day
                 </label>
                 <label style={styles.label}>
-                  <input
-                    type="radio"
-                    name="dayType"
-                    value="half"
-                    checked={dayType === 'half'}
-                    onChange={() => setDayType('half')}
-                  /> Half Day
+                  <input type="radio" name="dayType" value="half" checked={dayType === 'half'} onChange={() => setDayType('half')} />
+                  {' '}Half Day
                 </label>
               </div>
             )}
+
             <div style={styles.formGroup}>
-              <label style={styles.label}>{isEarnedLeave ? (isHalfDay ? 'Date' : 'Start Date') : 'Start Date'}</label>
-              <input
-                type="date"
-                value={leaveStart}
-                onChange={e => setLeaveStart(e.target.value)}
-                style={styles.input}
-              />
+              <label style={styles.label}>{isHalfDay ? 'Date' : 'Start Date'}</label>
+              <input type="date" value={leaveStart} onChange={e => setLeaveStart(e.target.value)} style={styles.input} />
             </div>
+
             {!isHalfDay && (
               <div style={styles.formGroup}>
                 <label style={styles.label}>End Date</label>
@@ -277,6 +251,7 @@ export default function LeaveApplication({ onMessage }) {
                 />
               </div>
             )}
+
             <div style={styles.formGroup}>
               <label style={styles.label}>Reason</label>
               <textarea
@@ -286,14 +261,16 @@ export default function LeaveApplication({ onMessage }) {
                 placeholder="Reason for leave"
               />
             </div>
+
             <button onClick={applyLeave} style={styles.submitBtn}>Submit</button>
           </div>
         </>
       )}
 
       <h3 style={{ ...styles.sectionTitle, marginTop: 40 }}>
-        {userRole === 'chairman' ? "All Leave Requests" : "Your Leave Requests"}
+        {userRole === 'chairman' ? 'All Leave Requests' : 'Your Leave Requests'}
       </h3>
+
       {leaveRequests.length ? (
         <div style={styles.tableWrapper}>
           <table style={styles.table}>
@@ -319,19 +296,19 @@ export default function LeaveApplication({ onMessage }) {
                     onMouseEnter={() => setHoverIdx(idx)}
                     onMouseLeave={() => setHoverIdx(-1)}
                   >
-                    <td>
+                    <td style={styles.tableCell}>
                       {req.leave_type === 'Earned Leave'
-                        ? `Earned Leave (${halfDay ? "Half Day" : "Full Day"})`
+                        ? `Earned Leave (${halfDay ? 'Half Day' : 'Full Day'})`
                         : req.leave_type}
                     </td>
-                    <td>{getLeaveDayType(req)}</td>
-                    <td>{req.start_date}</td>
-                    <td>{req.end_date}</td>
-                    <td>{req.reason || '-'}</td>
+                    <td style={styles.tableCell}>{getLeaveDayType(req)}</td>
+                    <td style={styles.tableCell}>{req.start_date}</td>
+                    <td style={styles.tableCell}>{req.end_date}</td>
+                    <td style={styles.tableCell}>{req.reason || '-'}</td>
                     <td style={{ ...styles.tableCell, fontWeight: 'bold', ...getStatusStyle(req.status) }}>
                       {req.status}
                     </td>
-                    <td>
+                    <td style={styles.tableCell}>
                       {userRole === 'chairman' && req.status.toLowerCase() === 'pending' ? (
                         <input
                           type="text"
@@ -347,9 +324,9 @@ export default function LeaveApplication({ onMessage }) {
                             <>
                               <br />
                               <span style={{ color: '#777', fontSize: '0.85em', fontStyle: 'italic' }}>
-                                {req.status && req.status.toLowerCase() === 'approved'
+                                {req.status?.toLowerCase() === 'approved'
                                   ? `Approved By: ${req.actioned_by_role || ''}${req.actioned_by_name ? ' - ' + req.actioned_by_name : ''}`
-                                  : req.status && req.status.toLowerCase() === 'rejected'
+                                  : req.status?.toLowerCase() === 'rejected'
                                     ? `Rejected By: ${req.actioned_by_role || ''}${req.actioned_by_name ? ' - ' + req.actioned_by_name : ''}`
                                     : `By: ${req.actioned_by_role || ''}${req.actioned_by_name ? ' - ' + req.actioned_by_name : ''}`}
                               </span>
@@ -359,7 +336,7 @@ export default function LeaveApplication({ onMessage }) {
                       )}
                     </td>
                     {userRole === 'chairman' && (
-                      <td>
+                      <td style={styles.tableCell}>
                         {req.status.toLowerCase() === 'pending' && (
                           <>
                             <button onClick={() => takeAction(idx, 'approve')} style={{ ...styles.actionBtn, backgroundColor: '#27ae60' }}>
@@ -376,7 +353,7 @@ export default function LeaveApplication({ onMessage }) {
                       </td>
                     )}
                   </tr>
-                )
+                );
               })}
             </tbody>
           </table>
