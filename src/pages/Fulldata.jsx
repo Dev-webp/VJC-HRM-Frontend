@@ -41,7 +41,9 @@ const EMP_COLORS = [
 function parseT(t) {
   if (!t) return null;
   const p = t.split('.')[0].split(':');
-  return new Date(Date.UTC(1970, 0, 1, +p[0] || 0, +p[1] || 0, 0));
+  const h = parseInt(p[0], 10), m = parseInt(p[1] || '0', 10);
+  if (isNaN(h) || isNaN(m)) return null;
+  return new Date(Date.UTC(1970, 0, 1, h, m, 0));
 }
 function diffMs(a, b) {
   const ta = parseT(a), tb = parseT(b);
@@ -66,7 +68,8 @@ function monthDays(ym) {
   const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
   return Array.from({ length: last }, (_, i) => {
     const d = new Date(Date.UTC(y, m - 1, i + 1));
-    return { date: d, iso: d.toISOString().slice(0, 10) };
+    // Use getUTCDay() to ensure consistent day-of-week in UTC
+    return { date: d, iso: d.toISOString().slice(0, 10), weekday: d.getUTCDay() };
   });
 }
 function fmtTime(t) {
@@ -78,19 +81,42 @@ function fmtTime(t) {
   } catch { return t; }
 }
 
+// Normalize date string to YYYY-MM-DD (handles both "2026-03-1" and "2026-03-01")
+function normalizeDate(dateStr) {
+  if (!dateStr) return null;
+  try {
+    const parts = String(dateStr).split('T')[0].split('-');
+    if (parts.length !== 3) return null;
+    return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+  } catch { return null; }
+}
+
 // ─── POLICY ──────────────────────────────────────────────────────────────────
 function calcNet(log) {
-  const { office_in, office_out, break_in, break_out, break_in_2, break_out_2,
-          lunch_in, lunch_out, extra_break_ins = [], extra_break_outs = [] } = log || {};
+  const {
+    office_in, office_out,
+    break_in, break_out, break_in_2, break_out_2,
+    lunch_in, lunch_out,
+    extra_break_ins, extra_break_outs,
+  } = log || {};
   if (!office_in || !office_out) return 0;
-  const tIn = parseT(office_in), tOut = parseT(office_out);
-  const actualIn  = tIn  < parseT(OFFICE_START)  ? OFFICE_START  : office_in;
-  const actualOut = tOut > parseT(LOGOUT_CUTOFF) ? LOGOUT_CUTOFF : office_out;
-  let gross = diffMs(actualIn, actualOut), brk = 0;
+
+  const tIn  = parseT(office_in);
+  const tOut = parseT(office_out);
+  if (!tIn || !tOut) return 0;
+
+  // FIX: compare Date objects properly
+  const tOfficeStart  = parseT(OFFICE_START);
+  const tLogoutCutoff = parseT(LOGOUT_CUTOFF);
+  const actualIn  = tIn  < tOfficeStart  ? OFFICE_START  : office_in;
+  const actualOut = tOut > tLogoutCutoff ? LOGOUT_CUTOFF : office_out;
+
+  let gross = diffMs(actualIn, actualOut);
+  let brk = 0;
   if (break_in   && break_out)   brk += diffMs(break_in,   break_out);
   if (break_in_2 && break_out_2) brk += diffMs(break_in_2, break_out_2);
   if (lunch_in   && lunch_out)   brk += diffMs(lunch_in,   lunch_out);
-  const ins = Array.isArray(extra_break_ins) ? extra_break_ins : [];
+  const ins  = Array.isArray(extra_break_ins)  ? extra_break_ins  : [];
   const outs = Array.isArray(extra_break_outs) ? extra_break_outs : [];
   for (let i = 0; i < Math.min(ins.length, outs.length); i++)
     if (ins[i] && outs[i]) brk += diffMs(ins[i], outs[i]);
@@ -101,42 +127,88 @@ function getLateInfo(log) {
   const t = parseT(log?.office_in);
   if (!t) return { late: false, grace: false, beyond: false };
   const s = parseT(OFFICE_START), g = parseT(LATE_GRACE_LIMIT);
+  if (!s || !g) return { late: false, grace: false, beyond: false };
   if (t <= s) return { late: false, grace: false, beyond: false };
-  if (t <= g) return { late: true, grace: true, beyond: false };
+  if (t <= g) return { late: true,  grace: true,  beyond: false };
   return { late: true, grace: false, beyond: true };
 }
 
 function buildLateStats(byDate, days) {
-  let count = 0; const exceeded = [];
+  let count = 0;
+  const exceeded = [];
   for (const { iso } of days) {
     const l = byDate.get(iso);
-    if (l) { const li = getLateInfo(l); if (li.late && li.grace) { count++; if (count > MAX_LATES) exceeded.push(iso); } }
+    if (l) {
+      const li = getLateInfo(l);
+      if (li.late && li.grace) {
+        count++;
+        if (count > MAX_LATES) exceeded.push(iso);
+      }
+    }
   }
   return { count, exceeded };
 }
 
 function classifyDay(iso, weekday, log, holidays, lStats, byDate) {
-  const netH = toHours(calcNet(log || {}));
-  if (weekday === 1) { const t = parseT(log?.office_in), c = parseT('14:00:00'); if (t && c && t > c) return 'absent'; }
+  const netMs = calcNet(log || {});
+  const netH  = toHours(netMs);
+
+  // Monday after 2 PM → absent
+  if (weekday === 1) {
+    const t = parseT(log?.office_in), c = parseT('14:00:00');
+    if (t && c && t > c) return 'absent';
+  }
+
+  // Sunday logic
   if (weekday === 0) {
+    if (holidays.has(iso)) return 'holiday';
     const dt = new Date(iso + 'T00:00:00Z');
+    const isMonthStart = dt.getUTCDate() === 1;
     const satS = new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate() - 1)).toISOString().slice(0, 10);
     const monS = new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate() + 1)).toISOString().slice(0, 10);
-    const satL = byDate.get(satS) || {}, monL = byDate.get(monS) || {};
-    const satOk = parseT(satL.office_out) >= parseT(LOGOUT_CUTOFF) || satL.leave_type?.toLowerCase().includes('paid') || satL.leave_type?.toLowerCase().includes('half');
-    const monOk = parseT(monL.office_in) && parseT(monL.office_in) <= parseT(LATE_GRACE_LIMIT);
-    return (satOk && monOk) || holidays.has(iso) ? 'holiday' : 'absent';
+    const satL = byDate.get(satS) || {};
+    const monL = byDate.get(monS) || {};
+
+    // FIX: null-safe comparisons for sat/mon conditions
+    const satOutT = parseT(satL.office_out);
+    const cutoffT = parseT(LOGOUT_CUTOFF);
+    const monInT  = parseT(monL.office_in);
+    const graceT  = parseT(LATE_GRACE_LIMIT);
+
+    const satOk = (satOutT && cutoffT && satOutT >= cutoffT)
+      || (satL.leave_type && (
+        satL.leave_type.toLowerCase().includes('paid') ||
+        satL.leave_type.toLowerCase().includes('half') ||
+        satL.leave_type.toLowerCase().includes('earned')
+      ));
+    const monOk = (monInT && graceT && monInT <= graceT)
+      || (monL.leave_type && monL.leave_type.toLowerCase().includes('earned'));
+
+    if (isMonthStart) return monOk ? 'holiday' : 'absent';
+    return (satOk && monOk) ? 'holiday' : 'absent';
   }
+
   if (holidays.has(iso)) return 'holiday';
-  if (log?.leave_type?.toLowerCase().includes('earned') && netH >= 4) return 'fullday';
-  if (log?.leave_type?.toLowerCase().includes('earned')) return 'paidleave';
+
+  // Earned leave
+  if (log?.leave_type?.toLowerCase().includes('earned')) {
+    return netH >= 4 ? 'fullday' : 'paidleave';
+  }
+  // Other leave (unpaid)
   if (log?.leave_type && !log.leave_type.toLowerCase().includes('earned')) return 'absent';
+
   if (!log?.office_in || !log?.office_out) return 'absent';
-  const outT = parseT(log.office_out), cutT = parseT(LOGOUT_CUTOFF);
-  const li = getLateInfo(log), exc = lStats.exceeded.includes(iso);
-  if (outT >= cutT && netH >= 4 && netH < 8) return 'halfday';
-  if (outT < cutT && netH >= 8) return 'halfday';
-  if (outT < cutT && netH < 4) return 'absent';
+
+  const outT  = parseT(log.office_out);
+  const cutT  = parseT(LOGOUT_CUTOFF);
+  const li    = getLateInfo(log);
+  const exc   = lStats.exceeded.includes(iso);
+
+  if (outT && cutT && outT >= cutT && netH >= 4 && netH < 8) return 'halfday';
+  if (outT && cutT && outT < cutT)  {
+    if (netH >= 8) return 'halfday';
+    if (netH < 4)  return 'absent';
+  }
   if ((li.late && li.grace && exc) || (li.late && li.beyond)) return netH >= 8 ? 'halfday' : 'absent';
   if (netH < 4) return 'absent';
   if (netH < 8) return 'halfday';
@@ -144,33 +216,47 @@ function classifyDay(iso, weekday, log, holidays, lStats, byDate) {
 }
 
 function buildSummary(logs, holidays, ym) {
-  if (!ym) return { fullDays: 0, halfDays: 0, absentDays: 0, holidayDays: 0, paidDays: 0, attPct: '0.0', avgNet: '0.0', lateCount: 0 };
-  const days = monthDays(ym);
+  if (!ym || !logs) return { fullDays: 0, halfDays: 0, absentDays: 0, holidayDays: 0, paidDays: 0, attPct: '0.0', avgNet: '0.0', lateCount: 0 };
+  const days    = monthDays(ym);
   const todayIS = new Date().toISOString().slice(0, 10);
-  const valid = days.filter(d => d.iso <= todayIS);
-  const byDate = new Map((logs || []).map(l => [l.date, l]));
+  const valid   = days.filter(d => d.iso <= todayIS);
+
+  // FIX: normalize all log dates before building map
+  const byDate = new Map();
+  (logs || []).forEach(l => {
+    const nd = normalizeDate(l.date);
+    if (nd) byDate.set(nd, l);
+  });
+
   const ls = buildLateStats(byDate, days);
   let full = 0, half = 0, absent = 0, holiday = 0, paid = 0, totalMs = 0;
-  for (const { date, iso } of valid) {
+  for (const { iso, weekday } of valid) {
     const log = byDate.get(iso);
     totalMs += calcNet(log || {});
-    const b = classifyDay(iso, date.getDay(), log, holidays, ls, byDate);
-    if (b === 'fullday') full++;
-    else if (b === 'halfday') half++;
+    const b = classifyDay(iso, weekday, log, holidays, ls, byDate);
+    if      (b === 'fullday')   full++;
+    else if (b === 'halfday')   half++;
     else if (b === 'paidleave') paid++;
-    else if (b === 'holiday') holiday++;
-    else absent++;
+    else if (b === 'holiday')   holiday++;
+    else                        absent++;
   }
+
   const extraFull = Math.floor(half / 2);
   full += extraFull;
   const remHalf = half % 2;
-  const workDays = valid.filter(d => d.date.getDay() !== 0 && !holidays.has(d.iso)).length;
-  const attPct = workDays > 0 ? (((full + remHalf * 0.5 + paid) / workDays) * 100).toFixed(1) : '0.0';
-  const avgNet = valid.length > 0 ? (toHours(totalMs) / valid.length).toFixed(1) : '0.0';
+
+  const workDays = valid.filter(d => d.weekday !== 0 && !holidays.has(d.iso)).length;
+  const attPct   = workDays > 0 ? (((full + remHalf * 0.5 + paid) / workDays) * 100).toFixed(1) : '0.0';
+  const workedDays = valid.filter(d => {
+    const nd = normalizeDate(d.iso);
+    return nd && byDate.get(nd)?.office_in;
+  }).length;
+  const avgNet = workedDays > 0 ? (toHours(totalMs) / workedDays).toFixed(1) : '0.0';
+
   return { fullDays: full, halfDays: remHalf, absentDays: absent, holidayDays: holiday, paidDays: paid, attPct, avgNet, lateCount: ls.count };
 }
 
-// ─── FIXED WIDTH BAR CHART (no ResponsiveContainer) ──────────────────────────
+// ─── CHARTS ──────────────────────────────────────────────────────────────────
 function OverallBar({ data }) {
   if (!data.length) return <div style={{ padding: 40, color: C.muted, textAlign: 'center' }}>No data yet</div>;
   const w = Math.max(600, data.length * 60);
@@ -180,15 +266,13 @@ function OverallBar({ data }) {
         <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
         <XAxis dataKey="shortName" tick={{ fill: C.muted, fontSize: 11 }} angle={-35} textAnchor="end" interval={0} />
         <YAxis tick={{ fill: C.muted, fontSize: 11 }} />
-        <Tooltip
-          contentStyle={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8 }}
-          labelFormatter={(_, pl) => pl?.[0]?.payload?.fullName || ''}
-        />
+        <Tooltip contentStyle={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8 }}
+          labelFormatter={(_, pl) => pl?.[0]?.payload?.fullName || ''} />
         <Legend wrapperStyle={{ fontSize: 12 }} />
-        <Bar dataKey="Full"   stackId="a" fill={C.full}    name="Full Day"   />
-        <Bar dataKey="Half"   stackId="a" fill={C.half}    name="Half Day"   />
-        <Bar dataKey="Leave"  stackId="a" fill={C.leave}   name="Paid Leave" />
-        <Bar dataKey="Absent" stackId="a" fill={C.absent}  name="Absent" radius={[4,4,0,0]} />
+        <Bar dataKey="Full"   stackId="a" fill={C.full}   name="Full Day"   />
+        <Bar dataKey="Half"   stackId="a" fill={C.half}   name="Half Day"   />
+        <Bar dataKey="Leave"  stackId="a" fill={C.leave}  name="Paid Leave" />
+        <Bar dataKey="Absent" stackId="a" fill={C.absent} name="Absent" radius={[4,4,0,0]} />
       </BarChart>
     </div>
   );
@@ -203,11 +287,9 @@ function AttLine({ data }) {
         <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
         <XAxis dataKey="shortName" tick={{ fill: C.muted, fontSize: 11 }} angle={-35} textAnchor="end" interval={0} />
         <YAxis domain={[0, 100]} tick={{ fill: C.muted, fontSize: 11 }} unit="%" />
-        <Tooltip
-          contentStyle={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8 }}
+        <Tooltip contentStyle={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8 }}
           formatter={v => [`${v}%`, 'Attendance']}
-          labelFormatter={(_, pl) => pl?.[0]?.payload?.fullName || ''}
-        />
+          labelFormatter={(_, pl) => pl?.[0]?.payload?.fullName || ''} />
         <Line type="monotone" dataKey="att" name="Attendance %" stroke={C.accent}
           strokeWidth={2.5} dot={{ r: 5, fill: C.accent }} activeDot={{ r: 7 }} />
       </LineChart>
@@ -215,7 +297,6 @@ function AttLine({ data }) {
   );
 }
 
-// ─── INDIVIDUAL PIE (fixed 180x180 svg) ──────────────────────────────────────
 function EmpPie({ s, name, color }) {
   const slices = [
     { name: 'Full',    value: s.fullDays,    color: C.full    },
@@ -224,9 +305,7 @@ function EmpPie({ s, name, color }) {
     { name: 'Leave',   value: s.paidDays,    color: C.leave   },
     { name: 'Holiday', value: s.holidayDays, color: C.holiday },
   ].filter(d => d.value > 0);
-
   const pieData = slices.length > 0 ? slices : [{ name: 'No Data', value: 1, color: '#e2e8f0' }];
-
   return (
     <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14,
       padding: '16px 18px', width: 210, flexShrink: 0,
@@ -235,8 +314,6 @@ function EmpPie({ s, name, color }) {
         whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
       <div style={{ color: color, fontSize: 22, fontWeight: 800 }}>{s.attPct}%</div>
       <div style={{ color: C.muted, fontSize: 10, marginBottom: 8 }}>Attendance</div>
-
-      {/* Fixed 174x160 pie — always renders */}
       <PieChart width={174} height={160}>
         <Pie data={pieData} dataKey="value" cx={87} cy={75}
           innerRadius={38} outerRadius={62} paddingAngle={slices.length > 1 ? 3 : 0} startAngle={90} endAngle={-270}>
@@ -244,7 +321,6 @@ function EmpPie({ s, name, color }) {
         </Pie>
         <Tooltip contentStyle={{ background: '#fff', border: `1px solid ${C.border}`, fontSize: 11, borderRadius: 6 }} />
       </PieChart>
-
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 10px' }}>
         {slices.length > 0 ? slices.map(d => (
           <div key={d.name} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: C.muted }}>
@@ -257,20 +333,17 @@ function EmpPie({ s, name, color }) {
   );
 }
 
-// ─── INDIVIDUAL HOURS BAR ────────────────────────────────────────────────────
 function EmpHoursBar({ logs, name, color }) {
   const data = [...(logs || [])]
     .filter(l => l.office_in && l.office_out)
-    .sort((a, b) => a.date.localeCompare(b.date))
+    .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
     .slice(-20)
-    .map(l => ({ date: l.date.slice(5), hrs: +toHours(calcNet(l)).toFixed(2) }));
-
+    .map(l => ({ date: (l.date || '').slice(5), hrs: +toHours(calcNet(l)).toFixed(2) }));
   if (!data.length) return (
     <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12,
       padding: 20, height: 230, display: 'flex', alignItems: 'center', justifyContent: 'center',
       color: C.muted, fontSize: 13 }}>No logged days found for this month</div>
   );
-
   const w = Math.max(400, data.length * 36);
   return (
     <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12,
@@ -292,9 +365,8 @@ function EmpHoursBar({ logs, name, color }) {
   );
 }
 
-// ─── LOG TABLE ───────────────────────────────────────────────────────────────
 function LogTable({ logs }) {
-  const sorted = [...logs].sort((a, b) => b.date.localeCompare(a.date));
+  const sorted = [...logs].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   return (
     <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
@@ -311,7 +383,7 @@ function LogTable({ logs }) {
             const net = calcNet(l), netH = toHours(net);
             const clr = netH >= 8 ? C.full : netH >= 4 ? C.half : netH > 0 ? C.absent : C.muted;
             return (
-              <tr key={l.date} style={{ background: i % 2 ? C.surf2 : C.surface }}>
+              <tr key={l.date || i} style={{ background: i % 2 ? C.surf2 : C.surface }}>
                 <td style={{ padding: '6px 12px', borderBottom: `1px solid ${C.border}`, fontWeight: 600, color: C.text }}>{l.date}</td>
                 {[l.office_in, l.break_in, l.break_out, l.lunch_in, l.lunch_out, l.office_out].map((t, idx) => (
                   <td key={idx} style={{ padding: '6px 12px', borderBottom: `1px solid ${C.border}`, fontFamily: 'monospace', color: C.muted }}>{fmtTime(t)}</td>
@@ -331,7 +403,6 @@ function LogTable({ logs }) {
   );
 }
 
-// ─── SMALL HELPERS ───────────────────────────────────────────────────────────
 function Card({ label, value, color, sub }) {
   return (
     <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12,
@@ -364,57 +435,118 @@ export default function ChairmanDashboard() {
   const [error,         setError]       = useState('');
   const [activeTab,     setActiveTab]   = useState('overview');
   const [selectedEmp,   setSelectedEmp] = useState(null);
+  const [loadProgress,  setLoadProgress] = useState({ done: 0, total: 0 });
 
   // Load employees
   useEffect(() => {
     setLoading(true);
+    setError('');
     axios.get(`${baseUrl}/admin/employees`, { withCredentials: true })
-      .then(r => { setEmployees(Array.isArray(r.data) ? r.data : []); })
-      .catch(() => { setError('❌ Failed to load employees. Make sure you are logged in as chairman.'); setLoading(false); });
+      .then(r => {
+        const emps = Array.isArray(r.data) ? r.data : [];
+        // FIX: ensure IDs are always strings for consistent map keying
+        setEmployees(emps.map(e => ({ ...e, id: String(e.id) })));
+      })
+      .catch(() => {
+        setError('❌ Failed to load employees. Make sure you are logged in as chairman.');
+        setLoading(false);
+      });
   }, []);
 
   // Load holidays
   useEffect(() => {
     if (!selectedMonth) return;
     axios.get(`${baseUrl}/holidays?month=${selectedMonth}`, { withCredentials: true })
-      .then(r => { const m = new Map(); (r.data || []).forEach(h => { if (h.date) m.set(h.date, h); }); setHolidays(m); })
+      .then(r => {
+        const m = new Map();
+        (r.data || []).forEach(h => { if (h.date) m.set(normalizeDate(h.date) || h.date, h); });
+        setHolidays(m);
+      })
       .catch(() => {});
   }, [selectedMonth]);
 
-  // Load all logs
+  // FIX: Use /all-attendance endpoint (same as AttendanceChatLogs) instead of per-employee calls
+  // This avoids the N+1 problem and uses the same data source as the working component
   useEffect(() => {
-    if (!employees.length || !selectedMonth) return;
+    if (!selectedMonth) return;
     setLogsReady(false);
     setLoading(true);
-    const next = nextYM(selectedMonth);
-    Promise.all(
-      employees.map(emp =>
-        Promise.all([
-          axios.get(`${baseUrl}/admin/attendance?employee_id=${emp.id}&month=${selectedMonth}`, { withCredentials: true })
-            .then(r => Array.isArray(r.data) ? r.data : []).catch(() => []),
-          axios.get(`${baseUrl}/admin/attendance?employee_id=${emp.id}&month=${next}`, { withCredentials: true })
-            .then(r => Array.isArray(r.data) ? r.data : []).catch(() => []),
-        ]).then(([a, b]) => ({ id: emp.id, logs: [...a, ...b] }))
-      )
-    ).then(results => {
-      const map = {};
-      results.forEach(r => { map[r.id] = r.logs; });
-      setAllLogs(map);
-      setLoading(false);
-      setLogsReady(true);
-    });
+    setLoadProgress({ done: 0, total: 1 });
+
+    axios.get(`${baseUrl}/all-attendance?month=${selectedMonth}`, { withCredentials: true })
+      .then(r => {
+        const obj = r.data || {};
+        const map = {};
+        // obj keys are emails, values have { name, role, attendance: [...] }
+        // We also need to handle if employees list uses IDs — try to match by email
+        Object.entries(obj).forEach(([email, userData]) => {
+          const logs = (userData.attendance || []).map(l => ({
+            ...l,
+            date: normalizeDate(l.date) || l.date,
+          }));
+          map[email] = { logs, name: userData.name, role: userData.role, email };
+        });
+        setAllLogs(map);
+        setLoadProgress({ done: 1, total: 1 });
+        setLoading(false);
+        setLogsReady(true);
+      })
+      .catch(() => {
+        // Fallback: fetch per-employee if /all-attendance not available
+        if (!employees.length) { setLoading(false); return; }
+        setLoadProgress({ done: 0, total: employees.length });
+        const next = nextYM(selectedMonth);
+        Promise.all(
+          employees.map((emp, idx) =>
+            Promise.all([
+              axios.get(`${baseUrl}/admin/attendance?employee_id=${emp.id}&month=${selectedMonth}`, { withCredentials: true })
+                .then(r => Array.isArray(r.data) ? r.data : []).catch(() => []),
+              axios.get(`${baseUrl}/admin/attendance?employee_id=${emp.id}&month=${next}`, { withCredentials: true })
+                .then(r => Array.isArray(r.data) ? r.data : []).catch(() => []),
+            ]).then(([a, b]) => {
+              setLoadProgress(p => ({ ...p, done: p.done + 1 }));
+              return {
+                id: emp.id,
+                logs: [...a, ...b].map(l => ({ ...l, date: normalizeDate(l.date) || l.date })),
+              };
+            })
+          )
+        ).then(results => {
+          const map = {};
+          results.forEach(r => { map[r.id] = { logs: r.logs }; });
+          setAllLogs(map);
+          setLoading(false);
+          setLogsReady(true);
+        });
+      });
   }, [employees, selectedMonth]);
 
-  // Summaries
+  // Summaries — handle both /all-attendance response (keyed by email) and fallback (keyed by id)
   const summaries = useMemo(() => {
     if (!logsReady) return [];
+
+    // If allLogs is keyed by email (from /all-attendance)
+    const isEmailKeyed = Object.keys(allLogs).some(k => k.includes('@'));
+
+    if (isEmailKeyed) {
+      // Build summaries directly from allLogs entries (no need for employees list)
+      return Object.entries(allLogs).map(([email, userData], i) => ({
+        id:    email,
+        email: email,
+        name:  userData.name || email,
+        role:  userData.role || '',
+        s:     buildSummary(userData.logs || [], holidays, selectedMonth),
+      })).filter(e => e.role !== 'chairman')
+        .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    }
+
+    // Fallback: match by employee ID
     return employees.map(emp => ({
       ...emp,
-      s: buildSummary(allLogs[emp.id] || [], holidays, selectedMonth),
+      s: buildSummary((allLogs[emp.id] || {}).logs || allLogs[emp.id] || [], holidays, selectedMonth),
     }));
   }, [employees, allLogs, holidays, selectedMonth, logsReady]);
 
-  // Chart data
   const chartData = useMemo(() =>
     summaries.map(e => ({
       shortName: (e.name || '').split(' ')[0],
@@ -426,20 +558,28 @@ export default function ChairmanDashboard() {
       att:       parseFloat(e.s.attPct),
     })), [summaries]);
 
-  // Org stats
   const org = useMemo(() => {
     if (!summaries.length) return { n: 0, avgA: '0.0', top: '-', bot: '-', absent: 0 };
-    const n = summaries.length;
+    const n    = summaries.length;
     const avgA = (summaries.reduce((a, e) => a + parseFloat(e.s.attPct), 0) / n).toFixed(1);
     const top  = [...summaries].sort((a, b) => parseFloat(b.s.attPct) - parseFloat(a.s.attPct))[0];
     const bot  = [...summaries].sort((a, b) => b.s.absentDays - a.s.absentDays)[0];
     return { n, avgA, top: top?.name || '-', bot: bot?.name || '-', absent: summaries.reduce((a, e) => a + e.s.absentDays, 0) };
   }, [summaries]);
 
+  // FIX: selectedEmp is now email (string), empLogs filtered by month
   const empIdx  = summaries.findIndex(e => e.id === selectedEmp);
   const empData = empIdx >= 0 ? summaries[empIdx] : null;
-  const empLogs = (allLogs[selectedEmp] || []).filter(l => l.date?.startsWith(selectedMonth));
-  const empClr  = empIdx >= 0 ? EMP_COLORS[empIdx % EMP_COLORS.length] : C.accent;
+  const empLogs = useMemo(() => {
+    if (!selectedEmp) return [];
+    const userData = allLogs[selectedEmp];
+    const logs = userData?.logs || (Array.isArray(userData) ? userData : []);
+    return logs.filter(l => {
+      const nd = normalizeDate(l.date);
+      return nd && nd.startsWith(selectedMonth);
+    });
+  }, [allLogs, selectedEmp, selectedMonth]);
+  const empClr = empIdx >= 0 ? EMP_COLORS[empIdx % EMP_COLORS.length] : C.accent;
 
   return (
     <div style={{ background: C.bg, minHeight: '100vh', color: C.text,
@@ -475,7 +615,6 @@ export default function ChairmanDashboard() {
 
       <div style={{ padding: '18px 28px' }}>
 
-        {/* STAT CARDS */}
         {!loading && summaries.length > 0 && (
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 20 }}>
             <Card label="Employees"      value={org.n}          color={C.accent} />
@@ -501,7 +640,22 @@ export default function ChairmanDashboard() {
 
         {loading ? (
           <div style={{ textAlign: 'center', padding: 80, color: C.muted, fontSize: 15 }}>
-            ⏳ Loading attendance data for all employees…
+            <div style={{ marginBottom: 12 }}>⏳ Loading attendance data…</div>
+            {loadProgress.total > 1 && (
+              <div style={{ fontSize: 13 }}>
+                {loadProgress.done} / {loadProgress.total} employees loaded
+                <div style={{ marginTop: 8, height: 4, background: C.border, borderRadius: 4, width: 200, margin: '8px auto 0' }}>
+                  <div style={{ height: '100%', background: C.accent, borderRadius: 4,
+                    width: `${(loadProgress.done / loadProgress.total) * 100}%`, transition: 'width 0.3s' }} />
+                </div>
+              </div>
+            )}
+          </div>
+        ) : summaries.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: 60, color: C.muted, fontSize: 14,
+            background: C.surface, borderRadius: 12, border: `1px solid ${C.border}` }}>
+            No attendance data found for {selectedMonth}.<br />
+            <span style={{ fontSize: 12 }}>Make sure employees have logged attendance this month.</span>
           </div>
         ) : (
           <>
@@ -513,13 +667,11 @@ export default function ChairmanDashboard() {
                   padding: '18px 16px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', overflowX: 'auto' }}>
                   <OverallBar data={chartData} />
                 </div>
-
                 <Sec>Attendance % Comparison</Sec>
                 <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12,
                   padding: '18px 16px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', overflowX: 'auto' }}>
                   <AttLine data={chartData} />
                 </div>
-
                 <Sec>Individual Breakdown</Sec>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
                   {summaries.map((e, i) => (
@@ -566,7 +718,7 @@ export default function ChairmanDashboard() {
                                 </div>
                                 <div>
                                   <div style={{ color: C.text, fontWeight: 600 }}>{e.name}</div>
-                                  <div style={{ color: C.muted, fontSize: 10 }}>{e.department || e.role || ''}</div>
+                                  <div style={{ color: C.muted, fontSize: 10 }}>{e.role || ''}</div>
                                 </div>
                               </div>
                             </td>
@@ -576,8 +728,8 @@ export default function ChairmanDashboard() {
                                 {e.s.attPct}%
                               </span>
                             </td>
-                            {[[e.s.fullDays, C.full],[e.s.halfDays, C.half],[e.s.absentDays, C.absent],
-                              [e.s.paidDays, C.leave],[e.s.holidayDays, C.holiday]].map(([v, c], idx) => (
+                            {[[e.s.fullDays,C.full],[e.s.halfDays,C.half],[e.s.absentDays,C.absent],
+                              [e.s.paidDays,C.leave],[e.s.holidayDays,C.holiday]].map(([v,c],idx) => (
                               <td key={idx} style={{ padding: '8px 12px', color: c, fontWeight: 700,
                                 borderBottom: `1px solid ${C.border}`, fontFamily: 'monospace' }}>{v}</td>
                             ))}
@@ -642,7 +794,7 @@ export default function ChairmanDashboard() {
                         </div>
                         <div>
                           <div style={{ fontWeight: 700, fontSize: 14 }}>{empData.name}</div>
-                          <div style={{ color: C.muted, fontSize: 11 }}>{empData.department || empData.role || 'Employee'}</div>
+                          <div style={{ color: C.muted, fontSize: 11 }}>{empData.role || 'Employee'}</div>
                         </div>
                       </div>
                       <Card label="Attendance"  value={`${empData.s.attPct}%`} color={empClr} />
@@ -653,19 +805,23 @@ export default function ChairmanDashboard() {
                         color={empData.s.lateCount > MAX_LATES ? C.absent : C.muted} />
                       <Card label="Avg Net/Day" value={`${empData.s.avgNet}h`} color={C.accent} />
                     </div>
-
                     <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 20, alignItems: 'flex-start' }}>
                       <EmpPie name={empData.name} s={empData.s} color={empClr} />
                       <div style={{ flex: 1, minWidth: 300 }}>
                         <EmpHoursBar logs={empLogs} name={empData.name} color={empClr} />
                       </div>
                     </div>
-
                     <Sec>Complete Log · {selectedMonth}</Sec>
                     <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12 }}>
                       {empLogs.length > 0
                         ? <LogTable logs={empLogs} />
-                        : <div style={{ color: C.muted, padding: 40, textAlign: 'center' }}>No logs found for {selectedMonth}.</div>}
+                        : <div style={{ color: C.muted, padding: 40, textAlign: 'center' }}>
+                            No logs found for {selectedMonth}.<br/>
+                            <span style={{ fontSize: 11 }}>
+                              Total logs in system: {(allLogs[selectedEmp]?.logs || []).length}
+                            </span>
+                          </div>
+                      }
                     </div>
                   </div>
                 ) : null}
