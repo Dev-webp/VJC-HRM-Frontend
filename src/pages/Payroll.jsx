@@ -534,10 +534,10 @@ export default function ChairmanDashboard() {
       <div className="chair-body">
         <div className="stat-grid">
           <StatCard icon="👥" label="Total Employees" value={users.length} sub={`${filteredUsers.length} shown`} accent="#1d5bd4" />
-          <StatCard icon="💼" label="Total Gross" value={`₹ ${fmtInt(totalGross)}`} sub="Monthly combined" accent="#6c63ff" />
+        
           <StatCard icon="💳" label="This Month Net" value={statsLoading ? "Loading…" : `₹ ${fmtInt(totalCurrentNet)}`} sub="Net payable" accent="#1d5bd4" />
           <StatCard icon="📅" label="Last Month Net" value={statsLoading ? "Loading…" : `₹ ${fmtInt(totalPrevNet)}`} sub="Net paid" accent="#27ae60" />
-          <StatCard icon="💰" label="Saved This Month" value={statsLoading ? "Loading…" : `₹ ${fmtInt(totalSaved)}`} sub={`vs ₹ ${fmtInt(prevSaved)} last month`} accent="#e67e22" />
+         
         </div>
 
         <div className="table-section">
@@ -567,9 +567,8 @@ export default function ChairmanDashboard() {
                       <th>Employee</th>
                       <th>Email</th>
                       <th>Role</th>
-                      <th className="right">Gross Salary</th>
-                      <th className="right">This Month (Net)</th>
-                      <th className="right">Last Month (Net)</th>
+                      <th className="right">Net Payable (This Month)</th>
+                      <th className="right">Net Payable (Last Month)</th>
                       <th className="center">Action</th>
                     </tr>
                   </thead>
@@ -587,12 +586,11 @@ export default function ChairmanDashboard() {
                           </td>
                           <td><span className="emp-email">{user.email}</span></td>
                           <td><RoleBadge role={user.role} /></td>
-                          <td className="right"><span className="gross-val">₹ {fmtInt(user.salary)}</span></td>
                           <td className="right">
                             {statsLoading ? <span style={{ color: "#ccc" }}>…</span> : cur !== null ? (
                               <div>
                                 <div className="net-val">₹ {fmt(cur)}</div>
-                                {saved > 1 && <div className="net-saved">–₹ {fmtInt(saved)} saved</div>}
+                                {saved > 1 && <div className="net-saved">–₹ {fmtInt(saved)} deducted</div>}
                               </div>
                             ) : <span style={{ color: "#ccc" }}>—</span>}
                           </td>
@@ -609,14 +607,13 @@ export default function ChairmanDashboard() {
                         </tr>
                       );
                     }) : (
-                      <tr><td colSpan={7} style={{ padding: 40, textAlign: "center", color: "#aaa" }}>No employees found.</td></tr>
+                      <tr><td colSpan={6} style={{ padding: 40, textAlign: "center", color: "#aaa" }}>No employees found.</td></tr>
                     )}
                   </tbody>
                   {!statsLoading && filteredUsers.length > 0 && (
                     <tfoot>
                       <tr>
                         <td colSpan={3}><span className="tot-label">TOTALS ({filteredUsers.length} employees)</span></td>
-                        <td className="right" style={{ color: "#111827" }}>₹ {fmtInt(filtTotalGross)}</td>
                         <td className="right" style={{ color: "#1d5bd4" }}>₹ {fmtInt(filtTotalCur)}</td>
                         <td className="right" style={{ color: "#27ae60" }}>₹ {fmtInt(filtTotalPrev)}</td>
                         <td />
@@ -644,18 +641,14 @@ export default function ChairmanDashboard() {
                         <RoleBadge role={user.role} />
                       </div>
                       <div className="emp-card-row">
-                        <span className="eck-label">Gross Salary</span>
-                        <span className="eck-val">₹ {fmtInt(user.salary)}</span>
-                      </div>
-                      <div className="emp-card-row">
-                        <span className="eck-label">This Month Net</span>
+                        <span className="eck-label">Net Payable (This Month)</span>
                         <span className="eck-val" style={{ color: "#1d5bd4" }}>
                           {statsLoading ? "…" : cur !== null ? `₹ ${fmt(cur)}` : "—"}
-                          {!statsLoading && saved > 1 && <span className="net-saved" style={{ display: "block" }}>–₹ {fmtInt(saved)} saved</span>}
+                          {!statsLoading && saved > 1 && <span className="net-saved" style={{ display: "block" }}>–₹ {fmtInt(saved)} deducted</span>}
                         </span>
                       </div>
                       <div className="emp-card-row">
-                        <span className="eck-label">Last Month Net</span>
+                        <span className="eck-label">Net Payable (Last Month)</span>
                         <span className="eck-val" style={{ color: "#27ae60" }}>
                           {statsLoading ? "…" : prv !== null ? `₹ ${fmt(prv)}` : "—"}
                         </span>
