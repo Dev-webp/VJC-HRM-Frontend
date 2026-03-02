@@ -2,171 +2,305 @@
 import React, { useEffect, useState, useMemo, useCallback } from "react";
 import axios from "axios";
 
-// =================================================================
-// 1. PROFESSIONAL STYLES DEFINITION
-// =================================================================
+// ─── GLOBAL STYLES injected once ────────────────────────────────────────────
+const GLOBAL_CSS = `
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@400;500;600;700&display=swap');
 
-const colors = {
-  primary: "#0047b3", // Deep Corporate Blue
-  secondary: "#007bff",
-  text: "#222b48",
-  background: "#f7f9fc", // Lightest Grey/Blue
-  border: "#e0e0e0",
-  success: "#28a745",
-  danger: "#dc3545",
-  warning: "#ffc107",
-};
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-const styles = {
-  td: {
-    padding: 15,
-    borderBottom: `1px solid ${colors.border}`,
-    color: colors.text,
-    fontWeight: 500,
-    fontSize: 15,
-    background: "#ffffff",
-  },
-  th: {
-    padding: 15,
-    textAlign: "left",
-    fontWeight: 700,
-    fontSize: 14,
-    color: "#ffffff", // White text for header
-    background: colors.primary, // Solid corporate blue header
-    borderBottom: `2px solid ${colors.primary}`,
-  },
-  premiumTable: {
-    width: "100%",
-    borderCollapse: "collapse",
-    marginTop: 10,
-    borderRadius: 8,
-    overflow: "hidden",
-    boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
-  },
-  mainSection: {
-    marginBottom: 40,
-    background: "#ffffff",
-    padding: 30,
-    borderRadius: 12,
-    boxShadow: "0 8px 20px rgba(0,0,0,0.1)",
-    minHeight: 580,
-  },
-  header: {
-    fontSize: 30,
-    marginBottom: 20,
-    color: colors.primary,
-    fontWeight: "900",
-    letterSpacing: "0.02em",
-    borderBottom: `3px solid ${colors.border}`,
-    paddingBottom: 15,
-  },
-  flexRow: {
-    display: "flex",
-    alignItems: "center",
-    gap: 25,
-    flexWrap: "wrap",
-    marginBottom: 20,
-  },
-  label: {
-    fontWeight: 600,
-    fontSize: 16,
-    color: colors.text,
-  },
-  monthInput: {
-    fontWeight: "600",
-    padding: "8px 15px",
-    borderRadius: 6,
-    border: `1px solid ${colors.border}`,
-    fontSize: 16,
-    color: colors.text,
-    cursor: "pointer",
-    backgroundColor: "#ffffff",
-  },
-  holidayCount: {
-    fontWeight: 600,
-    fontSize: 16,
-    color: colors.text,
-  },
-  searchInput: {
-    padding: 12,
-    fontSize: 16,
-    width: "100%",
-    maxWidth: 400,
-    marginBottom: 25,
-    borderRadius: 6,
-    border: `1px solid ${colors.border}`,
-    outline: "none",
-    boxShadow: "inset 0 1px 3px rgba(0,0,0,0.05)",
-    transition: "border-color 0.2s",
-  },
-  effectButton: {
-    cursor: "pointer",
-    background: colors.secondary,
-    color: "#fff",
-    border: "none",
-    outline: "none",
-    borderRadius: 4,
-    padding: "8px 18px",
-    fontSize: 15,
-    fontWeight: 600,
-    transition: "background-color .2s",
-    boxShadow: "0 2px 6px rgba(0, 123, 255, 0.3)",
-    minWidth: 120,
-  },
-  overlayStyles: {
-    position: "fixed",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 1000,
-    background: "rgba(10, 25, 47, 0.7)",
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalStyles: {
-    minWidth: 420,
-    maxWidth: 600,
-    background: "#ffffff",
-    borderRadius: 12,
-    boxShadow: "0 10px 40px rgba(0,0,0,0.35)",
-    padding: "30px",
-    position: "relative",
-  },
-  closeXStyles: {
-    position: "absolute",
-    top: 15,
-    right: 15,
-    fontSize: 30,
-    background: "none",
-    border: "none",
-    color: colors.danger,
-    cursor: "pointer",
-    fontWeight: 800,
-    transition: "color .18s",
-    zIndex: 10,
-  },
-  summaryDetailRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    fontSize: 16,
-    padding: "10px 0",
-    borderBottom: `1px solid ${colors.border}`,
-    fontWeight: 500,
-    color: colors.text,
-  },
-  summaryNumber: (color = colors.secondary, weight = 700) => ({
-    fontFamily: "Arial, sans-serif",
-    fontWeight: weight,
-    color: color,
-    fontSize: 16,
-  }),
-};
+  .chair-wrap {
+    font-family: 'DM Sans', system-ui, sans-serif;
+    min-height: 100vh;
+    background: #f0f2f8;
+  }
 
-// =================================================================
-// 2. UTILITY FUNCTIONS
-// =================================================================
+  .chair-header {
+    background: #fff;
+    border-bottom: 1px solid #e4e8f0;
+    padding: 18px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 14px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  }
+  .chair-header-left .eyebrow {
+    font-size: 10px;
+    font-weight: 700;
+    color: #1d5bd4;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  .chair-header-left h1 {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: clamp(18px, 4vw, 26px);
+    font-weight: 900;
+    color: #111827;
+    line-height: 1.1;
+  }
+  .chair-header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .month-picker-wrap label {
+    display: block;
+    font-size: 9px;
+    font-weight: 700;
+    color: #999;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 3px;
+  }
+  .month-picker-wrap input[type="month"] {
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1.5px solid #e0e6f0;
+    font-size: 14px;
+    font-weight: 700;
+    color: #111827;
+    background: #fafbff;
+    cursor: pointer;
+    outline: none;
+    font-family: 'DM Sans', sans-serif;
+    transition: border-color .2s;
+  }
+  .month-picker-wrap input[type="month"]:focus { border-color: #1d5bd4; }
+  .holiday-badge {
+    background: #fff3f3;
+    border: 1.5px solid #ffd5d5;
+    border-radius: 10px;
+    padding: 8px 14px;
+    text-align: center;
+  }
+  .holiday-badge .hb-label { font-size: 9px; color: #e53935; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+  .holiday-badge .hb-val { font-size: 22px; font-weight: 900; color: #e53935; line-height: 1; }
+
+  .chair-body { padding: 28px 20px; max-width: 1400px; margin: 0 auto; }
+
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+  .stat-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 20px 22px;
+    box-shadow: 0 2px 14px rgba(0,0,0,0.06);
+    border-top: 4px solid var(--accent);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    transition: transform .18s, box-shadow .18s;
+  }
+  .stat-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.1); }
+  .stat-card .sc-icon { font-size: 24px; }
+  .stat-card .sc-label { font-size: 10px; font-weight: 700; color: #999; letter-spacing: 0.1em; text-transform: uppercase; }
+  .stat-card .sc-val {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: clamp(17px, 2.5vw, 22px);
+    font-weight: 900;
+    color: #111827;
+    line-height: 1.15;
+    word-break: break-word;
+  }
+  .stat-card .sc-sub { font-size: 11px; color: var(--accent); font-weight: 600; }
+
+  .table-section {
+    background: #fff;
+    border-radius: 20px;
+    box-shadow: 0 2px 20px rgba(0,0,0,0.06);
+    overflow: hidden;
+  }
+  .table-toolbar {
+    padding: 22px 24px 18px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 14px;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  .table-toolbar h2 { font-size: 17px; font-weight: 800; color: #111827; }
+  .table-toolbar p { font-size: 12px; color: #888; margin-top: 2px; }
+  .search-box {
+    padding: 10px 16px;
+    border-radius: 10px;
+    border: 1.5px solid #e8ecf4;
+    font-size: 14px;
+    color: #333;
+    width: 100%;
+    max-width: 300px;
+    outline: none;
+    background: #fafbff;
+    font-family: 'DM Sans', sans-serif;
+    transition: border-color .2s;
+  }
+  .search-box:focus { border-color: #1d5bd4; }
+
+  .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .emp-table { width: 100%; border-collapse: collapse; min-width: 680px; }
+  .emp-table thead tr { background: #fafbff; }
+  .emp-table th {
+    padding: 12px 18px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #999;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border-bottom: 2px solid #f0f0f0;
+    white-space: nowrap;
+  }
+  .emp-table th.right { text-align: right; }
+  .emp-table th.center { text-align: center; }
+  .emp-table td { padding: 13px 18px; border-bottom: 1px solid #f5f6fa; vertical-align: middle; }
+  .emp-table td.right { text-align: right; }
+  .emp-table td.center { text-align: center; }
+  .emp-table tbody tr { transition: background .12s; }
+  .emp-table tbody tr:hover { background: #f0f5ff !important; }
+  .emp-table tfoot tr { background: #f7f9ff; border-top: 2px solid #e8ecf4; }
+  .emp-table tfoot td { padding: 13px 18px; font-weight: 800; font-size: 14px; }
+
+  .emp-name { font-weight: 700; font-size: 14px; color: #111827; }
+  .emp-loc { font-size: 11px; color: #1d5bd4; font-weight: 600; margin-top: 1px; }
+  .emp-email { font-size: 13px; color: #555; }
+  .role-badge { display: inline-block; border-radius: 6px; padding: 3px 10px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+  .net-val { font-weight: 800; font-size: 14px; color: #1d5bd4; }
+  .net-saved { font-size: 10px; color: #e67e22; font-weight: 600; margin-top: 1px; }
+  .prev-val { font-weight: 700; font-size: 14px; color: #27ae60; }
+  .gross-val { font-weight: 700; font-size: 14px; color: #111827; }
+  .tot-label { font-size: 12px; font-weight: 700; color: #888; }
+
+  .view-btn {
+    background: #1d5bd4;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    box-shadow: 0 2px 8px rgba(29,91,212,0.25);
+    transition: background .15s, transform .12s;
+    white-space: nowrap;
+  }
+  .view-btn:hover { background: #1447a8; transform: scale(1.03); }
+  .view-btn:active { transform: scale(0.97); }
+
+  .loading-state { padding: 60px; text-align: center; color: #aaa; font-size: 16px; }
+
+  /* MOBILE CARDS */
+  .emp-cards { display: none; padding: 12px; }
+  .emp-card {
+    background: #fff;
+    border-radius: 14px;
+    padding: 16px 18px;
+    margin-bottom: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    border-left: 4px solid #1d5bd4;
+  }
+  .emp-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 12px; }
+  .emp-card-meta { flex: 1; min-width: 0; }
+  .emp-card-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 0; border-bottom: 1px solid #f5f5f5; font-size: 13px;
+  }
+  .emp-card-row:last-of-type { border-bottom: none; }
+  .eck-label { color: #888; font-weight: 600; font-size: 12px; }
+  .eck-val { font-weight: 700; color: #111827; }
+
+  @media (max-width: 700px) {
+    .chair-body { padding: 16px 12px; }
+    .table-scroll { display: none; }
+    .emp-cards { display: block; }
+    .table-section { overflow: visible; background: transparent; box-shadow: none; border-radius: 0; }
+    .table-toolbar { background: #fff; border-radius: 14px; margin-bottom: 14px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); padding: 18px 16px; }
+    .search-box { max-width: 100%; }
+    .stat-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
+    .stat-card { padding: 16px; }
+  }
+  @media (max-width: 400px) {
+    .stat-grid { grid-template-columns: 1fr; }
+    .chair-header { flex-direction: column; align-items: flex-start; }
+  }
+
+  /* MODAL */
+  .modal-overlay {
+    position: fixed; inset: 0; z-index: 1000;
+    background: rgba(10,20,50,0.55);
+    backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px;
+  }
+  .modal-box {
+    background: #fff;
+    border-radius: 20px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.18);
+    padding: 32px 28px;
+    width: 100%;
+    max-width: 500px;
+    max-height: 92vh;
+    overflow-y: auto;
+    position: relative;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .modal-close {
+    position: absolute; top: 14px; right: 16px;
+    background: none; border: none;
+    font-size: 22px; color: #bbb; cursor: pointer; line-height: 1;
+    transition: color .15s;
+  }
+  .modal-close:hover { color: #e53935; }
+  .modal-eyebrow { font-size: 10px; color: #1d5bd4; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 4px; }
+  .modal-title { font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 900; color: #111827; }
+  .modal-subtitle { font-size: 13px; color: #888; margin-top: 2px; margin-bottom: 20px; }
+  .modal-table { width: 100%; border-radius: 12px; overflow: hidden; border: 1px solid #f0f0f0; margin-bottom: 18px; }
+  .modal-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; font-size: 14px; }
+  .modal-row:nth-child(even) { background: #fafbff; }
+  .mr-label { color: #555; font-weight: 500; }
+  .mr-val { font-weight: 700; }
+  .modal-section { background: #f7f9ff; border-radius: 12px; padding: 14px 16px; margin-bottom: 16px; }
+  .modal-section .modal-row { padding: 8px 0; border-bottom: 1px solid #eef0f8; background: transparent !important; }
+  .modal-section .modal-row:last-child { border-bottom: none; }
+  .modal-payout {
+    background: linear-gradient(135deg, #1d5bd4, #4a90e2);
+    border-radius: 12px;
+    padding: 16px 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .mp-label { color: rgba(255,255,255,0.9); font-size: 15px; font-weight: 700; }
+  .mp-val { color: #fff; font-size: 22px; font-weight: 900; font-family: 'Playfair Display', serif; }
+  .modal-deduct { display: flex; justify-content: space-between; padding: 10px 4px; border-bottom: 1px solid #f0f0f0; }
+  .modal-close-btn {
+    width: 100%; margin-top: 18px;
+    padding: 12px; background: #f5f5f5;
+    border: none; border-radius: 8px;
+    font-size: 14px; font-weight: 700;
+    color: #555; cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    transition: background .15s;
+  }
+  .modal-close-btn:hover { background: #ebebeb; }
+`;
+
+function injectStyles() {
+  if (document.getElementById("chair-css")) return;
+  const s = document.createElement("style");
+  s.id = "chair-css";
+  s.textContent = GLOBAL_CSS;
+  document.head.appendChild(s);
+}
 
 const baseUrl =
   window.location.hostname === "localhost"
@@ -177,376 +311,370 @@ function daysInMonth(month) {
   const [year, mon] = month.split("-");
   return new Date(parseInt(year), parseInt(mon), 0).getDate();
 }
+function fmt(n) {
+  return Number(n ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function fmtInt(n) {
+  return Number(n ?? 0).toLocaleString("en-IN");
+}
+function calcNet(summary, month, salary) {
+  const total = daysInMonth(month);
+  const absent = Math.max(total - (summary?.workDays ?? 0), 0);
+  const net = salary - absent * (salary / total);
+  return net >= 0 ? net : 0;
+}
+function getPrevMonth() {
+  const d = new Date();
+  d.setMonth(d.getMonth() - 1);
+  return d.toISOString().slice(0, 7);
+}
 
-// =================================================================
-// 3. MODAL COMPONENT
-// =================================================================
-
-function AttendanceSummaryModal({
-  attendanceSummary,
-  selectedUser,
-  selectedMonth,
-  holidaysCount,
-  userSalary,
-  netSalary,
-  calculatedAbsentDays,
-  closeModal,
-}) {
-  if (!attendanceSummary || !selectedUser) return null;
-
+function StatCard({ icon, label, value, sub, accent }) {
   return (
-    <div style={styles.overlayStyles} onClick={closeModal}>
-      <div
-        style={styles.modalStyles}
-        onClick={(e) => e.stopPropagation()}
-        tabIndex={-1}
-      >
-        <button
-          style={styles.closeXStyles}
-          onClick={closeModal}
-          title="Close Modal"
-        >
-          ×
-        </button>
-        <h2
-          style={{
-            fontWeight: 700,
-            fontSize: 24,
-            color: colors.primary,
-            marginBottom: 5,
-          }}
-        >
-          Payroll Summary - {selectedMonth}
-        </h2>
-        <p
-          style={{
-            fontWeight: 600,
-            color: colors.text,
-            marginBottom: 20,
-            fontSize: 16,
-          }}
-        >
-          Employee: {selectedUser.name}{" "}
-          <span style={{ color: colors.secondary }}>({selectedUser.email})</span>
-        </p>
+    <div className="stat-card" style={{ "--accent": accent }}>
+      <div className="sc-icon">{icon}</div>
+      <div className="sc-label">{label}</div>
+      <div className="sc-val">{value}</div>
+      {sub && <div className="sc-sub">{sub}</div>}
+    </div>
+  );
+}
 
-        <div style={{ padding: "0 0 10px 0" }}>
-          <div style={styles.summaryDetailRow}>
-            <span>Total Days in Month:</span>
-            <span style={styles.summaryNumber()}>{daysInMonth(selectedMonth)}</span>
+function RoleBadge({ role }) {
+  const r = (role || "").toLowerCase();
+  const map = {
+    chairman: { bg: "#e8efff", color: "#1d5bd4" },
+    manager:  { bg: "#e8fff0", color: "#27ae60" },
+  };
+  const style = map[r] || { bg: "#f5f5f5", color: "#666" };
+  return <span className="role-badge" style={{ background: style.bg, color: style.color }}>{role || "—"}</span>;
+}
+
+function AttendanceSummaryModal({ attendanceSummary, selectedUser, selectedMonth, holidaysCount, userSalary, netSalary, calculatedAbsentDays, closeModal }) {
+  if (!attendanceSummary || !selectedUser) return null;
+  const saved = userSalary - netSalary;
+  const rows = [
+    { label: "Total Days in Month", value: daysInMonth(selectedMonth), color: "#111827" },
+    { label: "Total Sundays", value: attendanceSummary.sundays ?? 0, color: "#888" },
+    { label: "Company Holidays", value: holidaysCount, color: "#e53935" },
+    { label: "Full Attendance Days", value: attendanceSummary.fullDays ?? 0, color: "#1d5bd4" },
+    { label: "Half Days", value: attendanceSummary.halfDays ?? 0, color: "#1d5bd4" },
+    { label: "Paid Leaves Applied", value: attendanceSummary.paidLeaves ?? 0, color: "#27ae60" },
+  ];
+  return (
+    <div className="modal-overlay" onClick={closeModal}>
+      <div className="modal-box" onClick={e => e.stopPropagation()}>
+        <button className="modal-close" onClick={closeModal}>✕</button>
+        <div className="modal-eyebrow">Payroll Summary · {selectedMonth}</div>
+        <div className="modal-title">{selectedUser.name}</div>
+        <div className="modal-subtitle">{selectedUser.email}</div>
+        <div className="modal-table">
+          {rows.map((r, i) => (
+            <div className="modal-row" key={i}>
+              <span className="mr-label">{r.label}</span>
+              <span className="mr-val" style={{ color: r.color }}>{r.value}</span>
+            </div>
+          ))}
+        </div>
+        <div className="modal-section">
+          <div className="modal-row">
+            <span className="mr-label" style={{ fontWeight: 700, color: "#111827" }}>Total Working Days</span>
+            <span className="mr-val" style={{ color: "#27ae60", fontSize: 16 }}>{attendanceSummary.workDays ?? 0}</span>
           </div>
-          <div style={styles.summaryDetailRow}>
-            <span>Total Sundays:</span>
-            <span style={styles.summaryNumber()}>{attendanceSummary.sundays ?? 0}</span>
-          </div>
-          <div style={styles.summaryDetailRow}>
-            <span>Company Holidays:</span>
-            <span style={styles.summaryNumber(colors.danger)}>{holidaysCount}</span>
-          </div>
-          <div style={styles.summaryDetailRow}>
-            <span>Full Attendance Days:</span>
-            <span style={styles.summaryNumber(colors.secondary)}>
-              {attendanceSummary.fullDays ?? 0}
-            </span>
-          </div>
-          <div style={styles.summaryDetailRow}>
-            <span>Half Days :</span>
-            <span style={styles.summaryNumber(colors.secondary)}>
-              {attendanceSummary.halfDays ?? 0}
-            </span>
-          </div>
-          <div style={styles.summaryDetailRow}>
-            <span>Paid Leaves Applied:</span>
-            <span style={styles.summaryNumber(colors.success)}>
-              {attendanceSummary.paidLeaves ?? 0}
-            </span>
+          <div className="modal-row">
+            <span className="mr-label" style={{ fontWeight: 700, color: "#111827" }}>Total Absent Days</span>
+            <span className="mr-val" style={{ color: "#e53935", fontSize: 16 }}>{calculatedAbsentDays}</span>
           </div>
         </div>
-
-        <div style={{ padding: "15px 0", borderTop: `2px solid ${colors.border}` }}>
-          <div style={styles.summaryDetailRow}>
-            <span style={{ fontWeight: 700 }}>Total Working Days:</span>
-            <span style={styles.summaryNumber(colors.success, 700)}>
-              {attendanceSummary.workDays ?? 0}
-            </span>
-          </div>
-          <div
-            style={{ ...styles.summaryDetailRow, borderBottom: `2px solid ${colors.border}` }}
-          >
-            <span style={{ fontWeight: 700 }}>Total Absent Days:</span>
-            <span style={styles.summaryNumber(colors.danger, 700)}>{calculatedAbsentDays}</span>
-          </div>
-
-          <div style={{ ...styles.summaryDetailRow, marginTop: 15 }}>
-            <span style={{ fontWeight: 800, fontSize: 18 }}>Gross Monthly Salary:</span>
-            <span
-              style={{ ...styles.summaryNumber(colors.primary, 800), fontSize: 18 }}
-            >
-              ₹ {userSalary.toLocaleString()}
-            </span>
-          </div>
-          <div style={styles.summaryDetailRow}>
-            <span style={{ fontWeight: 800, fontSize: 18 }}>Net Salary Payable:</span>
-            <span
-              style={{ ...styles.summaryNumber("#d9534f", 800), fontSize: 18 }}
-            >
-              ₹{" "}
-              {netSalary.toLocaleString(undefined, {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}
-            </span>
-          </div>
+        <div className="modal-deduct">
+          <span style={{ fontSize: 15, color: "#555", fontWeight: 600 }}>Gross Monthly Salary</span>
+          <span style={{ fontSize: 16, fontWeight: 800, color: "#111827" }}>₹ {fmtInt(userSalary)}</span>
         </div>
-
-        <button
-          style={{
-            ...styles.effectButton,
-            marginTop: 25,
-            float: "right",
-            background: colors.danger,
-            boxShadow: "0 2px 6px rgba(220, 53, 69, 0.4)",
-          }}
-          onClick={closeModal}
-        >
-          Close
-        </button>
+        <div className="modal-deduct" style={{ marginBottom: 14 }}>
+          <span style={{ fontSize: 15, color: "#555", fontWeight: 600 }}>Amount Deducted</span>
+          <span style={{ fontSize: 16, fontWeight: 800, color: "#e67e22" }}>– ₹ {fmt(saved)}</span>
+        </div>
+        <div className="modal-payout">
+          <span className="mp-label">Net Salary Payable</span>
+          <span className="mp-val">₹ {fmt(netSalary)}</span>
+        </div>
+        <button className="modal-close-btn" onClick={closeModal}>Close</button>
       </div>
     </div>
   );
 }
 
-// =================================================================
-// 4. MAIN COMPONENT
-// =================================================================
-
 export default function ChairmanDashboard() {
-  // State Hooks
+  injectStyles();
+
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [attendanceSummary, setAttendanceSummary] = useState(null);
-  const [selectedMonth, setSelectedMonth] = useState(() =>
-    new Date().toISOString().slice(0, 7)
-  );
+  const [selectedMonth, setSelectedMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [searchTerm, setSearchTerm] = useState("");
   const [holidaysCount, setHolidaysCount] = useState(0);
   const [userSalary, setUserSalary] = useState(0);
   const [netSalary, setNetSalary] = useState(0);
   const [calculatedAbsentDays, setCalculatedAbsentDays] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
-
-  // Current logged-in user info for filtering
   const [userRole, setUserRole] = useState("");
   const [userLocation, setUserLocation] = useState("");
+  const [allSummaries, setAllSummaries] = useState({});
+  const [statsLoading, setStatsLoading] = useState(false);
 
-  // Fetch current logged-in user info (role + location)
   useEffect(() => {
-    async function fetchUserRoleAndLocation() {
-      try {
-        const res = await axios.get(`${baseUrl}/me`, { withCredentials: true });
-        setUserRole(res.data.role || "");
-        setUserLocation(res.data.location || "");
-      } catch (error) {
-        console.error("Failed to fetch current user role/location", error);
-      }
-    }
-    fetchUserRoleAndLocation();
+    axios.get(`${baseUrl}/me`, { withCredentials: true })
+      .then(res => { setUserRole(res.data.role || ""); setUserLocation(res.data.location || ""); })
+      .catch(() => {});
   }, []);
 
-  // Helper Functions for API calls
   const fetchHolidays = useCallback(async (month) => {
     try {
-      const res = await axios.get(`${baseUrl}/holidays-count?month=${month}`, {
-        withCredentials: true,
-      });
+      const res = await axios.get(`${baseUrl}/holidays-count?month=${month}`, { withCredentials: true });
       const count = res.data.count ?? 0;
       setHolidaysCount(count);
       return count;
-    } catch (error) {
-      console.error("Failed to fetch holidays count", error);
-      setHolidaysCount(0);
-      return 0;
-    }
+    } catch { setHolidaysCount(0); return 0; }
   }, []);
 
-  const fetchAttendanceSummary = useCallback(
-    async (user, month) => {
-      if (!user || !month) return;
+  const fetchAttendanceSummary = useCallback(async (user, month) => {
+    if (!user || !month) return;
+    try {
+      const attendanceRes = await axios.post(`${baseUrl}/get-attendance-summary`, { email: user.email, month }, { withCredentials: true });
+      const summary = attendanceRes.data;
+      const salary = user.salary ?? 0;
+      const holidayCount = await fetchHolidays(month);
+      const totalDays = daysInMonth(month);
+      const finalAbsentDays = Math.max(totalDays - (summary?.workDays ?? 0), 0);
+      const net = salary - finalAbsentDays * (salary / totalDays);
+      setAttendanceSummary(summary);
+      setSelectedUser(user);
+      setUserSalary(salary);
+      setNetSalary(net >= 0 ? net : 0);
+      setCalculatedAbsentDays(finalAbsentDays);
+      setModalOpen(true);
+    } catch { alert("Error fetching attendance summary."); }
+  }, [fetchHolidays]);
 
-      try {
-        const attendanceRes = await axios.post(
-          `${baseUrl}/get-attendance-summary`,
-          { email: user.email, month },
-          { withCredentials: true }
-        );
-
-        const summary = attendanceRes.data;
-        const salary = user.salary ?? 0;
-        const holidayCount = await fetchHolidays(month);
-
-        const totalDays = daysInMonth(month);
-        const workDays = summary?.workDays ?? 0;
-
-        // Calculate absent days (Total days - Paid days)
-        const absentsCalc = totalDays - workDays;
-        const finalAbsentDays = absentsCalc > 0 ? absentsCalc : 0;
-
-        const perDaySalary = salary / totalDays;
-        const net = salary - finalAbsentDays * perDaySalary;
-
-        setAttendanceSummary(summary);
-        setSelectedUser(user);
-        setUserSalary(salary);
-        setNetSalary(net >= 0 ? net : 0);
-        setCalculatedAbsentDays(finalAbsentDays);
-        setModalOpen(true);
-      } catch (error) {
-        console.error("Failed to fetch attendance summary", error);
-        alert("Error fetching attendance summary.");
-      }
-    },
-    [fetchHolidays]
-  );
-
-  // Effect to fetch initial user list
   useEffect(() => {
     async function fetchUsers() {
       setLoading(true);
       try {
-        const res = await axios.get(`${baseUrl}/all-attendance`, {
-          withCredentials: true,
-        });
-        const data = res.data;
-        const usersList = Object.entries(data).map(([email, info]) => ({
-          email,
-          name: info.name,
-          role: info.role,
-          location: info.location || "", // Ensure location is included
-          salary: info.salary ?? 0,
+        const res = await axios.get(`${baseUrl}/all-attendance`, { withCredentials: true });
+        const usersList = Object.entries(res.data).map(([email, info]) => ({
+          email, name: info.name, role: info.role, location: info.location || "", salary: info.salary ?? 0,
         }));
         setUsers(usersList);
-      } catch (error) {
-        console.error("Failed to fetch users", error);
-      } finally {
-        setLoading(false);
-      }
+        setStatsLoading(true);
+        const curMonth = new Date().toISOString().slice(0, 7);
+        const prv = getPrevMonth();
+        const summaries = {};
+        await Promise.all(usersList.map(async (u) => {
+          try {
+            const [curRes, prvRes] = await Promise.all([
+              axios.post(`${baseUrl}/get-attendance-summary`, { email: u.email, month: curMonth }, { withCredentials: true }),
+              axios.post(`${baseUrl}/get-attendance-summary`, { email: u.email, month: prv }, { withCredentials: true }),
+            ]);
+            summaries[u.email] = { current: calcNet(curRes.data, curMonth, u.salary), prev: calcNet(prvRes.data, prv, u.salary), gross: u.salary };
+          } catch { summaries[u.email] = { current: 0, prev: 0, gross: u.salary }; }
+        }));
+        setAllSummaries(summaries);
+        setStatsLoading(false);
+      } catch { } finally { setLoading(false); }
     }
     fetchUsers();
   }, []);
 
-  // Effect to refetch summary when the month changes, if a user is already selected
   useEffect(() => {
-    if (selectedUser && selectedMonth) {
-      fetchAttendanceSummary(selectedUser, selectedMonth);
-    } else {
-      fetchHolidays(selectedMonth);
-    }
+    if (selectedUser && selectedMonth) fetchAttendanceSummary(selectedUser, selectedMonth);
+    else fetchHolidays(selectedMonth);
     // eslint-disable-next-line
   }, [selectedMonth]);
 
-  // Memoized function for filtered users with role & location check
   const filteredUsers = useMemo(() => {
     const term = searchTerm.toLowerCase();
-    let filtered = users.filter(({ email, name }) => {
-      return (
-        email.toLowerCase().includes(term) ||
-        (name && name.toLowerCase().includes(term))
-      );
-    });
-
-    // Role/location-based filtering
-    if (userRole.toLowerCase() === "manager" && userLocation) {
-      filtered = filtered.filter(
-        (user) =>
-          user.location &&
-          user.location.toLowerCase() === userLocation.toLowerCase()
-      );
-    }
-    // Chairman sees all: no filtering here
-
+    let filtered = users.filter(({ email, name }) =>
+      email.toLowerCase().includes(term) || (name && name.toLowerCase().includes(term))
+    );
+    if (userRole.toLowerCase() === "manager" && userLocation)
+      filtered = filtered.filter(u => u.location?.toLowerCase() === userLocation.toLowerCase());
     return filtered;
   }, [users, searchTerm, userRole, userLocation]);
 
-  // Handler to open the summary modal
-  function openSummaryPopup(user) {
-    fetchAttendanceSummary(user, selectedMonth);
-  }
+  const totalGross = useMemo(() => users.reduce((s, u) => s + (u.salary ?? 0), 0), [users]);
+  const totalCurrentNet = useMemo(() => Object.values(allSummaries).reduce((s, v) => s + (v.current ?? 0), 0), [allSummaries]);
+  const totalPrevNet = useMemo(() => Object.values(allSummaries).reduce((s, v) => s + (v.prev ?? 0), 0), [allSummaries]);
+  const totalSaved = totalGross - totalCurrentNet;
+  const prevSaved = totalGross - totalPrevNet;
+
+  const filtTotalGross = filteredUsers.reduce((s, u) => s + (u.salary ?? 0), 0);
+  const filtTotalCur = filteredUsers.reduce((s, u) => s + (allSummaries[u.email]?.current ?? 0), 0);
+  const filtTotalPrev = filteredUsers.reduce((s, u) => s + (allSummaries[u.email]?.prev ?? 0), 0);
 
   return (
-    <section style={styles.mainSection}>
-      <h2 style={styles.header}>📊 Payroll & Attendance Summary</h2>
+    <div className="chair-wrap">
+      <header className="chair-header">
+        <div className="chair-header-left">
+          <div className="eyebrow">VJC Overseas</div>
+          <h1>Chairman Payroll Portal</h1>
+        </div>
+        <div className="chair-header-right">
+          <div className="month-picker-wrap">
+            <label>Select Month</label>
+            <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} />
+          </div>
+          <div className="holiday-badge">
+            <div className="hb-label">Holidays</div>
+            <div className="hb-val">{holidaysCount}</div>
+          </div>
+        </div>
+      </header>
 
-      <div style={styles.flexRow}>
-        <span style={styles.label}>Select Month:</span>
-        <input
-          type="month"
-          value={selectedMonth}
-          onChange={(e) => setSelectedMonth(e.target.value)}
-          style={styles.monthInput}
-        />
-        <span style={styles.holidayCount}>
-          Public Holidays:{" "}
-          <span style={styles.summaryNumber(colors.danger)}>{holidaysCount}</span>
-        </span>
+      <div className="chair-body">
+        <div className="stat-grid">
+          <StatCard icon="👥" label="Total Employees" value={users.length} sub={`${filteredUsers.length} shown`} accent="#1d5bd4" />
+          <StatCard icon="💼" label="Total Gross" value={`₹ ${fmtInt(totalGross)}`} sub="Monthly combined" accent="#6c63ff" />
+          <StatCard icon="💳" label="This Month Net" value={statsLoading ? "Loading…" : `₹ ${fmtInt(totalCurrentNet)}`} sub="Net payable" accent="#1d5bd4" />
+          <StatCard icon="📅" label="Last Month Net" value={statsLoading ? "Loading…" : `₹ ${fmtInt(totalPrevNet)}`} sub="Net paid" accent="#27ae60" />
+          <StatCard icon="💰" label="Saved This Month" value={statsLoading ? "Loading…" : `₹ ${fmtInt(totalSaved)}`} sub={`vs ₹ ${fmtInt(prevSaved)} last month`} accent="#e67e22" />
+        </div>
+
+        <div className="table-section">
+          <div className="table-toolbar">
+            <div>
+              <h2>Employee Directory</h2>
+              <p>Tap "View Summary" for full payroll breakdown — <b>{selectedMonth}</b></p>
+            </div>
+            <input
+              className="search-box"
+              type="text"
+              placeholder="🔍  Search name or email…"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+            />
+          </div>
+
+          {loading ? (
+            <div className="loading-state">Loading employee data…</div>
+          ) : (
+            <>
+              {/* DESKTOP TABLE */}
+              <div className="table-scroll">
+                <table className="emp-table">
+                  <thead>
+                    <tr>
+                      <th>Employee</th>
+                      <th>Email</th>
+                      <th>Role</th>
+                      <th className="right">Gross Salary</th>
+                      <th className="right">This Month (Net)</th>
+                      <th className="right">Last Month (Net)</th>
+                      <th className="center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredUsers.length ? filteredUsers.map((user, idx) => {
+                      const s = allSummaries[user.email];
+                      const cur = s?.current ?? null;
+                      const prv = s?.prev ?? null;
+                      const saved = user.salary - (cur ?? user.salary);
+                      return (
+                        <tr key={user.email} style={{ background: idx % 2 === 0 ? "#fff" : "#fafbff" }}>
+                          <td>
+                            <div className="emp-name">{user.name}</div>
+                            {user.location && <div className="emp-loc">{user.location}</div>}
+                          </td>
+                          <td><span className="emp-email">{user.email}</span></td>
+                          <td><RoleBadge role={user.role} /></td>
+                          <td className="right"><span className="gross-val">₹ {fmtInt(user.salary)}</span></td>
+                          <td className="right">
+                            {statsLoading ? <span style={{ color: "#ccc" }}>…</span> : cur !== null ? (
+                              <div>
+                                <div className="net-val">₹ {fmt(cur)}</div>
+                                {saved > 1 && <div className="net-saved">–₹ {fmtInt(saved)} saved</div>}
+                              </div>
+                            ) : <span style={{ color: "#ccc" }}>—</span>}
+                          </td>
+                          <td className="right">
+                            {statsLoading ? <span style={{ color: "#ccc" }}>…</span>
+                              : prv !== null ? <span className="prev-val">₹ {fmt(prv)}</span>
+                              : <span style={{ color: "#ccc" }}>—</span>}
+                          </td>
+                          <td className="center">
+                            <button className="view-btn" onClick={() => fetchAttendanceSummary(user, selectedMonth)}>
+                              View Summary
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    }) : (
+                      <tr><td colSpan={7} style={{ padding: 40, textAlign: "center", color: "#aaa" }}>No employees found.</td></tr>
+                    )}
+                  </tbody>
+                  {!statsLoading && filteredUsers.length > 0 && (
+                    <tfoot>
+                      <tr>
+                        <td colSpan={3}><span className="tot-label">TOTALS ({filteredUsers.length} employees)</span></td>
+                        <td className="right" style={{ color: "#111827" }}>₹ {fmtInt(filtTotalGross)}</td>
+                        <td className="right" style={{ color: "#1d5bd4" }}>₹ {fmtInt(filtTotalCur)}</td>
+                        <td className="right" style={{ color: "#27ae60" }}>₹ {fmtInt(filtTotalPrev)}</td>
+                        <td />
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+
+              {/* MOBILE CARDS — shown only on small screens */}
+              <div className="emp-cards">
+                {filteredUsers.length ? filteredUsers.map(user => {
+                  const s = allSummaries[user.email];
+                  const cur = s?.current ?? null;
+                  const prv = s?.prev ?? null;
+                  const saved = user.salary - (cur ?? user.salary);
+                  return (
+                    <div className="emp-card" key={user.email}>
+                      <div className="emp-card-top">
+                        <div className="emp-card-meta">
+                          <div className="emp-name">{user.name}</div>
+                          <div className="emp-email" style={{ marginTop: 2 }}>{user.email}</div>
+                          {user.location && <div className="emp-loc">{user.location}</div>}
+                        </div>
+                        <RoleBadge role={user.role} />
+                      </div>
+                      <div className="emp-card-row">
+                        <span className="eck-label">Gross Salary</span>
+                        <span className="eck-val">₹ {fmtInt(user.salary)}</span>
+                      </div>
+                      <div className="emp-card-row">
+                        <span className="eck-label">This Month Net</span>
+                        <span className="eck-val" style={{ color: "#1d5bd4" }}>
+                          {statsLoading ? "…" : cur !== null ? `₹ ${fmt(cur)}` : "—"}
+                          {!statsLoading && saved > 1 && <span className="net-saved" style={{ display: "block" }}>–₹ {fmtInt(saved)} saved</span>}
+                        </span>
+                      </div>
+                      <div className="emp-card-row">
+                        <span className="eck-label">Last Month Net</span>
+                        <span className="eck-val" style={{ color: "#27ae60" }}>
+                          {statsLoading ? "…" : prv !== null ? `₹ ${fmt(prv)}` : "—"}
+                        </span>
+                      </div>
+                      <button
+                        className="view-btn"
+                        style={{ marginTop: 14, width: "100%", padding: "11px", fontSize: 13 }}
+                        onClick={() => fetchAttendanceSummary(user, selectedMonth)}
+                      >
+                        View Full Summary
+                      </button>
+                    </div>
+                  );
+                }) : <div style={{ textAlign: "center", color: "#aaa", padding: "30px 12px" }}>No employees found.</div>}
+              </div>
+            </>
+          )}
+        </div>
       </div>
-
-      <input
-        type="text"
-        placeholder="🔍 Search Employee by Email or Name..."
-        value={searchTerm}
-        onChange={(e) => setSearchTerm(e.target.value)}
-        style={styles.searchInput}
-      />
-
-      <p style={{ color: colors.text, fontSize: 15, marginTop: -15, marginBottom: 30 }}>
-        Select an employee to view their detailed attendance and payroll calculation for{" "}
-        <b>{selectedMonth}</b>.
-      </p>
-
-      {loading ? (
-        <p style={{ padding: 30, textAlign: "center", fontSize: 18, color: "#555" }}>
-          Loading employee data...
-        </p>
-      ) : (
-        <table style={styles.premiumTable}>
-          <thead>
-            <tr>
-              <th style={{ ...styles.th, borderTopLeftRadius: 8 }}>Email</th>
-              <th style={styles.th}>Name</th>
-              <th style={styles.th}>Role</th>
-              <th style={{ ...styles.th, textAlign: "center", borderTopRightRadius: 8 }}>
-                Action
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredUsers.length ? (
-              filteredUsers.map((user) => (
-                <tr key={user.email} style={{ transition: "background-color 0.15s" }}>
-                  <td style={styles.td}>{user.email}</td>
-                  <td style={styles.td}>{user.name}</td>
-                  <td style={styles.td}>{user.role}</td>
-                  <td style={{ ...styles.td, textAlign: "center" }}>
-                    <button
-                      style={styles.effectButton}
-                      onClick={() => openSummaryPopup(user)}
-                    >
-                      View Summary
-                    </button>
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td style={{ ...styles.td, textAlign: "center", padding: 20 }} colSpan={4}>
-                  No employees found matching the search criteria.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      )}
 
       {modalOpen && (
         <AttendanceSummaryModal
@@ -560,6 +688,6 @@ export default function ChairmanDashboard() {
           closeModal={() => setModalOpen(false)}
         />
       )}
-    </section>
+    </div>
   );
 }

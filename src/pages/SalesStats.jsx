@@ -6,1242 +6,860 @@ const baseUrl =
         ? "http://localhost:5000"
         : "https://backend.vjcoverseas.com";
 
-function SalesStats({ employeeEmail, employeeSalary, isChairman = false }) {
-    const [stats, setStats] = useState(null);
-    const [salesEntries, setSalesEntries] = useState([]);
-    const [loading, setLoading] = useState(true);
-    
-    // Chairman edit mode
-    const [editMode, setEditMode] = useState(false);
-    const [targetAmount, setTargetAmount] = useState('');
-    
-    // Employee sales entry form
-    const [showEntryForm, setShowEntryForm] = useState(false);
-    const [saleAmount, setSaleAmount] = useState('');
-    const [saleCompany, setSaleCompany] = useState('');
-    const [clientName, setClientName] = useState('');
-    const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]);
-    const [remarks, setRemarks] = useState('');
-    
-    // View period
-    const [viewPeriod, setViewPeriod] = useState('current');
-    
-    // Real-time calculation toggle
-    const [useRealTimeCalc, setUseRealTimeCalc] = useState(false);
-    const [attendanceSummary, setAttendanceSummary] = useState(null);
-    const [currentMonth, setCurrentMonth] = useState(new Date().toISOString().slice(0, 7));
+/* ─── Inject styles once ──────────────────────────────────────────────── */
+const STYLE_ID = 'ss-global-style';
+if (!document.getElementById(STYLE_ID)) {
+    const s = document.createElement('style');
+    s.id = STYLE_ID;
+    s.textContent = `
+        @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Lora:ital,wght@1,400;0,500&display=swap');
+        .ss-wrap { font-family:'Sora',sans-serif; }
+        @keyframes ssUp   { from{opacity:0;transform:translateY(18px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes ssGrow { from{width:0!important} }
+        @keyframes ssGrowH{ from{height:0!important} }
+        @keyframes ssRing { from{stroke-dashoffset:339.3} }
+        @keyframes ssFade { from{opacity:0} to{opacity:1} }
+        .ss-anim { animation:ssUp   .45s cubic-bezier(.22,.68,0,1.2) both; }
+        .ss-fade { animation:ssFade .32s ease both; }
+        .ss-bar  { animation:ssGrow  .85s cubic-bezier(.22,.68,0,1.2) both; }
+        .ss-barH { animation:ssGrowH .75s cubic-bezier(.22,.68,0,1.2) both; }
+        .ss-ring { animation:ssRing 1.1s cubic-bezier(.22,.68,0,1.2) both; }
+        .ss-kpi  { transition:transform .22s,box-shadow .22s; }
+        .ss-kpi:hover { transform:translateY(-5px); box-shadow:0 14px 36px rgba(15,23,42,.10)!important; }
+        .ss-row  { transition:background .14s; }
+        .ss-row:hover  { background:#F8FAFF!important; }
+        .ss-btn  { transition:all .17s; }
+        .ss-btn:hover  { transform:translateY(-1px); filter:brightness(1.07); }
+        .ss-mcol { transition:all .17s; cursor:pointer; }
+        .ss-mcol:hover { transform:translateY(-3px); }
+        .ss-mcol:hover .ss-mbar { filter:brightness(1.12)!important; }
+        .ss-htab { transition:all .17s; cursor:pointer; }
+        .ss-htab:hover { background:#EFF6FF!important; }
+        .ss-inp:focus { outline:none!important; border-color:#3B82F6!important; box-shadow:0 0 0 3px rgba(59,130,246,.14)!important; }
+        .ss-inp  { transition:border-color .17s,box-shadow .17s; }
+        .ss-div  { display:flex;align-items:center;gap:14px;margin:28px 0 16px; }
+        .ss-div span { font-size:.67rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#94A3B8;white-space:nowrap; }
+        .ss-div::before,.ss-div::after { content:'';flex:1;height:1px;background:#E2E8F0; }
+        ::-webkit-scrollbar{width:5px;height:5px}
+        ::-webkit-scrollbar-track{background:#F1F5F9;border-radius:99px}
+        ::-webkit-scrollbar-thumb{background:#CBD5E1;border-radius:99px}
+    `;
+    document.head.appendChild(s);
+}
 
-    useEffect(() => {
-        if (employeeEmail) {
-            fetchStats();
-            fetchSalesEntries();
-            fetchAttendanceSummary(employeeEmail, currentMonth);
-        }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [employeeEmail]);
+/* ─── Helpers ──────────────────────────────────────────────────────────── */
+const INR   = n => parseFloat(n||0).toLocaleString('en-IN');
+const SHORT = n => {
+    n = parseFloat(n||0);
+    if(n>=1e7) return `₹${(n/1e7).toFixed(1)}Cr`;
+    if(n>=1e5) return `₹${(n/1e5).toFixed(1)}L`;
+    if(n>=1e3) return `₹${(n/1e3).toFixed(0)}K`;
+    return `₹${n}`;
+};
+const MONTH_LABEL = m => new Date(m+'-01').toLocaleDateString('en-IN',{month:'short',year:'2-digit'});
+const MONTH_FULL  = m => new Date(m+'-01').toLocaleDateString('en-IN',{month:'long',year:'numeric'});
+const TODAY_MONTH = () => new Date().toISOString().slice(0,7);
 
-    // Recalculate when month or mode changes
-    useEffect(() => {
-        if (employeeEmail && salesEntries.length > 0 && useRealTimeCalc) {
-            const monthSales = calculateMonthSales(salesEntries, currentMonth);
-            // Update stats with month-specific sales
-            setStats(prev => ({
-                ...prev,
-                current_sales: monthSales
-            }));
-        } else if (employeeEmail && !useRealTimeCalc) {
-            // Fetch total sales when in simple mode
-            fetchStats();
-        }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentMonth, useRealTimeCalc, salesEntries]);
+const TIERS = [
+    {min:100,label:'Full Salary Eligible',color:'#10B981',bg:'#D1FAE5',text:'#065F46'},
+    {min:75, label:'75% Salary Eligible', color:'#F59E0B',bg:'#FEF3C7',text:'#92400E'},
+    {min:50, label:'50% Salary Eligible', color:'#F97316',bg:'#FFEDD5',text:'#7C2D12'},
+    {min:25, label:'25% Salary Eligible', color:'#EF4444',bg:'#FEE2E2',text:'#7F1D1D'},
+    {min:0,  label:'No Salary Eligible',  color:'#94A3B8',bg:'#F1F5F9',text:'#475569'},
+];
+const getTier = p => TIERS.find(t=>parseFloat(p)>=t.min)||TIERS[4];
+const CAT_CLR = ['#3B82F6','#10B981','#F59E0B','#8B5CF6','#EF4444','#06B6D4','#EC4899'];
 
-    const calculateMonthSales = (entries, month) => {
-        if (!entries || entries.length === 0) return 0;
-        
-        const [year, monthNum] = month.split('-');
-        const monthSales = entries.filter(entry => {
-            const entryDate = new Date(entry.sale_date);
-            return entryDate.getFullYear() === parseInt(year) && 
-                   (entryDate.getMonth() + 1) === parseInt(monthNum);
-        });
-        
-        return monthSales.reduce((sum, entry) => sum + parseFloat(entry.amount || 0), 0);
-    };
+const CARD = {
+    background:'#fff',borderRadius:16,padding:'22px 24px',
+    boxShadow:'0 2px 12px rgba(15,23,42,.07)',border:'1px solid #E8EEFF',marginBottom:18,
+};
+const INPUT_S = {
+    width:'100%',padding:'11px 14px',border:'1.5px solid #CBD5E1',
+    borderRadius:10,fontSize:'0.88rem',fontFamily:'Sora,sans-serif',
+    background:'#FAFBFF',color:'#1E293B',boxSizing:'border-box',
+};
+const FLABEL = {display:'block',fontWeight:600,fontSize:'0.8rem',color:'#64748B',marginBottom:5};
+const MICRO  = {fontSize:'0.67rem',fontWeight:700,letterSpacing:'.1em',textTransform:'uppercase',color:'#94A3B8'};
 
-    const fetchStats = async () => {
-        try {
-            const res = await axios.get(`${baseUrl}/sales-stats/${employeeEmail}`, {
-                withCredentials: true
-            });
-            setStats(res.data);
-            setTargetAmount(res.data.target || '');
-        } catch (err) {
-            console.error('Failed to fetch sales stats', err);
-            setStats({ target: 0, current_sales: 0 });
-        } finally {
-            setLoading(false);
-        }
-    };
+/* ─── Sub-components ───────────────────────────────────────────────────── */
+function RingGauge({pct,color,size=130}){
+    const r=54, circ=2*Math.PI*r;
+    const off=circ-(Math.min(parseFloat(pct),100)/100)*circ;
+    return(
+        <svg width={size} height={size} viewBox="0 0 120 120">
+            <circle fill="none" stroke="#F1F5F9" strokeWidth="12" cx="60" cy="60" r={r}/>
+            <circle fill="none" stroke={color} strokeWidth="12" strokeLinecap="round"
+                cx="60" cy="60" r={r} strokeDasharray={circ} strokeDashoffset={off}
+                className="ss-ring" style={{transform:'rotate(-90deg)',transformOrigin:'50% 50%'}}/>
+            <text x="60" y="55" textAnchor="middle" fill={color}
+                style={{fontFamily:'Sora,sans-serif',fontSize:'19px',fontWeight:800}}>
+                {Math.round(parseFloat(pct))}%
+            </text>
+            <text x="60" y="73" textAnchor="middle" fill="#94A3B8"
+                style={{fontFamily:'Sora,sans-serif',fontSize:'10px',fontWeight:500}}>
+                achieved
+            </text>
+        </svg>
+    );
+}
 
-    const fetchSalesEntries = async () => {
-        try {
-            const res = await axios.get(`${baseUrl}/sales-entries/${employeeEmail}`, {
-                withCredentials: true
-            });
-            setSalesEntries(res.data);
-        } catch (err) {
-            console.error('Failed to fetch sales entries', err);
-        }
-    };
+function Divider({children}){
+    return <div className="ss-div"><span>{children}</span></div>;
+}
 
-    const fetchAttendanceSummary = async (email, month) => {
-        try {
-            const res = await axios.post(
-                `${baseUrl}/get-attendance-summary`,
-                { email, month },
-                { withCredentials: true }
-            );
-            setAttendanceSummary(res.data);
-        } catch (err) {
-            console.error('Failed to fetch attendance summary', err);
-            setAttendanceSummary(null);
-        }
-    };
-
-    const handleSaveTarget = async () => {
-        if (!targetAmount) {
-            alert('Please enter target amount');
-            return;
-        }
-
-        try {
-            await axios.post(
-                `${baseUrl}/update-sales-target`,
-                new URLSearchParams({
-                    employee_email: employeeEmail,
-                    target: targetAmount
-                }),
-                { withCredentials: true }
-            );
-            alert('✅ Target updated successfully');
-            fetchStats();
-            setEditMode(false);
-        } catch (err) {
-            alert('❌ Failed to update target: ' + (err.response?.data?.error || err.message));
-        }
-    };
-
-    const handleAddSalesEntry = async () => {
-        if (!saleAmount || !saleCompany || !clientName || !saleDate) {
-            alert('Please fill all required fields');
-            return;
-        }
-
-        try {
-            await axios.post(
-                `${baseUrl}/add-sales-entry`,
-                new URLSearchParams({
-                    employee_email: employeeEmail,
-                    amount: saleAmount,
-                    company: saleCompany,
-                    client_name: clientName,
-                    sale_date: saleDate,
-                    remarks: remarks || ''
-                }),
-                { withCredentials: true }
-            );
-            
-            alert('✅ Sales entry added successfully');
-            
-            // Reset form
-            setSaleAmount('');
-            setSaleCompany('');
-            setClientName('');
-            setRemarks('');
-            setSaleDate(new Date().toISOString().split('T')[0]);
-            setShowEntryForm(false);
-            
-            // Refresh data
-            fetchStats();
-            fetchSalesEntries();
-        } catch (err) {
-            alert('❌ Failed to add sales entry: ' + (err.response?.data?.error || err.message));
-        }
-    };
-
-    if (loading) {
-        return <div style={styles.loading}>Loading sales stats...</div>;
-    }
-
-    const target = parseFloat(stats?.target || 0);
-    const current = parseFloat(stats?.current_sales || 0);
-    const baseSalary = parseFloat(employeeSalary || 0);
-
-    // Calculate salary with attendance integration
-    const calculateSalaryWithAttendance = () => {
-        if (!attendanceSummary || target === 0) return null;
-
-        const totalDays = attendanceSummary.totalDays || 0;
-        const sundays = attendanceSummary.sundays || 0;
-        const workDays = parseFloat(attendanceSummary.workDays) || 0;
-
-        if (totalDays === 0) return null;
-
-        // Calculate pro-rated salary
-        const workingDays = totalDays;
-        const perDaySalary = baseSalary / workingDays;
-        const proratedSalary = perDaySalary * workDays;
-
-        // Calculate adjusted target
-        const adjustedTarget = (target / workingDays) * workDays;
-
-        // Calculate achievement percentage
-        const percentage = (current / adjustedTarget) * 100;
-
-        // Determine salary percentage
-        let salaryPercentage = 0;
-        if (percentage >= 100) salaryPercentage = 100;
-        else if (percentage >= 75) salaryPercentage = 75;
-        else if (percentage >= 50) salaryPercentage = 50;
-        else if (percentage >= 25) salaryPercentage = 25;
-
-        const payable = proratedSalary * (salaryPercentage / 100);
-
-        return {
-            percentage: percentage.toFixed(1),
-            salaryPercentage,
-            payable: payable.toFixed(2),
-            proratedSalary: proratedSalary.toFixed(2),
-            adjustedTarget: adjustedTarget.toFixed(2),
-            originalTarget: target.toFixed(2),
-            attendanceData: {
-                totalDays,
-                sundays,
-                workDays: workDays.toFixed(2),
-                workingDays
-            }
-        };
-    };
-
-    // Calculate salary without attendance (simple mode)
-    const calculateSalarySimple = () => {
-        const percentage = target > 0 ? (current / target) * 100 : 0;
-        
-        let salaryPercentage = 0;
-        if (percentage >= 100) salaryPercentage = 100;
-        else if (percentage >= 75) salaryPercentage = 75;
-        else if (percentage >= 50) salaryPercentage = 50;
-        else if (percentage >= 25) salaryPercentage = 25;
-
-        const payable = baseSalary * (salaryPercentage / 100);
-
-        return {
-            percentage: percentage.toFixed(1),
-            salaryPercentage,
-            payable: payable.toFixed(2)
-        };
-    };
-
-    const salaryCalc = useRealTimeCalc ? calculateSalaryWithAttendance() : calculateSalarySimple();
-    const percentage = salaryCalc?.percentage || 0;
-    const remaining = Math.max(0, target - current);
-
-    // Salary status
-    let salaryStatus = '';
-    let statusColor = '';
-
-    if (salaryCalc) {
-        const sp = salaryCalc.salaryPercentage;
-        if (sp >= 100) {
-            salaryStatus = '✅ Full Salary Eligible';
-            statusColor = '#28a745';
-        } else if (sp >= 75) {
-            salaryStatus = '⚠️ 75% Salary Eligible';
-            statusColor = '#ffc107';
-        } else if (sp >= 50) {
-            salaryStatus = '⚠️ 50% Salary Eligible';
-            statusColor = '#fd7e14';
-        } else if (sp >= 25) {
-            salaryStatus = '⚠️ 25% Salary Eligible';
-            statusColor = '#dc3545';
-        } else {
-            salaryStatus = '❌ No Salary Eligible';
-            statusColor = '#6c757d';
-        }
-    }
-
-    // Get comparison data
-    const getComparisonData = () => {
-        if (salesEntries.length === 0) return null;
-
-        const now = new Date();
-        let compareData = [];
-
-        if (viewPeriod === '10days') {
-            const tenDaysAgo = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000);
-            compareData = salesEntries.filter(e => new Date(e.sale_date) >= tenDaysAgo);
-        } else if (viewPeriod === 'month') {
-            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-            compareData = salesEntries.filter(e => new Date(e.sale_date) >= startOfMonth);
-        }
-
-        if (compareData.length === 0) return null;
-
-        const totalSales = compareData.reduce((sum, entry) => sum + parseFloat(entry.amount || 0), 0);
-        const avgSale = totalSales / compareData.length;
-
-        return {
-            totalSales,
-            count: compareData.length,
-            avgSale,
-            period: viewPeriod === '10days' ? 'Last 10 Days' : 'This Month'
-        };
-    };
-
-    const comparisonData = getComparisonData();
-
-    // Group sales by company
-    const salesByCompany = salesEntries.reduce((acc, entry) => {
-        const company = entry.company || 'Other';
-        if (!acc[company]) {
-            acc[company] = { total: 0, count: 0 };
-        }
-        acc[company].total += parseFloat(entry.amount || 0);
-        acc[company].count += 1;
-        return acc;
-    }, {});
-
-    return (
-        <div style={styles.container}>
-            <div style={styles.header}>
-                <h2 style={styles.title}>📊 Sales Performance Dashboard</h2>
-                <div style={styles.headerButtons}>
-                    {isChairman && (
-                        <button
-                            onClick={() => setEditMode(!editMode)}
-                            style={styles.editButton}
-                        >
-                            {editMode ? '❌ Cancel' : '✏️ Edit Target'}
-                        </button>
-                    )}
-                    {!isChairman && (
-                        <button
-                            onClick={() => setShowEntryForm(!showEntryForm)}
-                            style={styles.addButton}
-                        >
-                            {showEntryForm ? '❌ Cancel' : '➕ Add Sales Entry'}
-                        </button>
-                    )}
-                </div>
+function MiniBar({label,pct,value,count,color}){
+    return(
+        <div style={{marginBottom:13}}>
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:5,alignItems:'center'}}>
+                <span style={{fontWeight:600,fontSize:'0.87rem',color:'#334155'}}>{label}</span>
+                <span style={{fontSize:'0.8rem',color:'#64748B'}}>
+                    <strong style={{color:'#1E293B'}}>{value}</strong>&nbsp;·&nbsp;{count} deal{count!==1?'s':''}
+                </span>
             </div>
-
-            {/* Real-time Calculation Toggle */}
-            <div style={styles.toggleCard}>
-                <div style={styles.toggleHeader}>
-                    <h4 style={styles.toggleTitle}>💡 Salary Calculation Mode</h4>
-                    <label style={styles.toggleContainer}>
-                        <input
-                            type="checkbox"
-                            checked={useRealTimeCalc}
-                            onChange={(e) => setUseRealTimeCalc(e.target.checked)}
-                        />
-                        <span style={styles.toggleLabel}>Real-time Mode</span>
-                    </label>
-                </div>
-                <p style={styles.toggleDescription}>
-                    {useRealTimeCalc 
-                        ? "✅ Real-time mode: Salary based on attendance + sales performance" 
-                        : "📊 Simple mode: Salary based on sales performance only"}
-                </p>
-                {useRealTimeCalc && !attendanceSummary && (
-                    <p style={styles.toggleWarning}>
-                        ⚠️ No attendance summary found for {currentMonth}. Please generate attendance summary first.
-                    </p>
-                )}
-            </div>
-
-            {/* Month Selector for Real-time Mode */}
-            {useRealTimeCalc && (
-                <div style={styles.monthSelector}>
-                    <label style={styles.label}>Select Month:</label>
-                    <input
-                        type="month"
-                        value={currentMonth}
-                        onChange={async (e) => {
-                            setCurrentMonth(e.target.value);
-                            await fetchAttendanceSummary(employeeEmail, e.target.value);
-                            // Calculate sales for selected month
-                            const monthSales = calculateMonthSales(salesEntries, e.target.value);
-                            setStats(prev => ({
-                                ...prev,
-                                current_sales: monthSales
-                            }));
-                        }}
-                        style={styles.input}
-                    />
-                    <p style={styles.monthNote}>
-                        📊 Sales for {new Date(currentMonth + '-01').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}: 
-                        <strong> ₹{parseFloat(stats?.current_sales || 0).toLocaleString('en-IN')}</strong>
-                    </p>
-                </div>
-            )}
-
-            {/* Chairman Edit Target */}
-            {editMode && isChairman && (
-                <div style={styles.editForm}>
-                    <h4 style={styles.formTitle}>Set Sales Target</h4>
-                    <div style={styles.formGroup}>
-                        <label style={styles.label}>Monthly Target (₹)</label>
-                        <input
-                            type="number"
-                            value={targetAmount}
-                            onChange={(e) => setTargetAmount(e.target.value)}
-                            style={styles.input}
-                            placeholder="Enter target amount (e.g., 100000)"
-                        />
-                    </div>
-                    <button onClick={handleSaveTarget} style={styles.saveButton}>
-                        💾 Save Target
-                    </button>
-                </div>
-            )}
-
-            {/* Employee Add Sales Entry */}
-            {showEntryForm && !isChairman && (
-                <div style={styles.salesEntryForm}>
-                    <h4 style={styles.formTitle}>➕ Add New Sales Entry</h4>
-                    
-                    <div style={styles.formRow}>
-                        <div style={styles.formGroup}>
-                            <label style={styles.label}>Sale Amount (₹) *</label>
-                            <input
-                                type="number"
-                                value={saleAmount}
-                                onChange={(e) => setSaleAmount(e.target.value)}
-                                style={styles.input}
-                                placeholder="Enter amount (e.g., 50000)"
-                                required
-                            />
-                        </div>
-                        <div style={styles.formGroup}>
-                            <label style={styles.label}>Company/Service *</label>
-                            <select
-                                value={saleCompany}
-                                onChange={(e) => setSaleCompany(e.target.value)}
-                                style={styles.input}
-                                required
-                            >
-                                <option value="">-- Select Company --</option>
-                                <option value="JSS">JSS</option>
-                                <option value="PR">PR (Public Relations)</option>
-                                <option value="Study">Study Visa</option>
-                                <option value="Work Visa">Work Visa</option>
-                                <option value="Tourist Visa">Tourist Visa</option>
-                                <option value="Other">Other</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div style={styles.formRow}>
-                        <div style={styles.formGroup}>
-                            <label style={styles.label}>Client Name *</label>
-                            <input
-                                type="text"
-                                value={clientName}
-                                onChange={(e) => setClientName(e.target.value)}
-                                style={styles.input}
-                                placeholder="Enter client name"
-                                required
-                            />
-                        </div>
-                        <div style={styles.formGroup}>
-                            <label style={styles.label}>Sale Date *</label>
-                            <input
-                                type="date"
-                                value={saleDate}
-                                onChange={(e) => setSaleDate(e.target.value)}
-                                style={styles.input}
-                                required
-                            />
-                        </div>
-                    </div>
-
-                    <div style={styles.formGroup}>
-                        <label style={styles.label}>Remarks (Optional)</label>
-                        <textarea
-                            value={remarks}
-                            onChange={(e) => setRemarks(e.target.value)}
-                            style={{...styles.input, minHeight: '80px', resize: 'vertical'}}
-                            placeholder="Add any additional notes or details..."
-                        />
-                    </div>
-
-                    <button onClick={handleAddSalesEntry} style={styles.saveButton}>
-                        💾 Add Sales Entry
-                    </button>
-                </div>
-            )}
-
-            {/* Period Selector */}
-            <div style={styles.periodSelector}>
-                <button
-                    onClick={() => setViewPeriod('current')}
-                    style={{
-                        ...styles.periodButton,
-                        ...(viewPeriod === 'current' ? styles.periodButtonActive : {})
-                    }}
-                >
-                    📊 Current Stats
-                </button>
-                <button
-                    onClick={() => setViewPeriod('10days')}
-                    style={{
-                        ...styles.periodButton,
-                        ...(viewPeriod === '10days' ? styles.periodButtonActive : {})
-                    }}
-                >
-                    📈 Last 10 Days
-                </button>
-                <button
-                    onClick={() => setViewPeriod('month')}
-                    style={{
-                        ...styles.periodButton,
-                        ...(viewPeriod === 'month' ? styles.periodButtonActive : {})
-                    }}
-                >
-                    📅 This Month
-                </button>
-            </div>
-
-            {/* Comparison Card */}
-            {viewPeriod !== 'current' && comparisonData && (
-                <div style={styles.comparisonCard}>
-                    <h3 style={styles.comparisonTitle}>📈 Sales Analysis - {comparisonData.period}</h3>
-                    <div style={styles.comparisonGrid}>
-                        <div style={styles.comparisonItem}>
-                            <div style={styles.comparisonLabel}>Total Sales</div>
-                            <div style={styles.comparisonValue}>₹ {comparisonData.totalSales.toLocaleString('en-IN')}</div>
-                        </div>
-                        <div style={styles.comparisonItem}>
-                            <div style={styles.comparisonLabel}>Number of Sales</div>
-                            <div style={styles.comparisonValue}>{comparisonData.count}</div>
-                        </div>
-                        <div style={styles.comparisonItem}>
-                            <div style={styles.comparisonLabel}>Average per Sale</div>
-                            <div style={styles.comparisonValue}>₹ {comparisonData.avgSale.toLocaleString('en-IN')}</div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Stats Grid */}
-            <div style={styles.statsGrid}>
-                <div style={styles.statCard}>
-                    <div style={styles.statLabel}>Monthly Target</div>
-                    <div style={styles.statValue}>₹ {target.toLocaleString('en-IN')}</div>
-                </div>
-                <div style={styles.statCard}>
-                    <div style={styles.statLabel}>Total Sales</div>
-                    <div style={styles.statValue}>₹ {current.toLocaleString('en-IN')}</div>
-                </div>
-                <div style={styles.statCard}>
-                    <div style={styles.statLabel}>Remaining</div>
-                    <div style={{...styles.statValue, color: remaining > 0 ? '#dc3545' : '#28a745'}}>
-                        ₹ {remaining.toLocaleString('en-IN')}
-                    </div>
-                </div>
-                <div style={styles.statCard}>
-                    <div style={styles.statLabel}>Achievement</div>
-                    <div style={styles.statValue}>{percentage}%</div>
-                </div>
-            </div>
-
-            {/* Progress Bar */}
-            <div style={styles.progressContainer}>
-                <div style={styles.progressLabel}>Sales Progress</div>
-                <div style={styles.progressBar}>
-                    <div
-                        style={{
-                            ...styles.progressFill,
-                            width: `${Math.min(percentage, 100)}%`,
-                            backgroundColor: percentage >= 75 ? '#28a745' : percentage >= 50 ? '#ffc107' : '#dc3545'
-                        }}
-                    >
-                        {percentage > 10 && <span style={styles.progressText}>{percentage}%</span>}
-                    </div>
-                </div>
-            </div>
-
-            {/* Salary Calculation Card */}
-            {salaryCalc && (
-                <div style={{...styles.salaryCard, borderColor: statusColor}}>
-                    <h4 style={styles.salaryCardTitle}>💰 Salary Calculation</h4>
-                    
-                    <div style={styles.salaryRow}>
-                        <span style={styles.salaryLabel}>Base Salary:</span>
-                        <span style={styles.salaryValue}>₹ {baseSalary.toLocaleString('en-IN')}</span>
-                    </div>
-
-                    {useRealTimeCalc && salaryCalc.proratedSalary && (
-                        <>
-                            <div style={styles.salaryRow}>
-                                <span style={styles.salaryLabel}>Work Days:</span>
-                                <span style={styles.salaryValue}>{salaryCalc.attendanceData?.workDays || 0}</span>
-                            </div>
-                            <div style={styles.salaryRow}>
-                                <span style={styles.salaryLabel}>Pro-rated Salary:</span>
-                                <span style={styles.salaryValue}>
-                                    ₹ {parseFloat(salaryCalc.proratedSalary).toLocaleString('en-IN')}
-                                </span>
-                            </div>
-                            <div style={styles.salaryRow}>
-                                <span style={styles.salaryLabel}>Adjusted Target:</span>
-                                <span style={{...styles.salaryValue, color: '#e74c3c'}}>
-                                    ₹ {parseFloat(salaryCalc.adjustedTarget).toLocaleString('en-IN')}
-                                </span>
-                            </div>
-                        </>
-                    )}
-
-                    <div style={styles.salaryRow}>
-                        <span style={styles.salaryLabel}>Salary Percentage:</span>
-                        <span style={{...styles.salaryValue, color: statusColor}}>
-                            {salaryCalc.salaryPercentage}%
-                        </span>
-                    </div>
-
-                    <div style={{...styles.salaryRow, borderTop: '2px solid #e9ecef', marginTop: '10px', paddingTop: '15px'}}>
-                        <span style={{fontSize: '1.3rem', fontWeight: '700', color: '#2c3e50'}}>Net Payable:</span>
-                        <span style={{fontSize: '1.6rem', fontWeight: '700', color: statusColor}}>
-                            ₹ {parseFloat(salaryCalc.payable).toLocaleString('en-IN')}
-                        </span>
-                    </div>
-
-                    <div style={{textAlign: 'center', marginTop: '15px'}}>
-                        <span style={{...styles.salaryStatus, color: statusColor}}>
-                            {salaryStatus}
-                        </span>
-                    </div>
-                </div>
-            )}
-
-            {/* Visual Chart */}
-            <div style={styles.chartContainer}>
-                <h4 style={styles.chartTitle}>📊 Visual Progress</h4>
-                <div style={styles.barChart}>
-                    <div style={styles.barWrapper}>
-                        <div style={styles.barLabel}>Target</div>
-                        <div style={styles.barOuter}>
-                            <div style={{...styles.barInner, width: '100%', backgroundColor: '#e9ecef', color: '#495057'}}>
-                                ₹{target.toLocaleString('en-IN')}
-                            </div>
-                        </div>
-                    </div>
-                    <div style={styles.barWrapper}>
-                        <div style={styles.barLabel}>Current</div>
-                        <div style={styles.barOuter}>
-                            <div style={{
-                                ...styles.barInner, 
-                                width: `${Math.min(percentage, 100)}%`,
-                                backgroundColor: percentage >= 75 ? '#28a745' : percentage >= 50 ? '#ffc107' : '#dc3545'
-                            }}>
-                                ₹{current.toLocaleString('en-IN')}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* Sales by Company Breakdown */}
-            {Object.keys(salesByCompany).length > 0 && (
-                <div style={styles.breakdownCard}>
-                    <h4 style={styles.chartTitle}>💼 Sales Breakdown by Company</h4>
-                    {Object.entries(salesByCompany).map(([company, data]) => {
-                        const companyPercent = target > 0 ? (data.total / target) * 100 : 0;
-                        return (
-                            <div key={company} style={styles.breakdownItem}>
-                                <div style={styles.breakdownHeader}>
-                                    <span style={styles.breakdownCompany}>{company}</span>
-                                    <span style={styles.breakdownValue}>
-                                        ₹{data.total.toLocaleString('en-IN')} ({data.count} sales)
-                                    </span>
-                                </div>
-                                <div style={styles.breakdownBar}>
-                                    <div style={{
-                                        ...styles.breakdownBarFill,
-                                        width: `${Math.min(companyPercent, 100)}%`
-                                    }}>
-                                        {companyPercent.toFixed(1)}%
-                                    </div>
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            )}
-
-            {/* Sales Entries Table */}
-            {salesEntries.length > 0 && (
-                <div style={styles.entriesSection}>
-                    <h4 style={styles.entriesTitle}>📋 Sales Entries ({salesEntries.length})</h4>
-                    <div style={styles.entriesTable}>
-                        <table style={styles.table}>
-                            <thead>
-                                <tr style={styles.tableHeader}>
-                                    <th style={styles.th}>Date</th>
-                                    <th style={styles.th}>Client</th>
-                                    <th style={styles.th}>Company</th>
-                                    <th style={styles.th}>Amount</th>
-                                    <th style={styles.th}>Remarks</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {salesEntries.map((entry, idx) => (
-                                    <tr key={idx} style={styles.tableRow}>
-                                        <td style={styles.td}>
-                                            {new Date(entry.sale_date).toLocaleDateString('en-IN')}
-                                        </td>
-                                        <td style={styles.td}>{entry.client_name}</td>
-                                        <td style={styles.td}>
-                                            <span style={styles.companyBadge}>
-                                                {entry.company}
-                                            </span>
-                                        </td>
-                                        <td style={styles.td}>
-                                            <strong style={{color: '#28a745'}}>
-                                                ₹ {parseFloat(entry.amount).toLocaleString('en-IN')}
-                                            </strong>
-                                        </td>
-                                        <td style={styles.td}>
-                                            {entry.remarks || '-'}
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            )}
-
-            {/* Salary Rules */}
-            <div style={styles.rulesCard}>
-                <h4 style={styles.rulesTitle}>📋 Salary Eligibility Rules</h4>
-                {useRealTimeCalc && (
-                    <p style={styles.rulesNote}>
-                        <strong>Real-time Mode:</strong> Salary = Pro-rated Salary (based on attendance) × Achievement Percentage
-                    </p>
-                )}
-                <ul style={styles.rulesList}>
-                    <li style={styles.ruleItem}>
-                        <span style={{color: '#28a745'}}>✓</span> 100% Target = 100% Salary {useRealTimeCalc && '(of pro-rated)'}
-                    </li>
-                    <li style={styles.ruleItem}>
-                        <span style={{color: '#ffc107'}}>⚠</span> 75-99% Target = 75% Salary {useRealTimeCalc && '(of pro-rated)'}
-                    </li>
-                    <li style={styles.ruleItem}>
-                        <span style={{color: '#fd7e14'}}>⚠</span> 50-74% Target = 50% Salary {useRealTimeCalc && '(of pro-rated)'}
-                    </li>
-                    <li style={styles.ruleItem}>
-                        <span style={{color: '#dc3545'}}>✗</span> Below 25% Target = No Salary
-                    </li>
-                </ul>
+            <div style={{height:10,borderRadius:8,background:'#F1F5F9',overflow:'hidden'}}>
+                <div className="ss-bar" style={{height:'100%',borderRadius:8,width:`${Math.min(pct,100)}%`,
+                    background:`linear-gradient(90deg,${color},${color}99)`}}/>
             </div>
         </div>
     );
 }
 
-const styles = {
-    container: {
-        padding: '0',
-        fontFamily: "'Inter', 'Segoe UI', sans-serif",
-    },
-    header: {
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: '25px',
-        paddingBottom: '15px',
-        borderBottom: '2px solid #e9ecef',
-        flexWrap: 'wrap',
-        gap: '15px'
-    },
-    title: {
-        fontSize: '1.8rem',
-        fontWeight: '700',
-        color: '#2c3e50',
-        margin: 0
-    },
-    headerButtons: {
-        display: 'flex',
-        gap: '10px'
-    },
-    editButton: {
-        padding: '10px 20px',
-        backgroundColor: '#3498db',
-        color: '#fff',
-        border: 'none',
-        borderRadius: '8px',
-        fontWeight: '600',
-        cursor: 'pointer',
-        fontSize: '0.95rem',
-        transition: 'background-color 0.2s'
-    },
-    addButton: {
-        padding: '10px 20px',
-        backgroundColor: '#28a745',
-        color: '#fff',
-        border: 'none',
-        borderRadius: '8px',
-        fontWeight: '600',
-        cursor: 'pointer',
-        fontSize: '0.95rem',
-        transition: 'background-color 0.2s'
-    },
-    toggleCard: {
-        backgroundColor: '#f0f9ff',
-        border: '3px solid #3498db',
-        borderRadius: '12px',
-        padding: '20px',
-        marginBottom: '25px'
-    },
-    toggleHeader: {
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: '10px'
-    },
-    toggleTitle: {
-        fontSize: '1.2rem',
-        fontWeight: '700',
-        color: '#2c3e50',
-        margin: 0
-    },
-    toggleContainer: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '10px',
-        cursor: 'pointer'
-    },
-    toggleLabel: {
-        fontSize: '1rem',
-        fontWeight: '600',
-        color: '#3498db'
-    },
-    toggleDescription: {
-        fontSize: '0.95rem',
-        color: '#495057',
-        margin: '5px 0 0 0'
-    },
-    toggleWarning: {
-        fontSize: '0.9rem',
-        color: '#e74c3c',
-        backgroundColor: '#fee',
-        padding: '10px',
-        borderRadius: '6px',
-        marginTop: '10px',
-        marginBottom: 0
-    },
-    monthSelector: {
-        backgroundColor: '#fff3cd',
-        border: '2px solid #ffc107',
-        borderRadius: '12px',
-        padding: '20px',
-        marginBottom: '25px'
-    },
-    monthNote: {
-        fontSize: '1rem',
-        color: '#856404',
-        marginTop: '10px',
-        marginBottom: 0,
-        padding: '10px',
-        backgroundColor: '#fff',
-        borderRadius: '6px'
-    },
-    label: {
-        display: 'block',
-        fontWeight: '600',
-        color: '#495057',
-        marginBottom: '8px',
-        fontSize: '0.95rem'
-    },
-    input: {
-        width: '100%',
-        padding: '12px',
-        border: '2px solid #dee2e6',
-        borderRadius: '8px',
-        fontSize: '1rem',
-        boxSizing: 'border-box'
-    },
-    editForm: {
-        backgroundColor: '#e3f2fd',
-        border: '2px solid #2196f3',
-        padding: '25px',
-        borderRadius: '12px',
-        marginBottom: '25px'
-    },
-    salesEntryForm: {
-        backgroundColor: '#e8f5e9',
-        border: '2px solid #4caf50',
-        padding: '25px',
-        borderRadius: '12px',
-        marginBottom: '25px'
-    },
-    formTitle: {
-        fontSize: '1.2rem',
-        fontWeight: '700',
-        color: '#2c3e50',
-        marginTop: 0,
-        marginBottom: '20px'
-    },
-    formRow: {
-        display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
-        gap: '15px',
-        marginBottom: '15px'
-    },
-    formGroup: {
-        marginBottom: '15px'
-    },
-    saveButton: {
-        padding: '12px 24px',
-        backgroundColor: '#28a745',
-        color: '#fff',
-        border: 'none',
-        borderRadius: '8px',
-        fontWeight: '700',
-        cursor: 'pointer',
-        fontSize: '1rem',
-        width: '100%',
-        marginTop: '10px'
-    },
-    periodSelector: {
-        display: 'flex',
-        gap: '10px',
-        marginBottom: '20px',
-        padding: '10px',
-        backgroundColor: '#f8f9fa',
-        borderRadius: '8px'
-    },
-    periodButton: {
-        flex: 1,
-        padding: '10px',
-        border: '2px solid #dee2e6',
-        borderRadius: '6px',
-        backgroundColor: '#fff',
-        cursor: 'pointer',
-        fontWeight: '600',
-        fontSize: '0.9rem',
-        transition: 'all 0.2s'
-    },
-    periodButtonActive: {
-        backgroundColor: '#3498db',
-        color: '#fff',
-        borderColor: '#3498db'
-    },
-    comparisonCard: {
-        backgroundColor: '#f0f9ff',
-        border: '3px solid #3498db',
-        borderRadius: '12px',
-        padding: '20px',
-        marginBottom: '25px'
-    },
-    comparisonTitle: {
-        fontSize: '1.2rem',
-        fontWeight: '700',
-        color: '#2c3e50',
-        marginTop: 0,
-        marginBottom: '15px'
-    },
-    comparisonGrid: {
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-        gap: '15px'
-    },
-    comparisonItem: {
-        textAlign: 'center',
-        padding: '15px',
-        backgroundColor: '#fff',
-        borderRadius: '8px'
-    },
-    comparisonLabel: {
-        fontSize: '0.85rem',
-        color: '#6c757d',
-        marginBottom: '5px'
-    },
-    comparisonValue: {
-        fontSize: '1.3rem',
-        fontWeight: '700',
-        color: '#2c3e50'
-    },
-    statsGrid: {
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-        gap: '20px',
-        marginBottom: '25px'
-    },
-    statCard: {
-        backgroundColor: '#f8f9fa',
-        padding: '20px',
-        borderRadius: '12px',
-        border: '2px solid #e9ecef',
-        transition: 'transform 0.2s, box-shadow 0.2s'
-    },
-    statLabel: {
-        fontSize: '0.9rem',
-        color: '#6c757d',
-        fontWeight: '500',
-        marginBottom: '8px'
-    },
-    statValue: {
-        fontSize: '1.8rem',
-        fontWeight: '700',
-        color: '#2c3e50'
-    },
-    progressContainer: {
-        marginBottom: '25px'
-    },
-    progressLabel: {
-        fontSize: '1rem',
-        fontWeight: '600',
-        color: '#495057',
-        marginBottom: '10px'
-    },
-    progressBar: {
-        width: '100%',
-        height: '35px',
-        backgroundColor: '#e9ecef',
-        borderRadius: '20px',
-        overflow: 'hidden',
-        position: 'relative'
-    },
-    progressFill: {
-        height: '100%',
-        transition: 'width 0.5s ease-in-out',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderRadius: '20px'
-    },
-    progressText: {
-        color: '#fff',
-        fontWeight: '700',
-        fontSize: '0.9rem'
-    },
-    salaryCard: {
-        backgroundColor: '#fff',
-        border: '3px solid',
-        borderRadius: '12px',
-        padding: '20px',
-        marginBottom: '25px'
-    },
-    salaryCardTitle: {
-        fontSize: '1.2rem',
-        fontWeight: '700',
-        color: '#2c3e50',
-        marginTop: 0,
-        marginBottom: '15px'
-    },
-    salaryRow: {
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: '10px 0'
-    },
-    salaryLabel: {
-        fontSize: '1rem',
-        color: '#6c757d',
-        fontWeight: '500'
-    },
-    salaryValue: {
-        fontSize: '1.1rem',
-        color: '#2c3e50',
-        fontWeight: '600'
-    },
-    salaryStatus: {
-        fontSize: '1.3rem',
-        fontWeight: '700'
-    },
-    chartContainer: {
-        backgroundColor: '#fff',
-        border: '2px solid #e9ecef',
-        borderRadius: '12px',
-        padding: '20px',
-        marginBottom: '25px'
-    },
-    chartTitle: {
-        fontSize: '1.1rem',
-        fontWeight: '700',
-        color: '#2c3e50',
-        marginTop: 0,
-        marginBottom: '15px'
-    },
-    barChart: {
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '15px'
-    },
-    barWrapper: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '15px'
-    },
-    barLabel: {
-        minWidth: '70px',
-        fontWeight: '600',
-        fontSize: '0.9rem',
-        color: '#495057'
-    },
-    barOuter: {
-        flex: 1,
-        height: '40px',
-        backgroundColor: '#f8f9fa',
-        borderRadius: '8px',
-        overflow: 'hidden',
-        border: '1px solid #dee2e6'
-    },
-    barInner: {
-        height: '100%',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: '#fff',
-        fontWeight: '600',
-        fontSize: '0.85rem',
-        transition: 'width 0.5s ease-in-out',
-        minWidth: '80px'
-    },
-    breakdownCard: {
-        backgroundColor: '#fff',
-        border: '2px solid #e9ecef',
-        borderRadius: '12px',
-        padding: '20px',
-        marginBottom: '25px'
-    },
-    breakdownItem: {
-        marginBottom: '15px'
-    },
-    breakdownHeader: {
-        display: 'flex',
-        justifyContent: 'space-between',
-        marginBottom: '8px'
-    },
-    breakdownCompany: {
-        fontWeight: '600',
-        color: '#2c3e50'
-    },
-    breakdownValue: {
-        fontWeight: '600',
-        color: '#495057'
-    },
-    breakdownBar: {
-        width: '100%',
-        height: '25px',
-        backgroundColor: '#f8f9fa',
-        borderRadius: '12px',
-        overflow: 'hidden',
-        border: '1px solid #dee2e6'
-    },
-    breakdownBarFill: {
-        height: '100%',
-        backgroundColor: '#3498db',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: '#fff',
-        fontSize: '0.8rem',
-        fontWeight: '600',
-        transition: 'width 0.5s ease-in-out'
-    },
-    entriesSection: {
-        marginBottom: '25px'
-    },
-    entriesTitle: {
-        fontSize: '1.2rem',
-        fontWeight: '700',
-        color: '#2c3e50',
-        marginBottom: '15px',
-        marginTop: 0
-    },
-    entriesTable: {
-        overflowX: 'auto',
-        border: '2px solid #e9ecef',
-        borderRadius: '12px'
-    },
-    table: {
-        width: '100%',
-        borderCollapse: 'collapse',
-        backgroundColor: '#fff'
-    },
-    tableHeader: {
-        backgroundColor: '#f8f9fa',
-        borderBottom: '2px solid #e9ecef'
-    },
-    th: {
-        padding: '12px',
-        textAlign: 'left',
-        fontWeight: '600',
-        color: '#495057',
-        fontSize: '0.85rem',
-        textTransform: 'uppercase'
-    },
-    tableRow: {
-        borderBottom: '1px solid #e9ecef'
-    },
-    td: {
-        padding: '12px',
-        fontSize: '0.9rem',
-        color: '#495057'
-    },
-    companyBadge: {
-        padding: '4px 10px',
-        borderRadius: '12px',
-        backgroundColor: '#e3f2fd',
-        color: '#1976d2',
-        fontWeight: '600',
-        fontSize: '0.8rem',
-        display: 'inline-block'
-    },
-    rulesCard: {
-        backgroundColor: '#fff3cd',
-        padding: '20px',
-        borderRadius: '12px',
-        border: '2px solid #ffc107'
-    },
-    rulesTitle: {
-        fontSize: '1.1rem',
-        fontWeight: '700',
-        color: '#2c3e50',
-        marginBottom: '15px',
-        marginTop: 0
-    },
-    rulesNote: {
-        fontSize: '0.9rem',
-        color: '#856404',
-        backgroundColor: '#fff',
-        padding: '10px',
-        borderRadius: '6px',
-        marginBottom: '15px'
-    },
-    rulesList: {
-        listStyle: 'none',
-        padding: 0,
-        margin: 0
-    },
-    ruleItem: {
-        padding: '8px 0',
-        fontSize: '0.95rem',
-        color: '#495057',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '10px'
-    },
-    loading: {
-        textAlign: 'center',
-        padding: '40px',
-        fontSize: '1.1rem',
-        color: '#6c757d'
-    }
-};
+/* ─── Monthly History (real-time, from salesEntries only) ──────────────── */
+function MonthlyHistory({salesEntries, target}){
+    const [selected, setSelected] = useState(null);
 
-export default SalesStats;
+    const buildData = () => {
+        const map = {};
+        salesEntries.forEach(e=>{
+            const d   = new Date(e.sale_date);
+            const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+            if(!map[key]) map[key]={total:0,count:0,entries:[]};
+            map[key].total   += parseFloat(e.amount||0);
+            map[key].count   += 1;
+            map[key].entries.push(e);
+        });
+        const cur = TODAY_MONTH();
+        if(!map[cur]) map[cur]={total:0,count:0,entries:[]};
+        return Object.entries(map)
+            .sort(([a],[b])=>a.localeCompare(b))
+            .map(([month,d],idx,arr)=>{
+                const prev   = idx>0 ? arr[idx-1][1].total : null;
+                const growth = prev!==null && prev>0 ? ((d.total-prev)/prev*100) : null;
+                const pct    = target>0 ? (d.total/target)*100 : 0;
+                return {month,...d,growth,pct,tier:getTier(pct)};
+            });
+    };
+
+    const data    = buildData();
+    if(!data.length) return null;
+    const maxVal  = Math.max(...data.map(d=>d.total),1);
+    const cur     = TODAY_MONTH();
+    const selData = selected ? data.find(d=>d.month===selected) : null;
+    const best    = [...data].sort((a,b)=>b.total-a.total)[0];
+
+    return(
+        <div>
+            {/* Summary strip */}
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(135px,1fr))',gap:12,marginBottom:18}}>
+                {[
+                    {label:'Months Tracked', val:data.length,                                 color:'#3B82F6'},
+                    {label:'All-time Total',  val:SHORT(data.reduce((s,d)=>s+d.total,0)),      color:'#10B981'},
+                    {label:'Best Month',      val:MONTH_LABEL(best.month),                     color:'#F59E0B'},
+                    {label:'Best Month Sales',val:SHORT(best.total),                           color:'#8B5CF6'},
+                ].map((item,i)=>(
+                    <div key={i} style={{background:'#F8FAFF',borderRadius:12,padding:'12px 14px',border:'1px solid #E8EEFF',textAlign:'center'}}>
+                        <p style={{...MICRO,margin:'0 0 4px'}}>{item.label}</p>
+                        <p style={{margin:0,fontSize:'1.15rem',fontWeight:800,color:item.color}}>{item.val}</p>
+                    </div>
+                ))}
+            </div>
+
+            {/* Bar chart */}
+            <div style={{background:'#FAFBFF',borderRadius:14,padding:'20px 16px 12px',border:'1px solid #E8EEFF',marginBottom:16,overflowX:'auto'}}>
+                <p style={{...MICRO,margin:'0 0 16px',color:'#64748B'}}>Monthly Sales vs Target — click any bar to drill in</p>
+                <div style={{display:'flex',gap:6,alignItems:'flex-end',minHeight:160,minWidth:Math.max(data.length*52,300)}}>
+                    {data.map((d)=>{
+                        const barH = Math.max((d.total/maxVal)*130, d.total>0?6:2);
+                        const isSel = selected===d.month;
+                        const isCur = d.month===cur;
+                        const clr   = isSel ? '#1D4ED8' : isCur ? '#3B82F6' : d.tier.color;
+                        return(
+                            <div key={d.month} className="ss-mcol"
+                                onClick={()=>setSelected(isSel?null:d.month)}
+                                style={{flex:'1 0 44px',display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
+                                {/* Growth arrow */}
+                                <div style={{fontSize:'0.63rem',fontWeight:700,minHeight:16,
+                                    color:d.growth===null?'transparent':d.growth>=0?'#10B981':'#EF4444'}}>
+                                    {d.growth!==null?(d.growth>=0?`▲${d.growth.toFixed(0)}%`:`▼${Math.abs(d.growth).toFixed(0)}%`):''}
+                                </div>
+                                {/* Bar */}
+                                <div className="ss-mbar ss-barH" style={{
+                                    width:'100%',height:barH,borderRadius:'6px 6px 0 0',
+                                    background:clr,transition:'background .18s',
+                                    border:isSel?'2px solid #1D4ED8':'2px solid transparent',
+                                    position:'relative',
+                                }}>
+                                    {d.count>0&&(
+                                        <span style={{position:'absolute',top:-18,left:'50%',transform:'translateX(-50%)',
+                                            fontSize:'0.58rem',fontWeight:700,color:'#64748B',whiteSpace:'nowrap'}}>
+                                            {SHORT(d.total)}
+                                        </span>
+                                    )}
+                                </div>
+                                {/* Target hit indicator */}
+                                <div style={{width:'100%',height:2,background:d.pct>=100?'#10B98166':'#E2E8F0',borderRadius:1}}/>
+                                {/* Label */}
+                                <span style={{fontSize:'0.63rem',fontWeight:isCur?800:600,
+                                    color:isCur?'#2563EB':'#94A3B8',textAlign:'center',lineHeight:1.2}}>
+                                    {MONTH_LABEL(d.month)}
+                                    {isCur&&<span style={{display:'block',fontSize:'0.53rem',color:'#3B82F6'}}>NOW</span>}
+                                </span>
+                            </div>
+                        );
+                    })}
+                </div>
+                {target>0&&(
+                    <p style={{margin:'8px 0 0',fontSize:'0.72rem',color:'#94A3B8',textAlign:'right'}}>
+                        Monthly target: <strong style={{color:'#3B82F6'}}>{SHORT(target)}</strong>
+                    </p>
+                )}
+            </div>
+
+            {/* Drill-down panel */}
+            {selData&&(
+                <div className="ss-fade" style={{...CARD,background:'linear-gradient(135deg,#EFF6FF,#F8FAFF)',
+                    border:`2px solid ${selData.tier.color}44`,marginBottom:16}}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:10,marginBottom:14}}>
+                        <div>
+                            <p style={{...MICRO,margin:'0 0 3px'}}>Month Drill-down</p>
+                            <p style={{margin:0,fontWeight:800,fontSize:'1.05rem',color:'#0F172A'}}>{MONTH_FULL(selData.month)}</p>
+                        </div>
+                        <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+                            <span style={{padding:'4px 12px',borderRadius:99,background:selData.tier.bg,
+                                color:selData.tier.text,fontWeight:700,fontSize:'0.77rem'}}>{selData.tier.label}</span>
+                            {selData.month===cur&&(
+                                <span style={{padding:'4px 10px',borderRadius:99,background:'#DBEAFE',
+                                    color:'#1D4ED8',fontWeight:700,fontSize:'0.72rem'}}>🔴 Live</span>
+                            )}
+                            <button onClick={()=>setSelected(null)} style={{padding:'4px 10px',border:'1px solid #CBD5E1',
+                                borderRadius:8,background:'#fff',color:'#64748B',cursor:'pointer',
+                                fontSize:'0.78rem',fontFamily:'Sora,sans-serif',fontWeight:600}}>✕ Close</button>
+                        </div>
+                    </div>
+                    {/* Stats mini cards */}
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(120px,1fr))',gap:10,marginBottom:14}}>
+                        {[
+                            {label:'Total Sales', val:SHORT(selData.total),                                    color:'#10B981'},
+                            {label:'Deals',       val:selData.count||'0',                                      color:'#3B82F6'},
+                            {label:'Avg/Deal',    val:selData.count?SHORT(selData.total/selData.count):'₹0',   color:'#8B5CF6'},
+                            {label:'vs Target',   val:`${selData.pct.toFixed(1)}%`,                            color:selData.tier.color},
+                            ...(selData.growth!==null?[{
+                                label:'vs Prev Month',
+                                val:selData.growth>=0?`+${selData.growth.toFixed(1)}%`:`${selData.growth.toFixed(1)}%`,
+                                color:selData.growth>=0?'#10B981':'#EF4444',
+                            }]:[]),
+                        ].map((item,i)=>(
+                            <div key={i} style={{background:'#fff',borderRadius:10,padding:'10px 12px',
+                                border:'1px solid #E8EEFF',textAlign:'center'}}>
+                                <p style={{...MICRO,margin:'0 0 3px'}}>{item.label}</p>
+                                <p style={{margin:0,fontSize:'1.05rem',fontWeight:800,color:item.color}}>{item.val}</p>
+                            </div>
+                        ))}
+                    </div>
+                    {/* Progress */}
+                    <div style={{marginBottom:14}}>
+                        <div style={{display:'flex',justifyContent:'space-between',marginBottom:5}}>
+                            <span style={{fontWeight:600,fontSize:'0.82rem',color:'#334155'}}>Achievement vs Target</span>
+                            <span style={{fontWeight:700,fontSize:'0.82rem',color:selData.tier.color}}>{selData.pct.toFixed(1)}%</span>
+                        </div>
+                        <div style={{height:10,borderRadius:99,background:'#F1F5F9',overflow:'hidden'}}>
+                            <div style={{height:'100%',borderRadius:99,width:`${Math.min(selData.pct,100)}%`,
+                                background:`linear-gradient(90deg,${selData.tier.color},${selData.tier.color}88)`,
+                                transition:'width .6s ease'}}/>
+                        </div>
+                    </div>
+                    {/* Transactions */}
+                    {selData.entries.length>0?(
+                        <div style={{overflowX:'auto',border:'1px solid #E8EEFF',borderRadius:10}}>
+                            <table style={{width:'100%',borderCollapse:'collapse'}}>
+                                <thead><tr style={{background:'#F8FAFF'}}>
+                                    {['Date','Client','Category','Amount','Remarks'].map(h=>(
+                                        <th key={h} style={{padding:'9px 12px',textAlign:'left',fontSize:'0.65rem',
+                                            fontWeight:700,letterSpacing:'.09em',textTransform:'uppercase',
+                                            color:'#94A3B8',whiteSpace:'nowrap'}}>{h}</th>
+                                    ))}
+                                </tr></thead>
+                                <tbody>
+                                    {[...selData.entries].sort((a,b)=>new Date(b.sale_date)-new Date(a.sale_date)).map((e,i)=>(
+                                        <tr key={i} className="ss-row">
+                                            <td style={{padding:'10px 12px',fontSize:'0.83rem',color:'#334155',borderTop:'1px solid #F1F5F9'}}>
+                                                {new Date(e.sale_date).toLocaleDateString('en-IN')}
+                                            </td>
+                                            <td style={{padding:'10px 12px',fontSize:'0.83rem',fontWeight:600,color:'#1E293B',borderTop:'1px solid #F1F5F9'}}>
+                                                {e.client_name}
+                                            </td>
+                                            <td style={{padding:'10px 12px',borderTop:'1px solid #F1F5F9'}}>
+                                                <span style={{padding:'2px 9px',borderRadius:99,background:'#EFF6FF',
+                                                    color:'#2563EB',fontWeight:700,fontSize:'0.72rem'}}>{e.company}</span>
+                                            </td>
+                                            <td style={{padding:'10px 12px',fontSize:'0.87rem',fontWeight:800,color:'#10B981',borderTop:'1px solid #F1F5F9'}}>
+                                                ₹{INR(e.amount)}
+                                            </td>
+                                            <td style={{padding:'10px 12px',fontSize:'0.8rem',color:'#94A3B8',borderTop:'1px solid #F1F5F9'}}>
+                                                {e.remarks||'—'}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    ):(
+                        <div style={{textAlign:'center',padding:'24px',color:'#94A3B8',fontSize:'0.85rem'}}>
+                            No sales recorded for {MONTH_FULL(selData.month)} yet.
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Month-by-month summary table */}
+            <div style={{overflowX:'auto',border:'1px solid #E8EEFF',borderRadius:12}}>
+                <table style={{width:'100%',borderCollapse:'collapse',minWidth:480}}>
+                    <thead><tr style={{background:'#F8FAFF'}}>
+                        {['Month','Total Sales','Deals','Avg/Deal','vs Target','Growth','Status'].map(h=>(
+                            <th key={h} style={{padding:'10px 14px',textAlign:'left',fontSize:'0.65rem',
+                                fontWeight:700,letterSpacing:'.09em',textTransform:'uppercase',
+                                color:'#94A3B8',whiteSpace:'nowrap'}}>{h}</th>
+                        ))}
+                    </tr></thead>
+                    <tbody>
+                        {[...data].reverse().map((d)=>{
+                            const isCur = d.month===cur;
+                            const isSel = selected===d.month;
+                            return(
+                                <tr key={d.month} className="ss-row ss-htab"
+                                    onClick={()=>setSelected(isSel?null:d.month)}
+                                    style={{background:isSel?'#EFF6FF':isCur?'#F0FDF4':'#fff'}}>
+                                    <td style={{padding:'11px 14px',borderTop:'1px solid #F1F5F9'}}>
+                                        <span style={{fontWeight:700,fontSize:'0.88rem',color:'#1E293B'}}>{MONTH_FULL(d.month)}</span>
+                                        {isCur&&<span style={{marginLeft:6,padding:'1px 7px',borderRadius:99,
+                                            background:'#DBEAFE',color:'#1D4ED8',fontWeight:700,fontSize:'0.63rem'}}>LIVE</span>}
+                                    </td>
+                                    <td style={{padding:'11px 14px',borderTop:'1px solid #F1F5F9',fontWeight:800,color:'#10B981',fontSize:'0.9rem'}}>
+                                        {d.total>0?`₹${INR(d.total)}`:<span style={{color:'#CBD5E1'}}>—</span>}
+                                    </td>
+                                    <td style={{padding:'11px 14px',borderTop:'1px solid #F1F5F9',color:'#334155',fontWeight:600,fontSize:'0.88rem'}}>
+                                        {d.count||<span style={{color:'#CBD5E1'}}>0</span>}
+                                    </td>
+                                    <td style={{padding:'11px 14px',borderTop:'1px solid #F1F5F9',color:'#64748B',fontSize:'0.85rem'}}>
+                                        {d.count?SHORT(d.total/d.count):<span style={{color:'#CBD5E1'}}>—</span>}
+                                    </td>
+                                    <td style={{padding:'11px 14px',borderTop:'1px solid #F1F5F9'}}>
+                                        <div style={{display:'flex',alignItems:'center',gap:6}}>
+                                            <div style={{width:56,height:7,borderRadius:99,background:'#F1F5F9',overflow:'hidden'}}>
+                                                <div style={{height:'100%',borderRadius:99,width:`${Math.min(d.pct,100)}%`,background:d.tier.color}}/>
+                                            </div>
+                                            <span style={{fontSize:'0.8rem',fontWeight:700,color:d.tier.color}}>{d.pct.toFixed(0)}%</span>
+                                        </div>
+                                    </td>
+                                    <td style={{padding:'11px 14px',borderTop:'1px solid #F1F5F9'}}>
+                                        {d.growth===null?(
+                                            <span style={{color:'#CBD5E1',fontSize:'0.8rem'}}>—</span>
+                                        ):(
+                                            <span style={{fontWeight:700,fontSize:'0.83rem',color:d.growth>=0?'#10B981':'#EF4444'}}>
+                                                {d.growth>=0?'▲':'▼'} {Math.abs(d.growth).toFixed(1)}%
+                                            </span>
+                                        )}
+                                    </td>
+                                    <td style={{padding:'11px 14px',borderTop:'1px solid #F1F5F9'}}>
+                                        <span style={{padding:'3px 10px',borderRadius:99,background:d.tier.bg,
+                                            color:d.tier.text,fontWeight:700,fontSize:'0.72rem',whiteSpace:'nowrap'}}>
+                                            {d.tier.label.replace(' Eligible','')}
+                                        </span>
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   MAIN COMPONENT — real-time mode only (no toggle)
+═══════════════════════════════════════════════════════════════════════ */
+export default function SalesStats({ employeeEmail, employeeSalary, isChairman = false }) {
+    const [stats, setStats]                 = useState(null);
+    const [salesEntries, setSalesEntries]   = useState([]);
+    const [loading, setLoading]             = useState(true);
+    const [editMode, setEditMode]           = useState(false);
+    const [targetAmount, setTargetAmount]   = useState('');
+    const [showEntryForm, setShowEntryForm] = useState(false);
+    const [saleAmount, setSaleAmount]       = useState('');
+    const [saleCompany, setSaleCompany]     = useState('');
+    const [clientName, setClientName]       = useState('');
+    const [saleDate, setSaleDate]           = useState(new Date().toISOString().split('T')[0]);
+    const [remarks, setRemarks]             = useState('');
+    const [viewPeriod, setViewPeriod]       = useState('current');
+    const [attendance, setAttendance]       = useState(null);
+    const [currentMonth, setCurrentMonth]   = useState(TODAY_MONTH());
+
+    // Always real-time: re-compute current_sales from entries when month changes
+    useEffect(()=>{
+        if(employeeEmail){ fetchStats(); fetchEntries(); fetchAttendance(employeeEmail, currentMonth); }
+        // eslint-disable-next-line
+    },[employeeEmail]);
+
+    useEffect(()=>{
+        if(employeeEmail && salesEntries.length>0){
+            setStats(p=>({...p, current_sales: calcMonthSales(salesEntries, currentMonth)}));
+        }
+        // eslint-disable-next-line
+    },[currentMonth, salesEntries]);
+
+    const calcMonthSales = (entries, month) => {
+        const [y,m] = month.split('-');
+        return entries
+            .filter(e=>{ const d=new Date(e.sale_date); return d.getFullYear()===+y&&(d.getMonth()+1)===+m; })
+            .reduce((s,e)=>s+parseFloat(e.amount||0), 0);
+    };
+
+    const fetchStats = async()=>{
+        try{
+            const r = await axios.get(`${baseUrl}/sales-stats/${employeeEmail}`,{withCredentials:true});
+            setStats(r.data); setTargetAmount(r.data.target||'');
+        }catch{ setStats({target:0,current_sales:0}); }
+        finally{ setLoading(false); }
+    };
+    const fetchEntries = async()=>{
+        try{ const r=await axios.get(`${baseUrl}/sales-entries/${employeeEmail}`,{withCredentials:true}); setSalesEntries(r.data); }
+        catch{}
+    };
+    const fetchAttendance = async(email,month)=>{
+        try{ const r=await axios.post(`${baseUrl}/get-attendance-summary`,{email,month},{withCredentials:true}); setAttendance(r.data); }
+        catch{ setAttendance(null); }
+    };
+
+    const handleSaveTarget = async()=>{
+        if(!targetAmount) return alert('Please enter target amount');
+        try{
+            await axios.post(`${baseUrl}/update-sales-target`,
+                new URLSearchParams({employee_email:employeeEmail,target:targetAmount}),{withCredentials:true});
+            alert('✅ Target updated'); fetchStats(); setEditMode(false);
+        }catch(err){ alert('❌ '+(err.response?.data?.error||err.message)); }
+    };
+    const handleAddEntry = async()=>{
+        if(!saleAmount||!saleCompany||!clientName||!saleDate) return alert('Please fill all required fields');
+        try{
+            await axios.post(`${baseUrl}/add-sales-entry`,
+                new URLSearchParams({employee_email:employeeEmail,amount:saleAmount,company:saleCompany,
+                    client_name:clientName,sale_date:saleDate,remarks:remarks||''}),{withCredentials:true});
+            alert('✅ Entry added');
+            setSaleAmount(''); setSaleCompany(''); setClientName(''); setRemarks('');
+            setSaleDate(new Date().toISOString().split('T')[0]); setShowEntryForm(false);
+            fetchStats(); fetchEntries();
+        }catch(err){ alert('❌ '+(err.response?.data?.error||err.message)); }
+    };
+
+    if(loading) return(
+        <div style={{display:'flex',alignItems:'center',justifyContent:'center',padding:80,
+            fontFamily:'Sora,sans-serif',color:'#94A3B8',gap:10}}>
+            <div style={{width:24,height:24,border:'3px solid #E2E8F0',borderTopColor:'#3B82F6',
+                borderRadius:'50%',animation:'spin 1s linear infinite'}}/>
+            Loading performance data…
+        </div>
+    );
+
+    /* ── Computed values ── */
+    const target    = parseFloat(stats?.target||0);
+    const current   = parseFloat(stats?.current_sales||0);
+    const base      = parseFloat(employeeSalary||0);
+
+    // Real-time salary calc: uses attendance when available, falls back to simple
+    const salaryCalc = (() => {
+        const hasMeta = attendance && attendance.totalDays > 0;
+        const totalDays = hasMeta ? (attendance.totalDays||0) : 0;
+        const workDays  = hasMeta ? (parseFloat(attendance.workDays)||0) : 0;
+        const prorated  = hasMeta ? (base/totalDays)*workDays : base;
+        const p = target>0 ? (current/target)*100 : 0;
+        let sp=0;
+        if(p>=100)sp=100; else if(p>=75)sp=75; else if(p>=50)sp=50; else if(p>=25)sp=25;
+        return {
+            percentage: p.toFixed(1),
+            salaryPercentage: sp,
+            payable: (prorated*sp/100).toFixed(2),
+            proratedSalary: hasMeta ? prorated.toFixed(2) : null,
+            attendanceData: hasMeta ? {totalDays,sundays:attendance.sundays||0,workDays:workDays.toFixed(2)} : null,
+        };
+    })();
+
+    const pct       = parseFloat(salaryCalc.percentage);
+    const remaining = Math.max(0, target-current);
+    const tier      = getTier(pct);
+
+    const getCompData = ()=>{
+        if(!salesEntries.length) return null;
+        const now=new Date(); let data=[];
+        if(viewPeriod==='10days'){ const ago=new Date(now-10*864e5); data=salesEntries.filter(e=>new Date(e.sale_date)>=ago); }
+        else if(viewPeriod==='month'){ const som=new Date(now.getFullYear(),now.getMonth(),1); data=salesEntries.filter(e=>new Date(e.sale_date)>=som); }
+        if(!data.length) return null;
+        const total=data.reduce((s,e)=>s+parseFloat(e.amount||0),0);
+        return{totalSales:total,count:data.length,avgSale:total/data.length,
+            period:viewPeriod==='10days'?'Last 10 Days':'This Month'};
+    };
+    const cmpData = getCompData();
+
+    const byCompany = salesEntries.reduce((acc,e)=>{
+        const c=e.company||'Other'; if(!acc[c]) acc[c]={total:0,count:0};
+        acc[c].total+=parseFloat(e.amount||0); acc[c].count+=1; return acc;
+    },{});
+
+    return(
+        <div className="ss-wrap" style={{background:'linear-gradient(145deg,#F0F4FF,#F8FAFF)',minHeight:'100vh',padding:'28px 22px 56px'}}>
+
+            {/* ── HEADER ── */}
+            <div className="ss-anim" style={{marginBottom:28,display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:16}}>
+                <div>
+                    <p style={{...MICRO,color:'#3B82F6',margin:'0 0 5px'}}>VJC Overseas · Sales Intelligence</p>
+                    <h1 style={{margin:0,fontSize:'clamp(1.45rem,3vw,1.9rem)',fontWeight:800,color:'#0F172A',lineHeight:1.15}}>
+                        Sales Performance Dashboard
+                    </h1>
+                    <p style={{margin:'5px 0 0',fontSize:'0.88rem',color:'#64748B',fontFamily:'Lora,serif',fontStyle:'italic'}}>
+                        {isChairman?'👑 Chairman View — complete employee visibility':`Viewing: ${employeeEmail}`}
+                    </p>
+                </div>
+                <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
+                    {/* Real-time badge — always on */}
+                    <span style={{padding:'7px 14px',borderRadius:99,background:'#DBEAFE',color:'#1D4ED8',
+                        fontWeight:700,fontSize:'0.78rem',display:'flex',alignItems:'center',gap:6}}>
+                        <span style={{width:7,height:7,borderRadius:'50%',background:'#EF4444',display:'inline-block',
+                            animation:'pulse 1.5s ease-in-out infinite',boxShadow:'0 0 0 0 #EF444466'}}/>
+                        Real-time Mode
+                    </span>
+                    {isChairman&&(
+                        <button className="ss-btn" onClick={()=>setEditMode(v=>!v)} style={{
+                            padding:'10px 20px',background:editMode?'#F1F5F9':'#3B82F6',color:editMode?'#475569':'#fff',
+                            border:editMode?'2px solid #CBD5E1':'none',borderRadius:10,fontWeight:700,
+                            cursor:'pointer',fontSize:'0.85rem',fontFamily:'Sora,sans-serif',
+                        }}>{editMode?'✕ Cancel':'✏️ Edit Target'}</button>
+                    )}
+                    {!isChairman&&(
+                        <button className="ss-btn" onClick={()=>setShowEntryForm(v=>!v)} style={{
+                            padding:'10px 20px',background:showEntryForm?'#F1F5F9':'#10B981',color:showEntryForm?'#475569':'#fff',
+                            border:showEntryForm?'2px solid #CBD5E1':'none',borderRadius:10,fontWeight:700,
+                            cursor:'pointer',fontSize:'0.85rem',fontFamily:'Sora,sans-serif',
+                        }}>{showEntryForm?'✕ Cancel':'＋ Add Sale'}</button>
+                    )}
+                </div>
+            </div>
+
+            {/* ── MONTH SELECTOR (always visible) ── */}
+            <div className="ss-anim" style={{...CARD,background:'linear-gradient(135deg,#FFFBEB,#FFF7ED)',
+                border:'1.5px solid #FDE68A',animationDelay:'.04s',display:'flex',flexWrap:'wrap',
+                alignItems:'center',gap:20}}>
+                <div style={{flex:1,minWidth:200}}>
+                    <p style={{margin:'0 0 8px',fontWeight:700,fontSize:'0.85rem',color:'#92400E'}}>
+                        📅 Viewing Month
+                    </p>
+                    <input type="month" value={currentMonth} className="ss-inp"
+                        style={{...INPUT_S,maxWidth:220,background:'#FFFBEB',borderColor:'#FDE68A'}}
+                        onChange={async e=>{
+                            setCurrentMonth(e.target.value);
+                            await fetchAttendance(employeeEmail, e.target.value);
+                        }}/>
+                </div>
+                <div style={{textAlign:'right'}}>
+                    <p style={{...MICRO,margin:'0 0 4px',color:'#B45309'}}>Sales This Month</p>
+                    <p style={{margin:0,fontSize:'1.6rem',fontWeight:800,color:'#92400E'}}>
+                        {SHORT(current)}
+                    </p>
+                    <p style={{margin:'2px 0 0',fontSize:'0.78rem',color:'#B45309'}}>₹{INR(current)}</p>
+                </div>
+            </div>
+
+            {!attendance&&(
+                <div className="ss-fade" style={{...CARD,background:'#FEF2F2',border:'1.5px solid #FECACA',
+                    padding:'14px 20px',marginTop:-10,animationDelay:'.06s'}}>
+                    <p style={{margin:0,fontSize:'0.82rem',color:'#DC2626',fontWeight:600}}>
+                        ⚠️ No attendance summary found for {MONTH_FULL(currentMonth)} —
+                        salary calculation will use base salary only until attendance is generated.
+                    </p>
+                </div>
+            )}
+
+            {/* ── EDIT TARGET ── */}
+            {editMode&&isChairman&&(
+                <div className="ss-anim ss-fade" style={{...CARD,background:'linear-gradient(135deg,#EFF6FF,#F8FAFF)',
+                    border:'1.5px solid #BFDBFE',animationDelay:'.04s'}}>
+                    <p style={{margin:'0 0 14px',fontWeight:700,fontSize:'0.95rem',color:'#1E3A5F'}}>📌 Set Monthly Sales Target</p>
+                    <label style={FLABEL}>Monthly Target Amount (₹)</label>
+                    <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
+                        <input type="number" value={targetAmount} onChange={e=>setTargetAmount(e.target.value)}
+                            className="ss-inp" style={{...INPUT_S,maxWidth:260}} placeholder="e.g. 100000"/>
+                        <button className="ss-btn" onClick={handleSaveTarget} style={{
+                            padding:'11px 22px',background:'#3B82F6',color:'#fff',border:'none',
+                            borderRadius:10,fontWeight:700,cursor:'pointer',fontFamily:'Sora,sans-serif',
+                        }}>💾 Save Target</button>
+                    </div>
+                </div>
+            )}
+
+            {/* ── ADD SALE FORM ── */}
+            {showEntryForm&&!isChairman&&(
+                <div className="ss-anim ss-fade" style={{...CARD,background:'linear-gradient(135deg,#F0FDF4,#ECFDF5)',
+                    border:'1.5px solid #A7F3D0',animationDelay:'.04s'}}>
+                    <p style={{margin:'0 0 16px',fontWeight:700,fontSize:'0.95rem',color:'#064E3B'}}>＋ New Sales Entry</p>
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:14,marginBottom:14}}>
+                        {[
+                            {label:'Sale Amount (₹) *',type:'number',val:saleAmount,set:setSaleAmount,ph:'e.g. 50000'},
+                            {label:'Client Name *',    type:'text',  val:clientName, set:setClientName, ph:'Client name'},
+                            {label:'Sale Date *',      type:'date',  val:saleDate,   set:setSaleDate},
+                        ].map((f,i)=>(
+                            <div key={i}>
+                                <label style={FLABEL}>{f.label}</label>
+                                <input type={f.type} value={f.val} onChange={e=>f.set(e.target.value)}
+                                    className="ss-inp" style={INPUT_S} placeholder={f.ph||''}/>
+                            </div>
+                        ))}
+                        <div>
+                            <label style={FLABEL}>Company / Service *</label>
+                            <select value={saleCompany} onChange={e=>setSaleCompany(e.target.value)} className="ss-inp" style={INPUT_S}>
+                                <option value="">— Select —</option>
+                                {['JSS','PR','Study','Work Visa','Tourist Visa','Other'].map(o=><option key={o} value={o}>{o}</option>)}
+                            </select>
+                        </div>
+                    </div>
+                    <div style={{marginBottom:14}}>
+                        <label style={FLABEL}>Remarks (optional)</label>
+                        <textarea value={remarks} onChange={e=>setRemarks(e.target.value)}
+                            className="ss-inp" style={{...INPUT_S,minHeight:65,resize:'vertical'}} placeholder="Additional notes…"/>
+                    </div>
+                    <button className="ss-btn" onClick={handleAddEntry} style={{
+                        width:'100%',padding:'12px',background:'#10B981',color:'#fff',border:'none',
+                        borderRadius:10,fontWeight:700,cursor:'pointer',fontSize:'0.9rem',fontFamily:'Sora,sans-serif',
+                    }}>💾 Save Sales Entry</button>
+                </div>
+            )}
+
+            {/* ── KPI CARDS ── */}
+            <Divider>This Month's Key Metrics</Divider>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(175px,1fr))',gap:14,marginBottom:18}}>
+                {[
+                    {label:'Monthly Target', big:SHORT(target),    sub:`₹${INR(target)}`,   accent:'#3B82F6',icon:'🎯',delay:'.06s'},
+                    {label:'Sales Achieved', big:SHORT(current),   sub:`₹${INR(current)}`,  accent:'#10B981',icon:'💰',delay:'.1s'},
+                    {label:'Remaining Gap',  big:SHORT(remaining), sub:remaining===0?'🎉 Target Met!':`₹${INR(remaining)} to go`,
+                        accent:remaining===0?'#10B981':'#EF4444',icon:'📉',delay:'.14s'},
+                    {label:'Achievement',    big:`${Math.round(pct)}%`,sub:tier.label,      accent:tier.color,icon:'🏆',delay:'.18s'},
+                ].map((k,i)=>(
+                    <div key={i} className="ss-kpi ss-anim" style={{...CARD,borderTop:`3px solid ${k.accent}`,margin:0,animationDelay:k.delay}}>
+                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                            <div>
+                                <p style={{...MICRO,margin:'0 0 6px'}}>{k.label}</p>
+                                <p style={{margin:'0 0 4px',fontSize:'1.65rem',fontWeight:800,color:k.accent,lineHeight:1}}>{k.big}</p>
+                                <p style={{margin:0,fontSize:'0.78rem',color:'#64748B'}}>{k.sub}</p>
+                            </div>
+                            <span style={{fontSize:'1.5rem'}}>{k.icon}</span>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {/* ── PROGRESS RING ── */}
+            <div className="ss-anim" style={{...CARD,display:'flex',gap:26,flexWrap:'wrap',alignItems:'center',
+                borderLeft:`4px solid ${tier.color}`,animationDelay:'.22s'}}>
+                <RingGauge pct={pct} color={tier.color} size={130}/>
+                <div style={{flex:1,minWidth:200}}>
+                    <div style={{display:'flex',justifyContent:'space-between',marginBottom:7}}>
+                        <span style={{fontWeight:700,fontSize:'0.88rem',color:'#334155'}}>Progress to Monthly Target</span>
+                        <span style={{fontWeight:800,fontSize:'0.88rem',color:tier.color}}>{Math.round(pct)}%</span>
+                    </div>
+                    <div style={{height:13,borderRadius:99,background:'#F1F5F9',overflow:'hidden',marginBottom:14}}>
+                        <div className="ss-bar" style={{height:'100%',borderRadius:99,width:`${Math.min(pct,100)}%`,
+                            background:`linear-gradient(90deg,${tier.color},${tier.color}99)`}}/>
+                    </div>
+                    <div style={{display:'flex',gap:8,marginBottom:14}}>
+                        {[25,50,75,100].map(m=>(
+                            <div key={m} style={{flex:1,textAlign:'center',padding:'6px 4px',borderRadius:8,
+                                background:pct>=m?tier.bg:'#F8FAFF',border:`1px solid ${pct>=m?tier.color+'44':'#E2E8F0'}`}}>
+                                <p style={{margin:0,fontSize:'0.68rem',fontWeight:700,color:pct>=m?tier.color:'#CBD5E1'}}>{m}%</p>
+                                <p style={{margin:0,fontSize:'0.6rem',color:pct>=m?tier.text:'#CBD5E1',fontWeight:600}}>
+                                    {m===100?'Full':`${m}%`}
+                                </p>
+                            </div>
+                        ))}
+                    </div>
+                    <span style={{padding:'5px 14px',borderRadius:99,background:tier.bg,color:tier.text,fontWeight:700,fontSize:'0.8rem'}}>
+                        {tier.label}
+                    </span>
+                    <span style={{marginLeft:10,padding:'5px 14px',borderRadius:99,background:'#F0FDF4',color:'#065F46',fontWeight:700,fontSize:'0.8rem'}}>
+                        Net Payable: ₹{INR(salaryCalc.payable)}
+                    </span>
+                </div>
+            </div>
+
+            {/* ── SALARY BREAKDOWN ── */}
+            <Divider>Salary Breakdown</Divider>
+            <div className="ss-anim" style={{...CARD,animationDelay:'.26s'}}>
+                <p style={{margin:'0 0 16px',fontWeight:700,fontSize:'0.95rem',color:'#0F172A'}}>💰 Salary Calculation
+                    <span style={{marginLeft:8,fontSize:'0.75rem',color:'#3B82F6',fontWeight:600}}>
+                        {salaryCalc.attendanceData?'(Attendance × Sales performance)':'(Sales performance — no attendance data)'}
+                    </span>
+                </p>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(155px,1fr))',gap:12,marginBottom:18}}>
+                    {[
+                        {label:'Base Salary',     val:`₹${INR(base)}`,                                        color:'#64748B'},
+                        salaryCalc.proratedSalary && {label:'Pro-rated Salary',val:`₹${INR(salaryCalc.proratedSalary)}`,color:'#3B82F6'},
+                        salaryCalc.attendanceData && {label:'Work Days',        val:salaryCalc.attendanceData.workDays, color:'#8B5CF6'},
+                        {label:'Salary Tier',     val:`${salaryCalc.salaryPercentage}%`,                       color:tier.color},
+                    ].filter(Boolean).map((row,i)=>row&&(
+                        <div key={i} style={{background:'#F8FAFF',borderRadius:10,padding:'12px 14px',border:'1px solid #E8EEFF'}}>
+                            <p style={{...MICRO,margin:'0 0 4px'}}>{row.label}</p>
+                            <p style={{margin:0,fontSize:'1.1rem',fontWeight:800,color:row.color}}>{row.val}</p>
+                        </div>
+                    ))}
+                </div>
+                <div style={{background:tier.bg,borderRadius:12,padding:'16px 20px',display:'flex',
+                    justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:10}}>
+                    <span style={{fontWeight:700,color:tier.text}}>Net Payable Amount</span>
+                    <span style={{fontSize:'2rem',fontWeight:800,color:tier.color}}>₹{INR(salaryCalc.payable)}</span>
+                </div>
+            </div>
+
+            {/* ── MONTHLY HISTORY ── */}
+            <Divider>Monthly History & Comparison</Divider>
+            <div className="ss-anim" style={{...CARD,animationDelay:'.28s'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:10,marginBottom:16}}>
+                    <div>
+                        <p style={{margin:0,fontWeight:700,fontSize:'0.95rem',color:'#0F172A'}}>📅 Month-over-Month Performance</p>
+                        <p style={{margin:'3px 0 0',fontSize:'0.8rem',color:'#64748B'}}>
+                            Live from all sales entries · Current month always shown · Click any bar or row to drill in
+                        </p>
+                    </div>
+                    <span style={{padding:'4px 12px',borderRadius:99,background:'#DBEAFE',color:'#1D4ED8',fontWeight:700,fontSize:'0.72rem'}}>
+                        🔴 Real-time
+                    </span>
+                </div>
+                <MonthlyHistory salesEntries={salesEntries} target={target}/>
+            </div>
+
+            {/* ── PERIOD SNAPSHOT ── */}
+            <Divider>Period Snapshot</Divider>
+            <div style={{display:'flex',gap:10,marginBottom:16,flexWrap:'wrap'}}>
+                {[['current','📊 Overall'],['10days','📈 Last 10 Days'],['month','📅 This Month']].map(([k,lbl])=>(
+                    <button key={k} className="ss-btn" onClick={()=>setViewPeriod(k)} style={{
+                        padding:'9px 18px',borderRadius:10,cursor:'pointer',fontWeight:600,
+                        fontSize:'0.83rem',fontFamily:'Sora,sans-serif',
+                        border:viewPeriod===k?'2px solid #3B82F6':'2px solid #E2E8F0',
+                        background:viewPeriod===k?'#EFF6FF':'#fff',
+                        color:viewPeriod===k?'#2563EB':'#64748B',
+                    }}>{lbl}</button>
+                ))}
+            </div>
+            {viewPeriod!=='current'&&cmpData&&(
+                <div className="ss-anim ss-fade" style={{...CARD,background:'linear-gradient(135deg,#EFF6FF,#F8FAFF)',
+                    border:'1.5px solid #BFDBFE',animationDelay:'.04s'}}>
+                    <p style={{margin:'0 0 14px',fontWeight:700,color:'#1E3A5F'}}>📈 {cmpData.period} — Snapshot</p>
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:12}}>
+                        {[
+                            {label:'Total Sales',  val:`₹${INR(cmpData.totalSales)}`,              color:'#3B82F6'},
+                            {label:'No. of Deals', val:cmpData.count,                               color:'#8B5CF6'},
+                            {label:'Avg per Deal', val:`₹${INR(Math.round(cmpData.avgSale))}`,      color:'#10B981'},
+                        ].map((item,i)=>(
+                            <div key={i} style={{textAlign:'center',background:'#fff',borderRadius:10,
+                                padding:'14px',border:'1px solid #E8EEFF'}}>
+                                <p style={{...MICRO,margin:'0 0 5px'}}>{item.label}</p>
+                                <p style={{margin:0,fontSize:'1.3rem',fontWeight:800,color:item.color}}>{item.val}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* ── COMPANY BREAKDOWN ── */}
+            {Object.keys(byCompany).length>0&&(
+                <>
+                    <Divider>Sales by Category</Divider>
+                    <div className="ss-anim" style={{...CARD,animationDelay:'.3s'}}>
+                        <p style={{margin:'0 0 18px',fontWeight:700,fontSize:'0.95rem',color:'#0F172A'}}>💼 Breakdown by Company / Service</p>
+                        {Object.entries(byCompany).sort(([,a],[,b])=>b.total-a.total).map(([co,d],i)=>(
+                            <MiniBar key={co} label={co} pct={target>0?(d.total/target)*100:0}
+                                value={SHORT(d.total)} count={d.count} color={CAT_CLR[i%CAT_CLR.length]}/>
+                        ))}
+                    </div>
+                </>
+            )}
+
+            {/* ── ALL TRANSACTIONS ── */}
+            {salesEntries.length>0&&(
+                <>
+                    <Divider>All Transactions</Divider>
+                    <div className="ss-anim" style={{...CARD,padding:0,overflow:'hidden',animationDelay:'.35s'}}>
+                        <div style={{padding:'16px 22px',borderBottom:'1px solid #F1F5F9',display:'flex',
+                            justifyContent:'space-between',alignItems:'center'}}>
+                            <p style={{margin:0,fontWeight:700,fontSize:'0.9rem',color:'#0F172A'}}>📋 All Sales Entries</p>
+                            <span style={{padding:'4px 12px',background:'#EFF6FF',color:'#2563EB',borderRadius:99,fontWeight:700,fontSize:'0.75rem'}}>
+                                {salesEntries.length} records
+                            </span>
+                        </div>
+                        <div style={{overflowX:'auto'}}>
+                            <table style={{width:'100%',borderCollapse:'collapse'}}>
+                                <thead><tr style={{background:'#F8FAFF'}}>
+                                    {['Date','Client','Category','Amount','Remarks'].map(h=>(
+                                        <th key={h} style={{padding:'11px 14px',textAlign:'left',fontSize:'0.68rem',
+                                            fontWeight:700,letterSpacing:'.1em',textTransform:'uppercase',
+                                            color:'#94A3B8',whiteSpace:'nowrap'}}>{h}</th>
+                                    ))}
+                                </tr></thead>
+                                <tbody>
+                                    {[...salesEntries].sort((a,b)=>new Date(b.sale_date)-new Date(a.sale_date)).map((e,i)=>(
+                                        <tr key={i} className="ss-row">
+                                            <td style={{padding:'12px 14px',fontSize:'0.85rem',color:'#334155',borderTop:'1px solid #F1F5F9'}}>
+                                                {new Date(e.sale_date).toLocaleDateString('en-IN')}
+                                            </td>
+                                            <td style={{padding:'12px 14px',fontSize:'0.85rem',fontWeight:600,color:'#1E293B',borderTop:'1px solid #F1F5F9'}}>
+                                                {e.client_name}
+                                            </td>
+                                            <td style={{padding:'12px 14px',borderTop:'1px solid #F1F5F9'}}>
+                                                <span style={{padding:'3px 10px',borderRadius:99,background:'#EFF6FF',
+                                                    color:'#2563EB',fontWeight:700,fontSize:'0.73rem'}}>{e.company}</span>
+                                            </td>
+                                            <td style={{padding:'12px 14px',fontSize:'0.88rem',fontWeight:800,color:'#10B981',borderTop:'1px solid #F1F5F9'}}>
+                                                ₹{INR(e.amount)}
+                                            </td>
+                                            <td style={{padding:'12px 14px',fontSize:'0.82rem',color:'#94A3B8',borderTop:'1px solid #F1F5F9'}}>
+                                                {e.remarks||'—'}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </>
+            )}
+
+            {/* ── SALARY RULES ── */}
+            <Divider>Eligibility Rules</Divider>
+            <div className="ss-anim" style={{...CARD,animationDelay:'.4s'}}>
+                <p style={{margin:'0 0 14px',fontWeight:700,fontSize:'0.92rem',color:'#0F172A'}}>📋 Salary Eligibility Tiers</p>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))',gap:12}}>
+                    {[
+                        {range:'≥ 100% of Target',payout:'100% — Full Salary',color:'#10B981',bg:'#D1FAE5',text:'#065F46'},
+                        {range:'75% – 99%',        payout:'75% of Salary',    color:'#F59E0B',bg:'#FEF3C7',text:'#92400E'},
+                        {range:'50% – 74%',        payout:'50% of Salary',    color:'#F97316',bg:'#FFEDD5',text:'#7C2D12'},
+                        {range:'25% – 49%',        payout:'25% of Salary',    color:'#EF4444',bg:'#FEE2E2',text:'#7F1D1D'},
+                        {range:'Below 25%',        payout:'No Salary',        color:'#94A3B8',bg:'#F1F5F9',text:'#475569'},
+                    ].map((r,i)=>(
+                        <div key={i} style={{background:r.bg,borderRadius:10,padding:'12px 14px',borderLeft:`4px solid ${r.color}`}}>
+                            <p style={{margin:'0 0 3px',fontSize:'0.75rem',fontWeight:700,color:r.color}}>{r.range}</p>
+                            <p style={{margin:0,fontSize:'0.88rem',fontWeight:700,color:'#1E293B'}}>{r.payout}</p>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+        </div>
+    );
+}

@@ -1,46 +1,32 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import axios from "axios";
 
-// Either use environment or a hardcoded switch for backend URL
 const API_BASE =
   process.env.NODE_ENV === "development"
     ? "http://localhost:5000"
     : "https://backend.vjcoverseas.com";
 
 export default function SalarySlipUpload() {
-  const [formData, setFormData] = useState({
-    email: "",
-    salarySlip: null,
-  });
-  const [status, setStatus] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [email, setEmail]       = useState("");
+  const [file, setFile]         = useState(null);
+  const [status, setStatus]     = useState(null);
+  const [isLoading, setLoading] = useState(false);
+  const fileRef = useRef(null);
 
-  const isFormValid = formData.email.trim() && formData.salarySlip;
-
-  const handleInputChange = (e) => {
-    const { name, value, files } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: files ? files[0] : value,
-    }));
-  };
+  const isValid = email.trim() && file;
 
   const handleUpload = async (e) => {
     e.preventDefault();
-
-    if (!isFormValid) {
-      setStatus({
-        message: "❌ Please enter a valid employee email and select a file.",
-        type: "error",
-      });
+    if (!isValid) {
+      setStatus({ message: "❌ Please enter a valid employee email and select a file.", type: "error" });
       return;
     }
 
     const payload = new FormData();
-    payload.append("email", formData.email);
-    payload.append("salarySlip", formData.salarySlip);
+    payload.append("email", email);
+    payload.append("salarySlip", file);
 
-    setIsLoading(true);
+    setLoading(true);
     setStatus(null);
 
     try {
@@ -48,84 +34,84 @@ export default function SalarySlipUpload() {
         withCredentials: true,
         headers: { "Content-Type": "multipart/form-data" },
       });
-      setStatus({
-        message: res.data?.message || "✅ Salary slip uploaded successfully!",
-        type: "success",
-      });
-      setFormData({ email: "", salarySlip: null });
+      setStatus({ message: res.data?.message || "✅ Salary slip uploaded successfully!", type: "success" });
+      // Reset form
+      setEmail("");
+      setFile(null);
+      if (fileRef.current) fileRef.current.value = "";
     } catch (err) {
-      const errorMessage =
-        err.response?.data?.message || "Failed to upload salary slip.";
-      setStatus({ message: `❌ ${errorMessage}`, type: "error" });
+      const msg = err.response?.data?.message || "Failed to upload salary slip.";
+      setStatus({ message: `❌ ${msg}`, type: "error" });
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  const fileInputKey = formData.salarySlip ? formData.salarySlip.name : Date.now();
-
   return (
-    <div style={styles.card}>
-      <div style={styles.header}>
-        <span style={styles.icon}>📄</span>
-        <h3>Upload Salary Slip</h3>
+    <div style={S.card}>
+      <div style={S.header}>
+        <span style={S.icon}>📄</span>
+        <h3 style={{ margin: 0 }}>Upload Salary Slip</h3>
       </div>
-      <p style={styles.subtext}>
-        Upload a salary slip for an employee by email.
-      </p>
+      <p style={S.subtext}>Upload a salary slip for an employee by email.</p>
 
-      <form onSubmit={handleUpload} style={styles.form}>
-        <div style={styles.inputGroup}>
-          <label style={styles.label}>Employee Email</label>
+      <form onSubmit={handleUpload} style={S.form}>
+        <div style={S.inputGroup}>
+          <label style={S.label}>Employee Email</label>
           <input
             type="email"
-            name="email"
             placeholder="e.g., john.doe@example.com"
-            value={formData.email}
-            onChange={handleInputChange}
-            style={styles.input}
-            aria-label="Employee Email"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            style={S.input}
           />
         </div>
 
-        <div style={styles.inputGroup}>
-          <label style={styles.label}>Select File</label>
-          <div style={styles.fileInputContainer}>
-            <label htmlFor="file-upload" style={styles.fileInputLabel}>
+        <div style={S.inputGroup}>
+          <label style={S.label}>Select File</label>
+          <div style={S.fileBox}>
+            <label htmlFor="salary-file-input" style={S.chooseBtn}>
               Choose File
             </label>
+            {/* FIX: no key prop — use ref to reset after upload instead */}
             <input
-              id="file-upload"
-              key={fileInputKey}
+              id="salary-file-input"
+              ref={fileRef}
               type="file"
-              name="salarySlip"
               accept="application/pdf,image/*"
-              onChange={handleInputChange}
+              onChange={e => setFile(e.target.files[0] || null)}
               style={{ display: "none" }}
-              aria-label="Select Salary Slip File"
             />
-            <span style={styles.fileName}>
-              {formData.salarySlip ? formData.salarySlip.name : "No file chosen"}
+            <span style={S.fileName}>
+              {file ? file.name : "No file chosen"}
             </span>
+            {file && (
+              <button
+                type="button"
+                onClick={() => { setFile(null); if (fileRef.current) fileRef.current.value = ""; }}
+                style={S.clearBtn}
+                title="Remove file"
+              >✕</button>
+            )}
           </div>
+          {file && (
+            <div style={S.fileInfo}>
+              📎 {(file.size / 1024).toFixed(1)} KB · {file.type || "unknown type"}
+            </div>
+          )}
         </div>
 
         <button
           type="submit"
-          style={{ ...styles.btn, opacity: isLoading || !isFormValid ? 0.6 : 1 }}
-          disabled={isLoading || !isFormValid}
+          style={{ ...S.btn, opacity: isLoading || !isValid ? 0.6 : 1 }}
+          disabled={isLoading || !isValid}
         >
-          {isLoading ? "Uploading..." : "Upload Slip"}
+          {isLoading ? "Uploading…" : "⬆️ Upload Slip"}
         </button>
       </form>
 
       {status && (
-        <p
-          style={{
-            ...styles.statusMessage,
-            color: status.type === "success" ? "#28a745" : "#dc3545",
-          }}
-        >
+        <p style={{ ...S.status, color: status.type === "success" ? "#16a34a" : "#dc2626" }}>
           {status.message}
         </p>
       )}
@@ -133,7 +119,7 @@ export default function SalarySlipUpload() {
   );
 }
 
-const styles = {
+const S = {
   card: {
     fontFamily: "Segoe UI, Tahoma, Geneva, Verdana, sans-serif",
     backgroundColor: "#fff",
@@ -143,83 +129,46 @@ const styles = {
     maxWidth: 450,
   },
   header: {
-    display: "flex",
-    alignItems: "center",
-    gap: 15,
-    marginBottom: 10,
+    display: "flex", alignItems: "center", gap: 12, marginBottom: 8,
   },
-  icon: {
-    fontSize: 28,
-  },
-  subtext: {
-    color: "#6c757d",
-    fontSize: 14,
-    marginBottom: 20,
-  },
-  form: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 20,
-  },
-  inputGroup: {
-    display: "flex",
-    flexDirection: "column",
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#495057",
-    marginBottom: 5,
-  },
+  icon: { fontSize: 28 },
+  subtext: { color: "#6c757d", fontSize: 14, marginBottom: 20, marginTop: 4 },
+  form: { display: "flex", flexDirection: "column", gap: 20 },
+  inputGroup: { display: "flex", flexDirection: "column", gap: 5 },
+  label: { fontSize: 14, fontWeight: "bold", color: "#495057" },
   input: {
-    padding: "12px 15px",
-    borderRadius: 8,
-    border: "1px solid #ced4da",
-    fontSize: 14,
-    transition: "border-color 0.3s, box-shadow 0.3s",
-    outline: "none",
+    padding: "12px 15px", borderRadius: 8, border: "1px solid #ced4da",
+    fontSize: 14, outline: "none",
   },
-  fileInputContainer: {
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
-    padding: "10px",
-    borderRadius: 8,
-    border: "1px dashed #ced4da",
-    backgroundColor: "#f8f9fa",
+  fileBox: {
+    display: "flex", alignItems: "center", gap: 10,
+    padding: 10, borderRadius: 8,
+    border: "1px dashed #ced4da", backgroundColor: "#f8f9fa",
   },
-  fileInputLabel: {
-    cursor: "pointer",
-    padding: "8px 16px",
-    borderRadius: 6,
-    border: "1px solid #007bff",
-    backgroundColor: "#e9f5ff",
-    color: "#007bff",
-    fontSize: 14,
-    fontWeight: "bold",
+  chooseBtn: {
+    cursor: "pointer", padding: "8px 16px", borderRadius: 6,
+    border: "1px solid #007bff", backgroundColor: "#e9f5ff",
+    color: "#007bff", fontSize: 14, fontWeight: "bold", flexShrink: 0,
   },
   fileName: {
-    fontSize: 14,
-    color: "#6c757d",
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
+    fontSize: 14, color: "#6c757d", flex: 1,
+    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+  },
+  clearBtn: {
+    background: "none", border: "none", cursor: "pointer",
+    color: "#dc2626", fontSize: 16, padding: "0 4px", flexShrink: 0,
+  },
+  fileInfo: {
+    fontSize: 11, color: "#6c757d", marginTop: 4, paddingLeft: 4,
   },
   btn: {
-    padding: "12px 24px",
-    borderRadius: 8,
-    border: "none",
-    fontWeight: "bold",
-    color: "#fff",
+    padding: "12px 24px", borderRadius: 8, border: "none",
+    fontWeight: "bold", color: "#fff",
     background: "linear-gradient(45deg, #28a745, #198754)",
-    cursor: "pointer",
-    fontSize: 16,
-    transition: "transform 0.2s, box-shadow 0.2s, opacity 0.3s",
-    boxShadow: "0 4px 10px rgba(40, 167, 69, 0.2)",
+    cursor: "pointer", fontSize: 16,
+    boxShadow: "0 4px 10px rgba(40,167,69,0.2)",
   },
-  statusMessage: {
-    marginTop: 20,
-    textAlign: "center",
-    fontWeight: "bold",
+  status: {
+    marginTop: 16, textAlign: "center", fontWeight: "bold", fontSize: 14,
   },
 };
