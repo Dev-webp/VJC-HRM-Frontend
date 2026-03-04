@@ -1,5 +1,4 @@
-
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import axios from "axios";
 
 const baseUrl =
@@ -7,7 +6,20 @@ const baseUrl =
     ? "http://localhost:5000"
     : "https://backend.vjcoverseas.com";
 
+// Location → prefix mapping
+const LOCATION_PREFIX_MAP = {
+  Bangalore: "VJC-BNG",
+  Hyderabad: "VJC-HYD",
+  Chennai:   "VJC-CHN",
+  Mumbai:    "VJC-MUM",
+  Delhi:     "VJC-DEL",
+};
+
+const LOCATIONS = Object.keys(LOCATION_PREFIX_MAP);
+
 export default function CreateUser() {
+  const currentYear = new Date().getFullYear();
+
   const [newUser, setNewUser] = useState({
     name: "",
     email: "",
@@ -24,15 +36,60 @@ export default function CreateUser() {
     department: "",
     paidLeaves: "",
   });
+
   const [userCreationMsg, setUserCreationMsg] = useState("");
+  const [loadingId, setLoadingId] = useState(false);
+
+  // Auto-generate employee ID when location changes
+  useEffect(() => {
+    if (!newUser.location) {
+      setNewUser((u) => ({ ...u, employeeId: "" }));
+      return;
+    }
+
+    const prefix = LOCATION_PREFIX_MAP[newUser.location];
+    if (!prefix) return;
+
+    setLoadingId(true);
+
+    // Fetch all users and find the highest sequence number for this prefix+year
+    axios
+      .get(`${baseUrl}/all-attendance`, { withCredentials: true })
+      .then((res) => {
+        const users = res.data; // object keyed by email
+        const pattern = `${prefix}-${currentYear}-`;
+
+        let maxSeq = 0;
+        Object.values(users).forEach((user) => {
+          const id = user.employeeId || "";
+          if (id.startsWith(pattern)) {
+            const seq = parseInt(id.replace(pattern, ""), 10);
+            if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+          }
+        });
+
+        const nextSeq = String(maxSeq + 1).padStart(3, "0");
+        setNewUser((u) => ({ ...u, employeeId: `${pattern}${nextSeq}` }));
+      })
+      .catch(() => {
+        // Fallback: just set 001 if fetch fails
+        setNewUser((u) => ({ ...u, employeeId: `${prefix}-${currentYear}-001` }));
+      })
+      .finally(() => setLoadingId(false));
+  }, [newUser.location, currentYear]);
 
   const colors = {
     orange500: "#f97316",
-    blue400: "#60a5fa",
-    white: "#ffffff",
-    gray100: "#f3f4f6",
-    gray300: "#d1d5db",
-    gray700: "#374151",
+    blue400:   "#60a5fa",
+    white:     "#ffffff",
+    gray100:   "#f3f4f6",
+    gray200:   "#e5e7eb",
+    gray300:   "#d1d5db",
+    gray500:   "#6b7280",
+    gray700:   "#374151",
+    green500:  "#22c55e",
+    red400:    "#ef4444",
+    indigo50:  "#eef2ff",
   };
 
   const styles = {
@@ -44,30 +101,77 @@ export default function CreateUser() {
       boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
     },
     formRow: {
-      display: "flex",
-      flexWrap: "wrap",
-      gap: 16,
-      marginBottom: 14,
+      display:       "flex",
+      flexWrap:      "wrap",
+      gap:           16,
+      marginBottom:  14,
     },
     input: {
-      flex: "1 1 220px",
-      padding: "10px 14px",
+      flex:         "1 1 220px",
+      padding:      "10px 14px",
       borderRadius: 8,
-      border: `2px solid ${colors.gray300}`,
-      fontSize: 15,
+      border:       `2px solid ${colors.gray300}`,
+      fontSize:     15,
       outlineOffset: 2,
+      backgroundColor: colors.white,
+    },
+    select: {
+      flex:            "1 1 220px",
+      padding:         "10px 14px",
+      borderRadius:    8,
+      border:          `2px solid ${colors.gray300}`,
+      fontSize:        15,
+      outlineOffset:   2,
+      backgroundColor: colors.white,
+      cursor:          "pointer",
+      appearance:      "auto",
+    },
+    employeeIdBox: {
+      flex:            "1 1 220px",
+      padding:         "10px 14px",
+      borderRadius:    8,
+      border:          `2px solid ${colors.blue400}`,
+      fontSize:        15,
+      backgroundColor: colors.indigo50,
+      color:           colors.gray700,
+      fontWeight:      "600",
+      letterSpacing:   "0.5px",
+      display:         "flex",
+      alignItems:      "center",
+      gap:             8,
+    },
+    badge: {
+      display:         "inline-block",
+      fontSize:        11,
+      fontWeight:      "700",
+      padding:         "2px 8px",
+      borderRadius:    999,
+      backgroundColor: colors.blue400,
+      color:           colors.white,
+      marginLeft:      4,
     },
     btn: {
-      cursor: "pointer",
-      padding: "10px 22px",
-      borderRadius: 8,
-      border: "none",
-      fontWeight: "700",
-      fontSize: 16,
+      cursor:          "pointer",
+      padding:         "10px 22px",
+      borderRadius:    8,
+      border:          "none",
+      fontWeight:      "700",
+      fontSize:        16,
       backgroundColor: colors.orange500,
-      color: colors.white,
-      transition: "background-color 0.3s ease",
+      color:           colors.white,
+      transition:      "background-color 0.3s ease",
     },
+    hint: {
+      fontSize:  12,
+      color:     colors.gray500,
+      marginTop: -10,
+      marginBottom: 6,
+      paddingLeft: 4,
+    },
+  };
+
+  const handleLocationChange = (e) => {
+    setNewUser((u) => ({ ...u, location: e.target.value, employeeId: "" }));
   };
 
   const handleCreateUser = async () => {
@@ -87,39 +191,28 @@ export default function CreateUser() {
       await axios.post(
         `${baseUrl}/create-user`,
         {
-          name: newUser.name,
-          email: newUser.email,
-          password: newUser.password,
-          role: newUser.role,
-          location: newUser.location,
-          employee_id: newUser.employeeId,
-          salary: newUser.salary,
+          name:         newUser.name,
+          email:        newUser.email,
+          password:     newUser.password,
+          role:         newUser.role,
+          location:     newUser.location,
+          employee_id:  newUser.employeeId,
+          salary:       newUser.salary,
           bank_account: newUser.bankAccount,
-          dob: newUser.dob,
-          doj: newUser.doj,
-          pan_no: newUser.panNo,
-          ifsc_code: newUser.ifscCode,
-          department: newUser.department,
-          paidLeaves: newUser.paidLeaves,
+          dob:          newUser.dob,
+          doj:          newUser.doj,
+          pan_no:       newUser.panNo,
+          ifsc_code:    newUser.ifscCode,
+          department:   newUser.department,
+          paidLeaves:   newUser.paidLeaves,
         },
         { withCredentials: true }
       );
       setUserCreationMsg("✅ User created successfully");
       setNewUser({
-        name: "",
-        email: "",
-        password: "",
-        role: "",
-        location: "",
-        employeeId: "",
-        salary: "",
-        bankAccount: "",
-        dob: "",
-        doj: "",
-        panNo: "",
-        ifscCode: "",
-        department: "",
-        paidLeaves: "",
+        name: "", email: "", password: "", role: "", location: "",
+        employeeId: "", salary: "", bankAccount: "", dob: "", doj: "",
+        panNo: "", ifscCode: "", department: "", paidLeaves: "",
       });
     } catch (err) {
       console.error("❌ Failed to create user:", err);
@@ -129,13 +222,7 @@ export default function CreateUser() {
 
   return (
     <section style={styles.section}>
-      <h2
-        style={{
-          color: colors.blue400,
-          fontWeight: "700",
-          marginBottom: 18,
-        }}
-      >
+      <h2 style={{ color: colors.blue400, fontWeight: "700", marginBottom: 18 }}>
         ➕ Create New User
       </h2>
 
@@ -175,22 +262,46 @@ export default function CreateUser() {
         />
       </div>
 
-      {/* Location, Employee ID, Salary */}
+      {/* Location dropdown — triggers auto ID generation */}
       <div style={styles.formRow}>
-        <input
-          type="text"
-          placeholder="Location *"
+        <select
           value={newUser.location}
-          onChange={(e) => setNewUser({ ...newUser, location: e.target.value })}
-          style={styles.input}
-        />
-        <input
-          type="text"
-          placeholder="Employee ID *"
-          value={newUser.employeeId}
-          onChange={(e) => setNewUser({ ...newUser, employeeId: e.target.value })}
-          style={styles.input}
-        />
+          onChange={handleLocationChange}
+          style={styles.select}
+        >
+          <option value="">Select Location *</option>
+          {LOCATIONS.map((loc) => (
+            <option key={loc} value={loc}>{loc}</option>
+          ))}
+        </select>
+
+        {/* Auto-generated Employee ID display */}
+        <div style={styles.employeeIdBox}>
+          {loadingId ? (
+            <span style={{ color: colors.gray500, fontWeight: "400" }}>
+              ⏳ Generating ID…
+            </span>
+          ) : newUser.employeeId ? (
+            <>
+              {newUser.employeeId}
+              <span style={styles.badge}>Auto</span>
+            </>
+          ) : (
+            <span style={{ color: colors.gray500, fontWeight: "400", fontSize: 14 }}>
+              Employee ID — select location first
+            </span>
+          )}
+        </div>
+      </div>
+
+      {newUser.location && !loadingId && (
+        <p style={styles.hint}>
+          📌 ID auto-generated for <strong>{newUser.location}</strong> ({LOCATION_PREFIX_MAP[newUser.location]}-{currentYear}-XXX)
+        </p>
+      )}
+
+      {/* Salary */}
+      <div style={styles.formRow}>
         <input
           type="number"
           placeholder="Salary *"
@@ -266,19 +377,14 @@ export default function CreateUser() {
       </button>
 
       {userCreationMsg && (
-        <p
-          style={{
-            marginTop: 10,
-            fontWeight: "600",
-            color: userCreationMsg.startsWith("✅")
-              ? "#22c55e"
-              : "#ef4444",
-          }}
-        >
+        <p style={{
+          marginTop: 10,
+          fontWeight: "600",
+          color: userCreationMsg.startsWith("✅") ? colors.green500 : colors.red400,
+        }}>
           {userCreationMsg}
         </p>
       )}
     </section>
   );
 }
-
