@@ -458,8 +458,6 @@ export default function ChairmanDashboard() {
       <div className="chair-body">
         <div className="stat-grid">
           <StatCard icon="👥" label="Total Employees" value={users.length} sub={`${filteredUsers.length} shown`} accent="#1d5bd4" />
-          <StatCard icon="💳" label="This Month Net"  value={statsLoading ? "Loading…" : `₹ ${fmtInt(totalCurrentNet)}`} sub="Net payable" accent="#1d5bd4" />
-          <StatCard icon="📅" label="Last Month Net"  value={statsLoading ? "Loading…" : `₹ ${fmtInt(totalPrevNet)}`}    sub="Net paid"   accent="#27ae60" />
         </div>
 
         <div className="table-section">
@@ -489,116 +487,56 @@ export default function ChairmanDashboard() {
                       <th>Employee</th>
                       <th>Email</th>
                       <th>Role</th>
-                      <th className="right">Net Payable (This Month)</th>
-                      <th className="right">Net Payable (Last Month)</th>
                       <th className="center">Action</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredUsers.length ? filteredUsers.map((user, idx) => {
-                      const s     = allSummaries[user.email];
-                      const cur   = s?.current ?? null;
-                      const prv   = s?.prev    ?? null;
-                      const saved = (cur !== null && user.salary > 0) ? user.salary - cur : 0;
-                      return (
-                        <tr key={user.email} style={{ background: idx % 2 === 0 ? "#fff" : "#fafbff" }}>
-                          <td>
-                            <div className="emp-name">{user.name}</div>
-                            {user.location && <div className="emp-loc">{user.location}</div>}
-                          </td>
-                          <td><span className="emp-email">{user.email}</span></td>
-                          <td><RoleBadge role={user.role} /></td>
-                          <td className="right">
-                            {statsLoading
-                              ? <span style={{ color: "#ccc" }}>…</span>
-                              : cur !== null
-                                ? (
-                                  <div>
-                                    <div className="net-val">₹ {fmt(cur)}</div>
-                                    {saved > 1 && <div className="net-saved">–₹ {fmtInt(saved)} deducted</div>}
-                                  </div>
-                                )
-                                : <span style={{ color: "#ccc" }}>—</span>
-                            }
-                          </td>
-                          <td className="right">
-                            {statsLoading
-                              ? <span style={{ color: "#ccc" }}>…</span>
-                              : prv !== null
-                                ? <span className="prev-val">₹ {fmt(prv)}</span>
-                                : <span style={{ color: "#ccc" }}>—</span>
-                            }
-                          </td>
-                          <td className="center">
-                            <button className="view-btn" onClick={() => fetchAttendanceSummary(user, selectedMonth)}>
-                              View Summary
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    }) : (
+                    {filteredUsers.length ? filteredUsers.map((user, idx) => (
+                      <tr key={user.email} style={{ background: idx % 2 === 0 ? "#fff" : "#fafbff" }}>
+                        <td>
+                          <div className="emp-name">{user.name}</div>
+                          {user.location && <div className="emp-loc">{user.location}</div>}
+                        </td>
+                        <td><span className="emp-email">{user.email}</span></td>
+                        <td><RoleBadge role={user.role} /></td>
+                        <td className="center">
+                          <button className="view-btn" onClick={() => fetchAttendanceSummary(user, selectedMonth)}>
+                            View Summary
+                          </button>
+                        </td>
+                      </tr>
+                    )) : (
                       <tr>
-                        <td colSpan={6} style={{ padding: 40, textAlign: "center", color: "#aaa" }}>
+                        <td colSpan={4} style={{ padding: 40, textAlign: "center", color: "#aaa" }}>
                           No employees found.
                         </td>
                       </tr>
                     )}
                   </tbody>
-                  {!statsLoading && filteredUsers.length > 0 && (
-                    <tfoot>
-                      <tr>
-                        <td colSpan={3}><span className="tot-label">TOTALS ({filteredUsers.length} employees)</span></td>
-                        <td className="right" style={{ color: "#1d5bd4" }}>₹ {fmtInt(filtTotalCur)}</td>
-                        <td className="right" style={{ color: "#27ae60" }}>₹ {fmtInt(filtTotalPrev)}</td>
-                        <td />
-                      </tr>
-                    </tfoot>
-                  )}
                 </table>
               </div>
 
               {/* MOBILE CARDS */}
               <div className="emp-cards">
-                {filteredUsers.length ? filteredUsers.map(user => {
-                  const s     = allSummaries[user.email];
-                  const cur   = s?.current ?? null;
-                  const prv   = s?.prev    ?? null;
-                  const saved = (cur !== null && user.salary > 0) ? user.salary - cur : 0;
-                  return (
-                    <div className="emp-card" key={user.email}>
-                      <div className="emp-card-top">
-                        <div className="emp-card-meta">
-                          <div className="emp-name">{user.name}</div>
-                          <div className="emp-email" style={{ marginTop: 2 }}>{user.email}</div>
-                          {user.location && <div className="emp-loc">{user.location}</div>}
-                        </div>
-                        <RoleBadge role={user.role} />
+                {filteredUsers.length ? filteredUsers.map(user => (
+                  <div className="emp-card" key={user.email}>
+                    <div className="emp-card-top">
+                      <div className="emp-card-meta">
+                        <div className="emp-name">{user.name}</div>
+                        <div className="emp-email" style={{ marginTop: 2 }}>{user.email}</div>
+                        {user.location && <div className="emp-loc">{user.location}</div>}
                       </div>
-                      <div className="emp-card-row">
-                        <span className="eck-label">Net Payable (This Month)</span>
-                        <span className="eck-val" style={{ color: "#1d5bd4" }}>
-                          {statsLoading ? "…" : cur !== null ? `₹ ${fmt(cur)}` : "—"}
-                          {!statsLoading && saved > 1 && (
-                            <span className="net-saved" style={{ display: "block" }}>–₹ {fmtInt(saved)} deducted</span>
-                          )}
-                        </span>
-                      </div>
-                      <div className="emp-card-row">
-                        <span className="eck-label">Net Payable (Last Month)</span>
-                        <span className="eck-val" style={{ color: "#27ae60" }}>
-                          {statsLoading ? "…" : prv !== null ? `₹ ${fmt(prv)}` : "—"}
-                        </span>
-                      </div>
-                      <button
-                        className="view-btn"
-                        style={{ marginTop: 14, width: "100%", padding: "11px", fontSize: 13 }}
-                        onClick={() => fetchAttendanceSummary(user, selectedMonth)}
-                      >
-                        View Full Summary
-                      </button>
+                      <RoleBadge role={user.role} />
                     </div>
-                  );
-                }) : (
+                    <button
+                      className="view-btn"
+                      style={{ marginTop: 4, width: "100%", padding: "11px", fontSize: 13 }}
+                      onClick={() => fetchAttendanceSummary(user, selectedMonth)}
+                    >
+                      View Full Summary
+                    </button>
+                  </div>
+                )) : (
                   <div style={{ textAlign: "center", color: "#aaa", padding: "30px 12px" }}>
                     No employees found.
                   </div>
