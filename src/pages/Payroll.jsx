@@ -317,12 +317,16 @@ function fmt(n) {
 function fmtInt(n) {
   return Number(n ?? 0).toLocaleString("en-IN");
 }
+
+// ✅ FIX: Return null when no summary data exists — never treat missing data as "0 work days"
 function calcNet(summary, month, salary) {
+  if (!summary || summary.workDays == null) return null;
   const total = daysInMonth(month);
-  const absent = Math.max(total - (summary?.workDays ?? 0), 0);
+  const absent = Math.max(total - summary.workDays, 0);
   const net = salary - absent * (salary / total);
   return net >= 0 ? net : 0;
 }
+
 function getPrevMonth() {
   const d = new Date();
   d.setMonth(d.getMonth() - 1);
@@ -441,7 +445,11 @@ export default function ChairmanDashboard() {
   const fetchAttendanceSummary = useCallback(async (user, month) => {
     if (!user || !month) return;
     try {
-      const attendanceRes = await axios.post(`${baseUrl}/get-attendance-summary`, { email: user.email, month }, { withCredentials: true });
+      const attendanceRes = await axios.post(
+        `${baseUrl}/get-attendance-summary`,
+        { email: user.email, month },
+        { withCredentials: true }
+      );
       const summary = attendanceRes.data;
       const salary = user.salary ?? 0;
       const holidayCount = await fetchHolidays(month);
@@ -454,7 +462,9 @@ export default function ChairmanDashboard() {
       setNetSalary(net >= 0 ? net : 0);
       setCalculatedAbsentDays(finalAbsentDays);
       setModalOpen(true);
-    } catch { alert("Error fetching attendance summary."); }
+    } catch {
+      alert("No attendance summary found for this employee for the selected month.");
+    }
   }, [fetchHolidays]);
 
   useEffect(() => {
@@ -463,25 +473,53 @@ export default function ChairmanDashboard() {
       try {
         const res = await axios.get(`${baseUrl}/all-attendance`, { withCredentials: true });
         const usersList = Object.entries(res.data).map(([email, info]) => ({
-          email, name: info.name, role: info.role, location: info.location || "", salary: info.salary ?? 0,
+          email,
+          name: info.name,
+          role: info.role,
+          location: info.location || "",
+          salary: info.salary ?? 0,
         }));
         setUsers(usersList);
         setStatsLoading(true);
+
         const curMonth = new Date().toISOString().slice(0, 7);
         const prv = getPrevMonth();
         const summaries = {};
-        await Promise.all(usersList.map(async (u) => {
-          try {
-            const [curRes, prvRes] = await Promise.all([
-              axios.post(`${baseUrl}/get-attendance-summary`, { email: u.email, month: curMonth }, { withCredentials: true }),
-              axios.post(`${baseUrl}/get-attendance-summary`, { email: u.email, month: prv }, { withCredentials: true }),
+
+        // ✅ FIX: Fetch current and previous month summaries SEPARATELY
+        // so a 404 on one doesn't zero-out the other.
+        await Promise.all(
+          usersList.map(async (u) => {
+            // ✅ FIX: Helper returns null on 404/error — never 0
+            const fetchOne = async (month) => {
+              try {
+                const r = await axios.post(
+                  `${baseUrl}/get-attendance-summary`,
+                  { email: u.email, month },
+                  { withCredentials: true }
+                );
+                return calcNet(r.data, month, u.salary); // null if workDays missing
+              } catch {
+                return null; // 404 or no summary saved → show "—" in table
+              }
+            };
+
+            const [current, prev] = await Promise.all([
+              fetchOne(curMonth),
+              fetchOne(prv),
             ]);
-            summaries[u.email] = { current: calcNet(curRes.data, curMonth, u.salary), prev: calcNet(prvRes.data, prv, u.salary), gross: u.salary };
-          } catch { summaries[u.email] = { current: 0, prev: 0, gross: u.salary }; }
-        }));
+
+            summaries[u.email] = { current, prev, gross: u.salary };
+          })
+        );
+
         setAllSummaries(summaries);
         setStatsLoading(false);
-      } catch { } finally { setLoading(false); }
+      } catch {
+        // silently fail — table will show empty state
+      } finally {
+        setLoading(false);
+      }
     }
     fetchUsers();
   }, []);
@@ -502,14 +540,15 @@ export default function ChairmanDashboard() {
     return filtered;
   }, [users, searchTerm, userRole, userLocation]);
 
-  const totalGross = useMemo(() => users.reduce((s, u) => s + (u.salary ?? 0), 0), [users]);
-  const totalCurrentNet = useMemo(() => Object.values(allSummaries).reduce((s, v) => s + (v.current ?? 0), 0), [allSummaries]);
-  const totalPrevNet = useMemo(() => Object.values(allSummaries).reduce((s, v) => s + (v.prev ?? 0), 0), [allSummaries]);
-  const totalSaved = totalGross - totalCurrentNet;
-  const prevSaved = totalGross - totalPrevNet;
+  // ✅ FIX: Only sum non-null values for totals (skip employees with no summary)
+  const totalCurrentNet = useMemo(() =>
+    Object.values(allSummaries).reduce((s, v) => s + (v.current ?? 0), 0),
+  [allSummaries]);
+  const totalPrevNet = useMemo(() =>
+    Object.values(allSummaries).reduce((s, v) => s + (v.prev ?? 0), 0),
+  [allSummaries]);
 
-  const filtTotalGross = filteredUsers.reduce((s, u) => s + (u.salary ?? 0), 0);
-  const filtTotalCur = filteredUsers.reduce((s, u) => s + (allSummaries[u.email]?.current ?? 0), 0);
+  const filtTotalCur  = filteredUsers.reduce((s, u) => s + (allSummaries[u.email]?.current ?? 0), 0);
   const filtTotalPrev = filteredUsers.reduce((s, u) => s + (allSummaries[u.email]?.prev ?? 0), 0);
 
   return (
@@ -534,10 +573,8 @@ export default function ChairmanDashboard() {
       <div className="chair-body">
         <div className="stat-grid">
           <StatCard icon="👥" label="Total Employees" value={users.length} sub={`${filteredUsers.length} shown`} accent="#1d5bd4" />
-        
           <StatCard icon="💳" label="This Month Net" value={statsLoading ? "Loading…" : `₹ ${fmtInt(totalCurrentNet)}`} sub="Net payable" accent="#1d5bd4" />
           <StatCard icon="📅" label="Last Month Net" value={statsLoading ? "Loading…" : `₹ ${fmtInt(totalPrevNet)}`} sub="Net paid" accent="#27ae60" />
-         
         </div>
 
         <div className="table-section">
@@ -574,10 +611,10 @@ export default function ChairmanDashboard() {
                   </thead>
                   <tbody>
                     {filteredUsers.length ? filteredUsers.map((user, idx) => {
-                      const s = allSummaries[user.email];
-                      const cur = s?.current ?? null;
-                      const prv = s?.prev ?? null;
-                      const saved = user.salary - (cur ?? user.salary);
+                      const s   = allSummaries[user.email];
+                      const cur = s?.current ?? null;  // null = no summary saved
+                      const prv = s?.prev   ?? null;
+                      const saved = cur !== null ? user.salary - cur : 0;
                       return (
                         <tr key={user.email} style={{ background: idx % 2 === 0 ? "#fff" : "#fafbff" }}>
                           <td>
@@ -587,17 +624,25 @@ export default function ChairmanDashboard() {
                           <td><span className="emp-email">{user.email}</span></td>
                           <td><RoleBadge role={user.role} /></td>
                           <td className="right">
-                            {statsLoading ? <span style={{ color: "#ccc" }}>…</span> : cur !== null ? (
-                              <div>
-                                <div className="net-val">₹ {fmt(cur)}</div>
-                                {saved > 1 && <div className="net-saved">–₹ {fmtInt(saved)} deducted</div>}
-                              </div>
-                            ) : <span style={{ color: "#ccc" }}>—</span>}
+                            {statsLoading
+                              ? <span style={{ color: "#ccc" }}>…</span>
+                              : cur !== null
+                                ? (
+                                  <div>
+                                    <div className="net-val">₹ {fmt(cur)}</div>
+                                    {saved > 1 && <div className="net-saved">–₹ {fmtInt(saved)} deducted</div>}
+                                  </div>
+                                )
+                                : <span style={{ color: "#ccc" }}>—</span>
+                            }
                           </td>
                           <td className="right">
-                            {statsLoading ? <span style={{ color: "#ccc" }}>…</span>
-                              : prv !== null ? <span className="prev-val">₹ {fmt(prv)}</span>
-                              : <span style={{ color: "#ccc" }}>—</span>}
+                            {statsLoading
+                              ? <span style={{ color: "#ccc" }}>…</span>
+                              : prv !== null
+                                ? <span className="prev-val">₹ {fmt(prv)}</span>
+                                : <span style={{ color: "#ccc" }}>—</span>   // ✅ shows dash, not ₹ 0.00
+                            }
                           </td>
                           <td className="center">
                             <button className="view-btn" onClick={() => fetchAttendanceSummary(user, selectedMonth)}>
@@ -607,7 +652,11 @@ export default function ChairmanDashboard() {
                         </tr>
                       );
                     }) : (
-                      <tr><td colSpan={6} style={{ padding: 40, textAlign: "center", color: "#aaa" }}>No employees found.</td></tr>
+                      <tr>
+                        <td colSpan={6} style={{ padding: 40, textAlign: "center", color: "#aaa" }}>
+                          No employees found.
+                        </td>
+                      </tr>
                     )}
                   </tbody>
                   {!statsLoading && filteredUsers.length > 0 && (
@@ -623,13 +672,13 @@ export default function ChairmanDashboard() {
                 </table>
               </div>
 
-              {/* MOBILE CARDS — shown only on small screens */}
+              {/* MOBILE CARDS */}
               <div className="emp-cards">
                 {filteredUsers.length ? filteredUsers.map(user => {
-                  const s = allSummaries[user.email];
+                  const s   = allSummaries[user.email];
                   const cur = s?.current ?? null;
-                  const prv = s?.prev ?? null;
-                  const saved = user.salary - (cur ?? user.salary);
+                  const prv = s?.prev   ?? null;
+                  const saved = cur !== null ? user.salary - cur : 0;
                   return (
                     <div className="emp-card" key={user.email}>
                       <div className="emp-card-top">
@@ -643,14 +692,24 @@ export default function ChairmanDashboard() {
                       <div className="emp-card-row">
                         <span className="eck-label">Net Payable (This Month)</span>
                         <span className="eck-val" style={{ color: "#1d5bd4" }}>
-                          {statsLoading ? "…" : cur !== null ? `₹ ${fmt(cur)}` : "—"}
-                          {!statsLoading && saved > 1 && <span className="net-saved" style={{ display: "block" }}>–₹ {fmtInt(saved)} deducted</span>}
+                          {statsLoading
+                            ? "…"
+                            : cur !== null
+                              ? `₹ ${fmt(cur)}`
+                              : "—"}
+                          {!statsLoading && saved > 1 && (
+                            <span className="net-saved" style={{ display: "block" }}>–₹ {fmtInt(saved)} deducted</span>
+                          )}
                         </span>
                       </div>
                       <div className="emp-card-row">
                         <span className="eck-label">Net Payable (Last Month)</span>
                         <span className="eck-val" style={{ color: "#27ae60" }}>
-                          {statsLoading ? "…" : prv !== null ? `₹ ${fmt(prv)}` : "—"}
+                          {statsLoading
+                            ? "…"
+                            : prv !== null
+                              ? `₹ ${fmt(prv)}`
+                              : "—"}   {/* ✅ dash instead of ₹ 0.00 */}
                         </span>
                       </div>
                       <button
@@ -662,7 +721,11 @@ export default function ChairmanDashboard() {
                       </button>
                     </div>
                   );
-                }) : <div style={{ textAlign: "center", color: "#aaa", padding: "30px 12px" }}>No employees found.</div>}
+                }) : (
+                  <div style={{ textAlign: "center", color: "#aaa", padding: "30px 12px" }}>
+                    No employees found.
+                  </div>
+                )}
               </div>
             </>
           )}
