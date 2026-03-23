@@ -320,20 +320,25 @@ export default function CreateUser() {
           onChange={(e) => setNewUser({ ...newUser, bankAccount: e.target.value })}
           style={styles.input}
         />
-        <input
-          type="date"
-          placeholder="DOB"
-          value={newUser.dob}
-          onChange={(e) => setNewUser({ ...newUser, dob: e.target.value })}
-          style={styles.input}
-        />
-        <input
-          type="date"
-          placeholder="DOJ"
-          value={newUser.doj}
-          onChange={(e) => setNewUser({ ...newUser, doj: e.target.value })}
-          style={styles.input}
-        />
+      <div style={styles.inputContainer}>
+  <label style={styles.label}>DOB</label>
+  <input
+    type="date"
+    value={newUser.dob}
+    onChange={(e) => setNewUser({ ...newUser, dob: e.target.value })}
+    style={styles.input}
+  />
+</div>
+
+<div style={styles.inputContainer}>
+  <label style={styles.label}> DOJ</label>
+  <input
+    type="date"
+    value={newUser.doj}
+    onChange={(e) => setNewUser({ ...newUser, doj: e.target.value })}
+    style={styles.input}
+  />
+</div>
       </div>
 
       {/* PAN, IFSC, Department */}
