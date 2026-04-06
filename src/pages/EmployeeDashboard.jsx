@@ -1,5 +1,5 @@
 /* eslint-disable no-unused-vars */
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import axios from "axios";
 import { useParams, useNavigate } from "react-router-dom";
 import LeaveApplication from "./LeaveApplication";
@@ -10,581 +10,598 @@ import AttendanceChatLogs from "./AttendanceChatLogs";
 import SalesStats from "./SalesStats";
 import AttendanceAnalytics from './Attendanceanalytics.jsx';
 import Fulldata from "./Fulldata.jsx";
+import LeadManagement from "./LeadManagement";
+import ChatSystem from "./ChatSystem";
+
 const baseUrl =
     window.location.hostname === "localhost"
         ? "http://localhost:5000"
         : "https://backend.vjcoverseas.com";
 
-// --- Manager Login Button Component ---
-const ManagerLoginButton = () => {
-    const handleManagerDashboard = () => {
-        window.location.href = "/manager-dashboard";
-    };
-
+// ─── Sidebar Nav Item ───────────────────────────────────────────────
+function NavItem({ icon, label, tabKey, activeTab, setActiveTab, badge, onClick }) {
+    const isActive = activeTab === tabKey;
     return (
         <button
-            onClick={handleManagerDashboard}
-            style={styles.managerLoginButton}
-            title="Switch to Manager Dashboard"
+            onClick={() => { setActiveTab(tabKey); onClick && onClick(); }}
+            style={{ ...styles.navItem, ...(isActive ? styles.navItemActive : {}) }}
         >
-            👔 Manager Dashboard
+            <span style={styles.navIcon}>{icon}</span>
+            <span style={styles.navLabel}>{label}</span>
+            {badge && <span style={styles.navBadge}>{badge}</span>}
         </button>
     );
-};
+}
 
-// --- User Menu Component ---
-function UserMenu({ name = "User", role = "employee" }) {
+// ─── User Avatar Menu ───────────────────────────────────────────────
+function UserAvatarMenu({ name = "User", role = "employee" }) {
     const [open, setOpen] = useState(false);
-    const navigate = useNavigate();
-    const toggleDropdown = () => setOpen((o) => !o);
+    const ref = useRef();
 
     const handleLogout = async () => {
         try {
             await axios.get(`${baseUrl}/logout`, { withCredentials: true });
             window.location.href = "/";
-        } catch (err) {
-            console.error("Logout failed", err);
-            alert("Logout failed");
-        }
-    };
-    
-    const handleSwitchUser = () => {
-        window.location.href = "/";
+        } catch { alert("Logout failed"); }
     };
 
     useEffect(() => {
-        const onClickOutside = (e) => {
-            if (!e.target.closest(".usermenu-container")) setOpen(false);
-        };
-        window.addEventListener("click", onClickOutside);
-        return () => window.removeEventListener("click", onClickOutside);
+        const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+        document.addEventListener("mousedown", handler);
+        return () => document.removeEventListener("mousedown", handler);
     }, []);
 
     return (
-        <div style={styles.userMenu.container} className="usermenu-container">
-            <div onClick={toggleDropdown} style={styles.userMenu.avatar} title={name}>
+        <div ref={ref} style={{ position: "relative" }}>
+            <div onClick={() => setOpen(o => !o)} style={styles.avatarCircle} title={name}>
                 {name[0]?.toUpperCase() || "U"}
             </div>
             {open && (
-                <div style={styles.userMenu.dropdown}>
-                    <div style={styles.userMenu.header}>
-                        <div style={styles.userMenu.name}>{name}</div>
-                        <div style={styles.userMenu.role}>{role}</div>
+                <div style={styles.avatarDropdown}>
+                    <div style={styles.avatarDropdownHeader}>
+                        <div style={{ fontWeight: 600, fontSize: 14 }}>{name}</div>
+                        <div style={{ fontSize: 12, opacity: 0.85, marginTop: 2 }}>{role}</div>
                     </div>
-                    <div style={styles.userMenu.divider}></div>
-                    <div style={styles.userMenu.dropdownItem} onClick={handleLogout}>
-                        🚪 Logout
-                    </div>
-                    <div style={styles.userMenu.dropdownItem} onClick={handleSwitchUser}>
-                        🔄 Switch User
-                    </div>
+                    <div style={styles.avatarDropdownItem} onClick={handleLogout}>🚪 Logout</div>
+                    <div style={styles.avatarDropdownItem} onClick={() => window.location.href = "/"}>🔄 Switch User</div>
                 </div>
             )}
         </div>
     );
 }
 
-// --- Instructions Button ---
-const InstructionButton = ({ onClick }) => (
-    <button
-        onClick={onClick}
-        style={styles.instructionButton}
-        title="Show instructions"
-    >
-        📋 Instructions
-    </button>
-);
+// ─── Toast ─────────────────────────────────────────────────────────
+function Toast({ toast }) {
+    if (!toast) return null;
+    const colors = { info: "#3b82f6", success: "#10b981", error: "#ef4444", warning: "#f59e0b" };
+    return (
+        <div style={{ ...styles.toast, background: colors[toast.type] || colors.info }}>
+            {toast.msg}
+        </div>
+    );
+}
 
-// --- Main Employee Dashboard ---
+// ─── Main Dashboard ─────────────────────────────────────────────────
 function EmployeeDashboard() {
     const { employeeName } = useParams();
     const navigate = useNavigate();
-    const [profile, setProfile] = useState(null);
-    const [salarySlips, setSalarySlips] = useState([]);
-    const [toast, setToast] = useState(null);
-    const [activeTab, setActiveTab] = useState('overview');
 
-    const [editMode, setEditMode] = useState(false);
-    const [editName, setEditName] = useState("");
-    const [editPassword, setEditPassword] = useState("");
-    const [imageFile, setImageFile] = useState(null);
+    const [profile, setProfile]             = useState(null);
+    const [salarySlips, setSalarySlips]     = useState([]);
+    const [toast, setToast]                 = useState(null);
+    const [activeTab, setActiveTab]         = useState("overview");
+    const [sidebarOpen, setSidebarOpen]     = useState(true);
+    const [visibleSections, setVisibleSections] = useState(["attendance","leave","salary","chat"]);
 
-    const [showInstructions, setShowInstructions] = useState(false);
+    const [editMode, setEditMode]           = useState(false);
+    const [editName, setEditName]           = useState("");
+    const [imageFile, setImageFile]         = useState(null);
     const [localProfileImage, setLocalProfileImage] = useState(null);
-    
-    // Sales stats availability
-    const [hasSalesTarget, setHasSalesTarget] = useState(false);
-    const [checkingSalesTarget, setCheckingSalesTarget] = useState(true);
-    
-    // Change password modal
+
+    const [showInstructions, setShowInstructions]   = useState(false);
     const [showPasswordModal, setShowPasswordModal] = useState(false);
-    const [newPassword, setNewPassword] = useState('');
-    const [confirmPassword, setConfirmPassword] = useState('');
+    const [newPassword, setNewPassword]             = useState("");
+    const [confirmPassword, setConfirmPassword]     = useState("");
+
+    const [hasSalesTarget, setHasSalesTarget]       = useState(false);
+    const [checkingSalesTarget, setCheckingSalesTarget] = useState(true);
+
+    const [canCreate, setCanCreate]         = useState(false);
+    const [hasLeads, setHasLeads]           = useState(false);
+    const [leadBadge, setLeadBadge]         = useState(0);
+    const [leadAccessChecked, setLeadAccessChecked] = useState(false);
+
+    const [chatUnread, setChatUnread]       = useState(0);
+
+    const showLeadTab = canCreate || hasLeads;
 
     const showToast = (msg, type = "info") => {
         setToast({ msg, type });
         setTimeout(() => setToast(null), 3500);
     };
 
-    // Load profile
+    // ── Load profile + visible sections ──
     useEffect(() => {
-        axios
-            .get(`${baseUrl}/me`, { withCredentials: true })
+        axios.get(`${baseUrl}/me`, { withCredentials: true })
             .then((res) => {
                 setProfile(res.data);
+                // Read visibleSections from backend (set by chairman)
+                const secs = res.data.visibleSections;
+                if (Array.isArray(secs) && secs.length > 0) {
+                    setVisibleSections(secs);
+                }
                 if (!employeeName && res.data.name) {
-                    const urlName = res.data.name.toLowerCase().replace(/\s+/g, '-');
+                    const urlName = res.data.name.toLowerCase().replace(/\s+/g, "-");
                     navigate(`/employee/${urlName}`, { replace: true });
                 }
             })
-            .catch(() => {
-                showToast("❌ Failed to fetch profile", "error");
-            });
+            .catch(() => showToast("❌ Failed to fetch profile", "error"));
 
         const storedImg = localStorage.getItem("userProfileImage");
         if (storedImg) setLocalProfileImage(storedImg);
     }, [employeeName, navigate]);
 
-    // Check if employee has sales target assigned
+    // ── Check sales target ──
     useEffect(() => {
         if (profile?.email) {
-            axios
-                .get(`${baseUrl}/sales-stats/${profile.email}`, { withCredentials: true })
-                .then((res) => {
-                    const target = parseFloat(res.data.target || 0);
-                    setHasSalesTarget(target > 0);
-                })
-                .catch(() => {
-                    setHasSalesTarget(false);
-                })
-                .finally(() => {
-                    setCheckingSalesTarget(false);
-                });
+            axios.get(`${baseUrl}/sales-stats/${profile.email}`, { withCredentials: true })
+                .then((res) => setHasSalesTarget(parseFloat(res.data.target || 0) > 0))
+                .catch(() => setHasSalesTarget(false))
+                .finally(() => setCheckingSalesTarget(false));
         }
     }, [profile]);
 
-    // Salary slips
+    // ── Load salary slips ──
     useEffect(() => {
         if (profile) {
-            axios
-                .get(`${baseUrl}/my-salary-slips`, { withCredentials: true })
+            axios.get(`${baseUrl}/my-salary-slips`, { withCredentials: true })
                 .then((res) => setSalarySlips(res.data))
                 .catch(() => {});
         }
     }, [profile]);
 
-    // Profile editing
-    const handleEditProfile = () => {
-        setEditName(profile?.name || "");
-        setEditPassword("");
-        setEditMode(true);
-    };
-    const handleCancelEdit = () => {
-        setEditMode(false);
-        setEditName("");
-        setEditPassword("");
-        setImageFile(null);
-    };
-    const handleProfileImageSelect = (e) => {
-        const file = e.target.files[0];
-        setImageFile(file);
-        if (file) setLocalProfileImage(URL.createObjectURL(file));
-        else setLocalProfileImage(null);
-    };
+    // ── Check lead access ──
+    useEffect(() => {
+        if (!profile) return;
+        axios.get(`${baseUrl}/leads/my-access`, { withCredentials: true })
+            .then((res) => {
+                setCanCreate(!!res.data.canCreate);
+                setHasLeads(!!res.data.hasLeads);
+            })
+            .catch(() => { setCanCreate(false); setHasLeads(false); })
+            .finally(() => setLeadAccessChecked(true));
+    }, [profile]);
 
-    const handleSaveProfile = async () => {
+    // ── Fetch lead badge ──
+    useEffect(() => {
+        if (!showLeadTab) return;
+        axios.get(`${baseUrl}/leads`, { withCredentials: true })
+            .then((res) => {
+                const pending = res.data.filter(l => l.status === "Pending").length;
+                setLeadBadge(pending);
+            })
+            .catch(() => {});
+    }, [showLeadTab]);
+
+    // ── Fetch chat unread count ──
+    const fetchChatUnread = useCallback(async () => {
+        if (!visibleSections.includes("chat")) return;
         try {
-            let updatedProfile = { ...profile };
-            let changes = [];
+            const r = await axios.get(`${baseUrl}/chat/rooms`, { withCredentials: true });
+            const total = r.data.reduce((s, rm) => s + (rm.unread_count || 0), 0);
+            setChatUnread(total);
+        } catch {}
+    }, [visibleSections]);
 
-            if (imageFile) {
-                const reader = new FileReader();
-                reader.onloadend = async () => {
-                    const imageDataUrl = reader.result;
-                    localStorage.setItem("userProfileImage", imageDataUrl);
-                    changes.push("image");
-                    await saveOtherChanges(updatedProfile, changes);
-                };
-                reader.readAsDataURL(imageFile);
-                return;
-            }
+    useEffect(() => {
+        fetchChatUnread();
+        const interval = setInterval(fetchChatUnread, 30000);
+        return () => clearInterval(interval);
+    }, [fetchChatUnread]);
 
-            await saveOtherChanges(updatedProfile, changes);
-        } catch {
-            showToast("❌ Failed to update profile", "error");
+    // ── Fallback: revoked tab ──
+    useEffect(() => {
+        if (leadAccessChecked && activeTab === "leads" && !showLeadTab) setActiveTab("overview");
+    }, [leadAccessChecked, activeTab, showLeadTab]);
+
+    useEffect(() => {
+        if (activeTab === "chat" && !visibleSections.includes("chat")) setActiveTab("overview");
+    }, [activeTab, visibleSections]);
+
+    const isMISExecutive = profile?.role?.toLowerCase().includes("mis-execuitve") ||
+        profile?.role?.toLowerCase() === "mis-execuitve";
+
+    const canSeeSection = (key) => visibleSections.includes(key);
+
+    // ── Profile edit ──
+    const handleSaveProfile = async () => {
+        let changes = [];
+        if (imageFile) {
+            const reader = new FileReader();
+            reader.onloadend = async () => {
+                localStorage.setItem("userProfileImage", reader.result);
+                setLocalProfileImage(reader.result);
+                changes.push("image");
+                await saveNameAndPassword(changes);
+            };
+            reader.readAsDataURL(imageFile);
+            return;
         }
+        await saveNameAndPassword(changes);
     };
 
-    const saveOtherChanges = async (updatedProfile, changes) => {
-        if (editName && editName !== updatedProfile.name) {
+    const saveNameAndPassword = async (changes) => {
+        let updatedProfile = { ...profile };
+        if (editName && editName !== profile.name) {
             try {
-                await axios.post(
-                    `${baseUrl}/update-profile-name`,
-                    new URLSearchParams({ name: editName }),
-                    { withCredentials: true }
-                );
+                await axios.post(`${baseUrl}/update-profile-name`,
+                    new URLSearchParams({ name: editName }), { withCredentials: true });
                 updatedProfile.name = editName;
                 changes.push("name");
-                const urlName = editName.toLowerCase().replace(/\s+/g, '-');
-                navigate(`/employee/${urlName}`, { replace: true });
-            } catch {
-                showToast("❌ Failed to update name", "error");
-            }
-        }
-        if (editPassword) {
-            try {
-                await axios.post(
-                    `${baseUrl}/update-password`,
-                    new URLSearchParams({ password: editPassword }),
-                    { withCredentials: true }
-                );
-                changes.push("password");
-            } catch {
-                showToast("❌ Failed to update password", "error");
-            }
+                navigate(`/employee/${editName.toLowerCase().replace(/\s+/g, "-")}`, { replace: true });
+            } catch { showToast("❌ Failed to update name", "error"); }
         }
         setProfile(updatedProfile);
         setEditMode(false);
-        if (changes.length > 0) {
-            showToast(`✅ Updated ${changes.join(", ")} successfully`, "success");
-        }
-    };
-    
-    // Handle password change from modal
-    const handleChangePassword = async () => {
-        if (!newPassword || !confirmPassword) {
-            showToast("❌ Please fill both password fields", "error");
-            return;
-        }
-        
-        if (newPassword !== confirmPassword) {
-            showToast("❌ Passwords do not match", "error");
-            return;
-        }
-        
-        if (newPassword.length < 6) {
-            showToast("❌ Password must be at least 6 characters", "error");
-            return;
-        }
-        
-        try {
-            await axios.post(
-                `${baseUrl}/update-password`,
-                new URLSearchParams({ password: newPassword }),
-                { withCredentials: true }
-            );
-            showToast("✅ Password updated successfully", "success");
-            setShowPasswordModal(false);
-            setNewPassword('');
-            setConfirmPassword('');
-        } catch {
-            showToast("❌ Failed to update password", "error");
-        }
+        if (changes.length > 0) showToast(`✅ Updated ${changes.join(", ")}`, "success");
     };
 
-    // Determine if MIS Executive role (for attendance chat logs)
-    const isMISExecutive = profile?.role?.toLowerCase().includes('mis-execuitve') || 
-                          profile?.role?.toLowerCase() === 'mis-execuitve';
+    const handleChangePassword = async () => {
+        if (!newPassword || !confirmPassword) return showToast("❌ Fill both fields", "error");
+        if (newPassword !== confirmPassword) return showToast("❌ Passwords don't match", "error");
+        if (newPassword.length < 6) return showToast("❌ Min 6 characters", "error");
+        try {
+            await axios.post(`${baseUrl}/update-password`,
+                new URLSearchParams({ password: newPassword }), { withCredentials: true });
+            showToast("✅ Password updated", "success");
+            setShowPasswordModal(false);
+            setNewPassword(""); setConfirmPassword("");
+        } catch { showToast("❌ Failed to update password", "error"); }
+    };
+
+    const pageTitles = {
+        overview: "Overview", attendance: "Attendance", leave: "Leave",
+        salary: "Salary & Payroll", sales: "Sales Stats",
+        chatlogs: "Chat Logs", fulldata: "Full Data",
+        leads: "My Leads", chat: "Team Chat",
+    };
+
+    const handleTabChange = (t) => {
+        setActiveTab(t);
+        if (t === "chat") setChatUnread(0);
+        if (t === "leads") setLeadBadge(0);
+    };
 
     return (
-        <div style={styles.page}>
-            <UserMenu name={profile?.name || "User"} role={profile?.role || "employee"} />
-            
-            {toast && (
-                <div style={{ ...styles.toast.base, ...styles.toast[toast.type] }}>
-                    {toast.msg}
-                </div>
-            )}
+        <div style={styles.shell}>
+            <Toast toast={toast} />
 
-            {/* Top Navigation */}
-            <div style={styles.topNav}>
-                <div style={styles.navContent}>
-                    <div style={styles.logo}>
+            {/* ── SIDEBAR ─────────────────────────────────── */}
+            <aside style={{ ...styles.sidebar, ...(sidebarOpen ? {} : styles.sidebarCollapsed) }}>
+                {/* Logo */}
+                <div style={styles.sidebarTop}>
+                    <div style={styles.logoRow}>
                         <img src="/logo512.png" alt="Logo" style={styles.logoImg} />
-                        <span style={styles.logoText}>VJC Overseas HRM</span>
+                        {sidebarOpen && (
+                            <div>
+                                <div style={styles.logoName}>VJC Overseas</div>
+                                <div style={styles.logoSub}>HRM Portal</div>
+                            </div>
+                        )}
                     </div>
-                    <div style={styles.navRight}>
-                        {profile?.role === 'manager' && <ManagerLoginButton />}
-                        <InstructionButton onClick={() => setShowInstructions(true)} />
-                    </div>
-                </div>
-            </div>
 
-            {/* Profile Header */}
-            <div style={styles.profileHeader}>
-                <div style={styles.profileHeaderContent}>
-                    <div style={styles.profileLeft}>
-                        <div style={styles.profileImageContainer}>
-                            <img
-                                src={
-                                    localProfileImage || 
-                                    (profile?.image ? `${baseUrl}${profile?.image}` : "https://placehold.co/120x120?text=Profile")
-                                }
-                                alt="Profile"
-                                style={styles.profileImage}
-                            />
-                            {editMode && (
-                                <label style={styles.imageUploadLabel} htmlFor="profile-upload">
-                                    📷
-                                </label>
-                            )}
-                            <input
-                                id="profile-upload"
-                                type="file"
-                                accept="image/*"
-                                onChange={handleProfileImageSelect}
-                                style={{ display: "none" }}
-                                disabled={!editMode}
-                            />
-                        </div>
-                        <div style={styles.profileInfo}>
+                    {/* Profile mini card */}
+                    {sidebarOpen && (
+                        <div style={styles.profileMini}>
+                            <div style={{ position: "relative" }}>
+                                <img
+                                    src={localProfileImage || (profile?.image ? `${baseUrl}${profile.image}` : "https://placehold.co/64x64?text=Me")}
+                                    alt="avatar"
+                                    style={styles.profileMiniImg}
+                                />
+                                {editMode && (
+                                    <label htmlFor="profile-upload" style={styles.profileMiniEdit}>📷</label>
+                                )}
+                                <input id="profile-upload" type="file" accept="image/*" style={{ display: "none" }}
+                                    onChange={(e) => {
+                                        setImageFile(e.target.files[0]);
+                                        if (e.target.files[0]) setLocalProfileImage(URL.createObjectURL(e.target.files[0]));
+                                    }} disabled={!editMode} />
+                            </div>
+
                             {!editMode ? (
                                 <>
-                                    <h1 style={styles.profileName}>{profile?.name}</h1>
-                                    <div style={styles.profileMeta}>
-                                        <span style={styles.profileRole}>{profile?.role || "Employee"}</span>
-                                        <span style={styles.profileDivider}>•</span>
-                                        <span style={styles.profileDept}>{profile?.department || "N/A"}</span>
-                                        <span style={styles.profileDivider}>•</span>
-                                        <span style={styles.profileId}>ID: {profile?.employeeId || profile?.id}</span>
+                                    <div style={styles.profileMiniName}>{profile?.name || "Loading..."}</div>
+                                    <div style={styles.profileMiniRole}>{profile?.role || "Employee"}</div>
+                                    <div style={styles.profileMiniBtns}>
+                                        <button style={styles.miniBtn} onClick={() => { setEditName(profile?.name || ""); setEditMode(true); }}>
+                                            ✏️ Edit
+                                        </button>
+                                        <button style={{ ...styles.miniBtn, color: "#10b981", borderColor: "#10b981" }}
+                                            onClick={() => setShowPasswordModal(true)}>
+                                            🔐 Password
+                                        </button>
                                     </div>
                                 </>
                             ) : (
-                                <div style={styles.editNameContainer}>
-                                    <label style={styles.editLabel}>Name:</label>
+                                <>
                                     <input
                                         type="text"
                                         value={editName}
                                         onChange={(e) => setEditName(e.target.value)}
                                         style={styles.editInput}
-                                        placeholder="Enter new name"
+                                        placeholder="Your name"
                                     />
-                                </div>
+                                    <div style={styles.profileMiniBtns}>
+                                        <button style={{ ...styles.miniBtn, background: "#6366f1", color: "#fff", borderColor: "#6366f1" }}
+                                            onClick={handleSaveProfile}>💾 Save</button>
+                                        <button style={styles.miniBtn} onClick={() => setEditMode(false)}>✕ Cancel</button>
+                                    </div>
+                                </>
                             )}
                         </div>
-                    </div>
-                    <div style={styles.profileRight}>
-                        {!editMode ? (
-                            <>
-                                <button onClick={handleEditProfile} style={styles.editButton}>
-                                    ✏️ Edit Profile
-                                </button>
-                                <button onClick={() => setShowPasswordModal(true)} style={styles.passwordButton}>
-                                    🔐 Change Password
-                                </button>
-                            </>
-                        ) : (
-                            <div style={styles.editButtons}>
-                                <button onClick={handleSaveProfile} style={styles.saveButton}>
-                                    💾 Save
-                                </button>
-                                <button onClick={handleCancelEdit} style={styles.cancelButton}>
-                                    ❌ Cancel
-                                </button>
-                            </div>
-                        )}
-                    </div>
+                    )}
                 </div>
+
+                {/* Nav Items */}
+                <nav style={styles.nav}>
+                    {sidebarOpen && <div style={styles.navSectionLabel}>Main</div>}
+
+                    {/* Overview — always visible */}
+                    <NavItem icon="◻" label="Overview" tabKey="overview" activeTab={activeTab} setActiveTab={handleTabChange} />
+
+                    {/* Sections controlled by chairman */}
+                    {canSeeSection("attendance") && (
+                        <NavItem icon="🕒" label="Attendance" tabKey="attendance" activeTab={activeTab} setActiveTab={handleTabChange} />
+                    )}
+                    {canSeeSection("leave") && (
+                        <NavItem icon="📅" label="Leave" tabKey="leave" activeTab={activeTab} setActiveTab={handleTabChange} />
+                    )}
+                    {canSeeSection("salary") && (
+                        <NavItem icon="💰" label="Salary & Payroll" tabKey="salary" activeTab={activeTab} setActiveTab={handleTabChange} />
+                    )}
+                    {canSeeSection("chat") && (
+                        <NavItem
+                            icon="💬" label="Team Chat" tabKey="chat" activeTab={activeTab}
+                            setActiveTab={handleTabChange}
+                            badge={chatUnread > 0 ? chatUnread : null}
+                        />
+                    )}
+                    {canSeeSection("leads") && showLeadTab && (
+                        <NavItem
+                            icon="🎯" label="My Leads" tabKey="leads" activeTab={activeTab}
+                            setActiveTab={handleTabChange}
+                            badge={leadBadge > 0 ? leadBadge : null}
+                        />
+                    )}
+                    {canSeeSection("sales") && hasSalesTarget && !checkingSalesTarget && (
+                        <NavItem icon="📈" label="Sales Stats" tabKey="sales" activeTab={activeTab} setActiveTab={handleTabChange} />
+                    )}
+
+                    {/* MIS Executive extras */}
+                    {(canSeeSection("chatlogs") || isMISExecutive) && (
+                        <>
+                            {sidebarOpen && <div style={{ ...styles.navSectionLabel, marginTop: 16 }}>MIS Executive</div>}
+                            <NavItem icon="💬" label="Chat Logs" tabKey="chatlogs" activeTab={activeTab} setActiveTab={handleTabChange} />
+                        </>
+                    )}
+                    {(canSeeSection("fulldata") || isMISExecutive) && (
+                        <NavItem icon="📊" label="Full Data" tabKey="fulldata" activeTab={activeTab} setActiveTab={handleTabChange} />
+                    )}
+                </nav>
+
+                {/* Footer actions */}
+                <div style={styles.sidebarFooter}>
+                    <button style={styles.footerBtn} onClick={() => setShowInstructions(true)}>
+                        📋 {sidebarOpen && "Instructions"}
+                    </button>
+                    {profile?.role === "manager" && (
+                        <button style={styles.footerBtn} onClick={() => window.location.href = "/manager-dashboard"}>
+                            👔 {sidebarOpen && "Manager Dashboard"}
+                        </button>
+                    )}
+                    <button style={{ ...styles.footerBtn, color: "#ef4444" }}
+                        onClick={() => axios.get(`${baseUrl}/logout`, { withCredentials: true }).then(() => window.location.href = "/")}>
+                        🚪 {sidebarOpen && "Logout"}
+                    </button>
+                </div>
+            </aside>
+
+            {/* ── MAIN ─────────────────────────────────────── */}
+            <div style={styles.main}>
+
+                {/* Top bar */}
+                <header style={styles.topbar}>
+                    <button style={styles.collapseBtn} onClick={() => setSidebarOpen(o => !o)}
+                        title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}>
+                        {sidebarOpen ? "◀" : "▶"}
+                    </button>
+                    <span style={styles.pageTitle}>{pageTitles[activeTab] || "Dashboard"}</span>
+                    <div style={styles.topbarRight}>
+                        {chatUnread > 0 && activeTab !== "chat" && canSeeSection("chat") && (
+                            <button
+                                onClick={() => handleTabChange("chat")}
+                                style={{ ...styles.chatPill }}>
+                                💬 {chatUnread} new
+                            </button>
+                        )}
+                        <UserAvatarMenu name={profile?.name || "User"} role={profile?.role || "employee"} />
+                    </div>
+                </header>
+
+                {/* Content area */}
+                <main style={styles.content}>
+
+                    {/* ── OVERVIEW TAB ── */}
+                    {activeTab === "overview" && (
+                        <div>
+                            <div style={styles.welcomeBanner}>
+                                <div>
+                                    <h2 style={styles.welcomeTitle}>Welcome back, {profile?.name?.split(" ")[0] || "there"} 👋</h2>
+                                    <p style={styles.welcomeSub}>Here's your snapshot for today.</p>
+                                </div>
+                            </div>
+
+                            {/* Quick info cards */}
+                            <div style={styles.infoStrip}>
+                                {[
+                                    { icon: "📧", label: "Email",       val: profile?.email      || "—" },
+                                    { icon: "💼", label: "Department",  val: profile?.department || "N/A" },
+                                    { icon: "📍", label: "Location",    val: profile?.location   || "N/A" },
+                                    { icon: "🆔", label: "Employee ID", val: profile?.employeeId || profile?.id || "—" },
+                                ].map(({ icon, label, val }) => (
+                                    <div key={label} style={styles.infoChip}>
+                                        <span style={styles.infoChipIcon}>{icon}</span>
+                                        <div>
+                                            <div style={styles.infoChipLabel}>{label}</div>
+                                            <div style={styles.infoChipVal}>{val}</div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Quick action tiles based on what's visible */}
+                            <div style={styles.quickGrid}>
+                                {canSeeSection("attendance") && (
+                                    <div style={styles.quickTile} onClick={() => handleTabChange("attendance")}>
+                                        <span style={styles.quickTileIcon}>🕒</span>
+                                        <span style={styles.quickTileLabel}>Attendance</span>
+                                    </div>
+                                )}
+                                {canSeeSection("leave") && (
+                                    <div style={styles.quickTile} onClick={() => handleTabChange("leave")}>
+                                        <span style={styles.quickTileIcon}>📅</span>
+                                        <span style={styles.quickTileLabel}>Apply Leave</span>
+                                    </div>
+                                )}
+                                {canSeeSection("salary") && (
+                                    <div style={styles.quickTile} onClick={() => handleTabChange("salary")}>
+                                        <span style={styles.quickTileIcon}>💰</span>
+                                        <span style={styles.quickTileLabel}>Salary</span>
+                                    </div>
+                                )}
+                                {canSeeSection("chat") && (
+                                    <div style={{ ...styles.quickTile, position: "relative" }} onClick={() => handleTabChange("chat")}>
+                                        <span style={styles.quickTileIcon}>💬</span>
+                                        <span style={styles.quickTileLabel}>Team Chat</span>
+                                        {chatUnread > 0 && (
+                                            <span style={styles.quickTileBadge}>{chatUnread}</span>
+                                        )}
+                                    </div>
+                                )}
+                                {canSeeSection("leads") && showLeadTab && (
+                                    <div style={styles.quickTile} onClick={() => handleTabChange("leads")}>
+                                        <span style={styles.quickTileIcon}>🎯</span>
+                                        <span style={styles.quickTileLabel}>My Leads</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Attendance analytics */}
+                            <div style={styles.sectionCard}>
+                                <AttendanceAnalytics />
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ── ATTENDANCE TAB ── */}
+                    {activeTab === "attendance" && canSeeSection("attendance") && (
+                        <div style={styles.sectionCard}><AttendanceDashboard /></div>
+                    )}
+
+                    {/* ── LEAVE TAB ── */}
+                    {activeTab === "leave" && canSeeSection("leave") && (
+                        <div style={styles.sectionCard}>
+                            <LeaveApplication onMessage={(msg) => showToast(msg, "info")} />
+                        </div>
+                    )}
+
+                    {/* ── SALARY TAB ── */}
+                    {activeTab === "salary" && canSeeSection("salary") && (
+                        <>
+                            <div style={styles.sectionCard}><SalarySlips salarySlips={salarySlips} /></div>
+                            <div style={{ ...styles.sectionCard, marginTop: 20 }}><PayrollSlip /></div>
+                        </>
+                    )}
+
+                    {/* ── TEAM CHAT TAB ── */}
+                    {activeTab === "chat" && canSeeSection("chat") && (
+                        <div style={{ ...styles.sectionCard, padding: 0, overflow: "hidden", height: "calc(100vh - 130px)" }}>
+                            <ChatSystem
+                                currentUser={{ id: profile?.id, name: profile?.name }}
+                                isChairman={false}
+                            />
+                        </div>
+                    )}
+
+                    {/* ── MY LEADS TAB ── */}
+                    {activeTab === "leads" && canSeeSection("leads") && showLeadTab && (
+                        <div style={styles.sectionCard}>
+                            <LeadManagement isChairman={false} />
+                        </div>
+                    )}
+
+                    {/* ── SALES TAB ── */}
+                    {activeTab === "sales" && canSeeSection("sales") && hasSalesTarget && (
+                        <div style={styles.sectionCard}>
+                            <SalesStats employeeEmail={profile?.email} isChairman={false} />
+                        </div>
+                    )}
+
+                    {/* ── CHAT LOGS TAB ── */}
+                    {activeTab === "chatlogs" && (canSeeSection("chatlogs") || isMISExecutive) && (
+                        <div style={styles.sectionCard}><AttendanceChatLogs /></div>
+                    )}
+
+                    {/* ── FULL DATA TAB ── */}
+                    {activeTab === "fulldata" && (canSeeSection("fulldata") || isMISExecutive) && (
+                        <div style={styles.sectionCard}><Fulldata /></div>
+                    )}
+
+                    {/* ── ACCESS DENIED ── (tab exists but section hidden) */}
+                    {activeTab !== "overview" && activeTab !== "chatlogs" && activeTab !== "fulldata" &&
+                     !canSeeSection(activeTab) && (
+                        <div style={styles.sectionCard}>
+                            <div style={{ textAlign: "center", padding: 60, color: "#94a3b8" }}>
+                                <div style={{ fontSize: 48, marginBottom: 12 }}>🔒</div>
+                                <div style={{ fontSize: 16, fontWeight: 600, color: "#334155", marginBottom: 6 }}>Access Restricted</div>
+                                <div style={{ fontSize: 13 }}>This section has not been enabled for your account. Contact your administrator.</div>
+                            </div>
+                        </div>
+                    )}
+                </main>
             </div>
 
-            {/* Tabs */}
-            <div style={styles.container}>
-                <div style={styles.quickInfoGrid}>
-                    <div style={styles.infoCard}>
-                        <div style={styles.infoIcon}>📧</div>
-                        <div style={styles.infoContent}>
-                            <div style={styles.infoLabel}>Email</div>
-                            <div style={styles.infoValue}>{profile?.email}</div>
-                        </div>
-                    </div>
-                    <div style={styles.infoCard}>
-                        <div style={styles.infoIcon}>📍</div>
-                        <div style={styles.infoContent}>
-                            <div style={styles.infoLabel}>Location</div>
-                            <div style={styles.infoValue}>{profile?.location || "N/A"}</div>
-                        </div>
-                    </div>
-                    <div style={styles.infoCard}>
-                        <div style={styles.infoIcon}>💼</div>
-                        <div style={styles.infoContent}>
-                            <div style={styles.infoLabel}>Department</div>
-                            <div style={styles.infoValue}>{profile?.department || "N/A"}</div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Tab Navigation */}
-                <div style={styles.tabContainer}>
-                    <div style={styles.tabNav}>
-                        <button onClick={() => setActiveTab('overview')} style={{ ...styles.tabButton, ...(activeTab === 'overview' ? styles.tabButtonActive : {}) }}>
-                            📊 Overview
-                        </button>
-                        <button onClick={() => setActiveTab('attendance')} style={{ ...styles.tabButton, ...(activeTab === 'attendance' ? styles.tabButtonActive : {}) }}>
-                            🕒 Attendance
-                        </button>
-                        <button onClick={() => setActiveTab('leave')} style={{ ...styles.tabButton, ...(activeTab === 'leave' ? styles.tabButtonActive : {}) }}>
-                            📅 Leave
-                        </button>
-                        <button onClick={() => setActiveTab('salary')} style={{ ...styles.tabButton, ...(activeTab === 'salary' ? styles.tabButtonActive : {}) }}>
-                            💰 Salary
-                        </button>
-                        {hasSalesTarget && !checkingSalesTarget && (
-                            <button onClick={() => setActiveTab('sales')} style={{ ...styles.tabButton, ...(activeTab === 'sales' ? styles.tabButtonActive : {}) }}>
-                                📈 Sales Stats
-                            </button>
-                        )}
-                        {isMISExecutive && (
-                            <button onClick={() => setActiveTab('chatlogs')} style={{ ...styles.tabButton, ...(activeTab === 'chatlogs' ? styles.tabButtonActive : {}) }}>
-                                💬 Chat Logs
-                            </button>
-                        )}
-                          {isMISExecutive && (
-                            <button onClick={() => setActiveTab('fulldata')} style={{ ...styles.tabButton, ...(activeTab === 'fulldata' ? styles.tabButtonActive : {}) }}>
-                                📊 Full Data
-                            </button>
-                        )}
-                    </div>
-
-                    {/* Tab Content */}
-                    <div style={styles.tabContent}>
-                        {activeTab === 'overview' && (
-                            <div style={styles.overviewSection}>
-                                <div style={styles.welcomeCard}>
-                                    <h2 style={styles.welcomeTitle}>Welcome back, {profile?.name}! 👋</h2>
-                                    <p style={styles.welcomeText}>Here's your quick overview</p>
-                                </div>
-                                
-                                <div style={styles.statsGrid}>
-                                    <div style={styles.statCard}>
-                                        <div style={styles.statIcon}>🆔</div>
-                                        <div style={styles.statContent}>
-                                            <div style={styles.statLabel}>Employee ID</div>
-                                            <div style={styles.statValue}>{profile?.employeeId || profile?.id}</div>
-                                        </div>
-                                    </div>
-                                    <div style={styles.statCard}>
-                                        <div style={styles.statIcon}>👔</div>
-                                        <div style={styles.statContent}>
-                                            <div style={styles.statLabel}>Role</div>
-                                            <div style={styles.statValue}>{profile?.role}</div>
-                                        </div>
-                                    </div>
-                                    <div style={styles.statCard}>
-                                        <div style={styles.statIcon}>🏢</div>
-                                        <div style={styles.statContent}>
-                                            <div style={styles.statLabel}>Department</div>
-                                            <div style={styles.statValue}>{profile?.department || "N/A"}</div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Attendance Analytics Section */}
-                                <div style={styles.sectionCard}>
-                                   
-                                    <AttendanceAnalytics />
-                                </div>
-                            </div>
-                        )}
-                        
-                        {activeTab === 'attendance' && (
-                            <div style={styles.sectionCard}><AttendanceDashboard /></div>
-                        )}
-                        {activeTab === 'leave' && (
-                            <div style={styles.sectionCard}>
-                                <LeaveApplication onMessage={(msg) => showToast(msg, "info")} />
-                            </div>
-                        )}
-                        {activeTab === 'salary' && (
-                            <>
-                                <div style={styles.sectionCard}><SalarySlips salarySlips={salarySlips} /></div>
-                                <div style={styles.sectionCard}><PayrollSlip /></div>
-                            </>
-                        )}
-                        {activeTab === 'sales' && hasSalesTarget && (
-                            <div style={styles.sectionCard}>
-                                <SalesStats 
-                                    employeeEmail={profile?.email} 
-                                    isChairman={false}
-                                />
-                            </div>
-                        )}
-                        {activeTab === 'chatlogs' && isMISExecutive && (
-                            <div style={styles.sectionCard}>
-                                <AttendanceChatLogs />
-                            </div>
-                        )}
-                         {activeTab === 'fulldata' && isMISExecutive && (
-                            <div style={styles.sectionCard}>
-                                <Fulldata />
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </div>
-            
-            {/* Instructions Modal */}
+            {/* ── INSTRUCTIONS MODAL ── */}
             {showInstructions && (
-                <div style={styles.modal} onClick={() => setShowInstructions(false)}>
-                    <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+                <div style={styles.overlay} onClick={() => setShowInstructions(false)}>
+                    <div style={styles.modal} onClick={e => e.stopPropagation()}>
                         <div style={styles.modalHeader}>
                             <h3 style={styles.modalTitle}>📋 Dashboard Instructions</h3>
-                            <button onClick={() => setShowInstructions(false)} style={styles.modalClose}>
-                                ×
-                            </button>
+                            <button style={styles.modalClose} onClick={() => setShowInstructions(false)}>×</button>
                         </div>
                         <div style={styles.modalBody}>
-                            <div style={styles.instructionSection}>
-                                <h4 style={styles.instructionTitle}>🎯 Overview Tab</h4>
-                                <p style={styles.instructionText}>
-                                    View your quick profile summary including your employee ID, role, department, and attendance analytics at a glance.
-                                </p>
-                            </div>
-                            
-                            <div style={styles.instructionSection}>
-                                <h4 style={styles.instructionTitle}>🕒 Attendance Tab</h4>
-                                <p style={styles.instructionText}>
-                                    Mark your daily attendance, view attendance history, and track your work hours. Office hours start at 10:00 AM. After 10:15 AM is late. Login counts milliseconds – always login before 10!
-                                </p>
-                            </div>
-                            
-                            <div style={styles.instructionSection}>
-                                <h4 style={styles.instructionTitle}>📅 Leave Tab</h4>
-                                <p style={styles.instructionText}>
-                                    Apply for leave, view pending requests, and check your leave history. Use earned leave option for paid leaves. Unapproved leave = Full-day absence.
-                                </p>
-                            </div>
-                            
-                            <div style={styles.instructionSection}>
-                                <h4 style={styles.instructionTitle}>💰 Salary Tab</h4>
-                                <p style={styles.instructionText}>
-                                    View your salary slips, download payroll documents, and track payment history.
-                                </p>
-                            </div>
-                            
-                            {hasSalesTarget && (
-                                <div style={styles.instructionSection}>
-                                    <h4 style={styles.instructionTitle}>📈 Sales Stats Tab</h4>
-                                    <p style={styles.instructionText}>
-                                        Track your sales performance, add new sales entries, view targets, and monitor your achievement percentage. This tab is only visible if your manager has assigned you a sales target.
-                                    </p>
+                            {[
+                                { title: "🎯 Overview",       text: "View your profile summary, employee ID, role, department, and attendance analytics at a glance." },
+                                canSeeSection("attendance") && { title: "🕒 Attendance",   text: "Mark daily attendance and view history. Office hours start at 10:00 AM. After 10:15 AM is late." },
+                                canSeeSection("leave")      && { title: "📅 Leave",        text: "Apply for leave and check history. Use earned leave for paid leaves. Unapproved leave = full-day absence." },
+                                canSeeSection("salary")     && { title: "💰 Salary",       text: "View salary slips, download payroll documents, and track payment history." },
+                                canSeeSection("chat")       && { title: "💬 Team Chat",    text: "Message your team in department channels, group chats, or direct messages. Like Microsoft Teams inside your HRM." },
+                                showLeadTab && canSeeSection("leads") && { title: "🎯 My Leads",   text: "Leads assigned to you appear here. You have 45 minutes to call each lead after it is assigned." },
+                                hasSalesTarget && canSeeSection("sales") && { title: "📈 Sales Stats", text: "Track your sales performance, add entries, view targets and achievement %." },
+                                isMISExecutive && { title: "💬 Chat Logs",  text: "Access attendance-related chat logs. Available for MIS Executive role." },
+                            ].filter(Boolean).map(({ title, text }) => (
+                                <div key={title} style={styles.instructionBlock}>
+                                    <h4 style={styles.instructionTitle}>{title}</h4>
+                                    <p style={styles.instructionText}>{text}</p>
                                 </div>
-                            )}
-                            
-                            {isMISExecutive && (
-                                <div style={styles.instructionSection}>
-                                    <h4 style={styles.instructionTitle}>💬 Chat Logs Tab</h4>
-                                    <p style={styles.instructionText}>
-                                        Access attendance-related chat logs and communications. This feature is available for MIS Executive role.
-                                    </p>
-                                </div>
-                            )}
-                            
-                            <div style={styles.instructionSection}>
+                            ))}
+                            <div style={styles.instructionBlock}>
                                 <h4 style={styles.instructionTitle}>⚠️ Important Rules</h4>
                                 <ul style={styles.instructionList}>
                                     <li>Grace: 6 late logins/month before penalties</li>
-                                    <li>Minimum work for full day is 8 hours</li>
-                                    <li>If you forget to logout, marked absent</li>
+                                    <li>Minimum 8 hours for a full day</li>
+                                    <li>Forgot to logout = marked absent</li>
                                     <li>Partial attendance in slots = half-day</li>
                                     <li>Contact Developer (nuthan-full-stack-dev) for issues</li>
                                 </ul>
@@ -593,51 +610,25 @@ function EmployeeDashboard() {
                     </div>
                 </div>
             )}
-            
-            {/* Change Password Modal */}
+
+            {/* ── PASSWORD MODAL ── */}
             {showPasswordModal && (
-                <div style={styles.modal} onClick={() => setShowPasswordModal(false)}>
-                    <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+                <div style={styles.overlay} onClick={() => setShowPasswordModal(false)}>
+                    <div style={{ ...styles.modal, maxWidth: 440 }} onClick={e => e.stopPropagation()}>
                         <div style={styles.modalHeader}>
                             <h3 style={styles.modalTitle}>🔐 Change Password</h3>
-                            <button onClick={() => setShowPasswordModal(false)} style={styles.modalClose}>
-                                ×
-                            </button>
+                            <button style={styles.modalClose} onClick={() => setShowPasswordModal(false)}>×</button>
                         </div>
                         <div style={styles.modalBody}>
-                            <div style={styles.formGroup}>
-                                <label style={styles.modalLabel}>New Password</label>
-                                <input
-                                    type="password"
-                                    value={newPassword}
-                                    onChange={(e) => setNewPassword(e.target.value)}
-                                    style={styles.modalInput}
-                                    placeholder="Enter new password"
-                                    autoComplete="new-password"
-                                />
-                            </div>
-                            
-                            <div style={styles.formGroup}>
-                                <label style={styles.modalLabel}>Confirm Password</label>
-                                <input
-                                    type="password"
-                                    value={confirmPassword}
-                                    onChange={(e) => setConfirmPassword(e.target.value)}
-                                    style={styles.modalInput}
-                                    placeholder="Confirm new password"
-                                    autoComplete="new-password"
-                                />
-                            </div>
-                            
-                            <div style={styles.modalActions}>
-                                <button onClick={handleChangePassword} style={styles.modalSaveButton}>
-                                    💾 Update Password
-                                </button>
-                                <button onClick={() => {
-                                    setShowPasswordModal(false);
-                                    setNewPassword('');
-                                    setConfirmPassword('');
-                                }} style={styles.modalCancelButton}>
+                            <label style={styles.fieldLabel}>New Password</label>
+                            <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)}
+                                style={styles.fieldInput} placeholder="Enter new password" autoComplete="new-password" />
+                            <label style={{ ...styles.fieldLabel, marginTop: 16 }}>Confirm Password</label>
+                            <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
+                                style={styles.fieldInput} placeholder="Confirm new password" autoComplete="new-password" />
+                            <div style={{ display: "flex", gap: 12, marginTop: 24 }}>
+                                <button style={styles.btnPrimary} onClick={handleChangePassword}>💾 Update Password</button>
+                                <button style={styles.btnSecondary} onClick={() => { setShowPasswordModal(false); setNewPassword(""); setConfirmPassword(""); }}>
                                     Cancel
                                 </button>
                             </div>
@@ -649,605 +640,78 @@ function EmployeeDashboard() {
     );
 }
 
-// Comprehensive Professional Styles
+// ─── Styles ─────────────────────────────────────────────────────────
+const SIDEBAR_W = 240;
+const SIDEBAR_COLLAPSED_W = 64;
+const TOPBAR_H = 56;
+const ACCENT = "#6366f1";
+
 const styles = {
-    page: {
-        minHeight: '100vh',
-        backgroundColor: '#f0f4f8',
-        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-    },
-    
-    topNav: {
-        backgroundColor: '#fff',
-        borderBottom: '1px solid #e2e8f0',
-        position: 'sticky',
-        top: 0,
-        zIndex: 1000,
-        boxShadow: '0 2px 4px rgba(0,0,0,0.04)',
-    },
-    navContent: {
-        maxWidth: 1400,
-        margin: '0 auto',
-        padding: '16px 32px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    logo: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '12px',
-    },
-    logoImg: {
-        width: 40,
-        height: 40,
-        borderRadius: '8px',
-    },
-    logoText: {
-        fontSize: '1.3rem',
-        fontWeight: '700',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        WebkitBackgroundClip: 'text',
-        WebkitTextFillColor: 'transparent',
-    },
-    navRight: {
-        display: 'flex',
-        gap: '12px',
-        alignItems: 'center',
-    },
-    
-    userMenu: {
-        container: {
-            position: 'fixed',
-            top: 20,
-            right: 32,
-            zIndex: 2000,
-        },
-        avatar: {
-            width: 48,
-            height: 48,
-            borderRadius: '50%',
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            color: '#fff',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '1.2rem',
-            fontWeight: '700',
-            cursor: 'pointer',
-            boxShadow: '0 4px 12px rgba(102, 126, 234, 0.4)',
-            transition: 'transform 0.2s, box-shadow 0.2s',
-        },
-        dropdown: {
-            position: 'absolute',
-            top: 'calc(100% + 12px)',
-            right: 0,
-            backgroundColor: '#fff',
-            borderRadius: '16px',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
-            minWidth: 220,
-            overflow: 'hidden',
-            border: '1px solid #e2e8f0',
-        },
-        header: {
-            padding: '20px',
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            color: '#fff',
-        },
-        name: {
-            fontWeight: '700',
-            fontSize: '1rem',
-        },
-        role: {
-            fontSize: '0.85rem',
-            opacity: 0.9,
-            marginTop: '4px',
-        },
-        divider: {
-            height: 1,
-            backgroundColor: '#e2e8f0',
-        },
-        dropdownItem: {
-            padding: '14px 20px',
-            cursor: 'pointer',
-            transition: 'background-color 0.2s',
-            color: '#334155',
-            fontSize: '0.95rem',
-            fontWeight: '500',
-        },
-    },
-    
-    profileHeader: {
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        color: '#fff',
-        padding: '48px 0',
-    },
-    profileHeaderContent: {
-        maxWidth: 1400,
-        margin: '0 auto',
-        padding: '0 32px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: '24px',
-    },
-    profileLeft: {
-        display: 'flex',
-        gap: '24px',
-        alignItems: 'center',
-    },
-    profileImageContainer: {
-        position: 'relative',
-    },
-    profileImage: {
-        width: 120,
-        height: 120,
-        borderRadius: '50%',
-        objectFit: 'cover',
-        border: '5px solid rgba(255,255,255,0.3)',
-        boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
-    },
-    imageUploadLabel: {
-        position: 'absolute',
-        bottom: 0,
-        right: 0,
-        width: 40,
-        height: 40,
-        borderRadius: '50%',
-        backgroundColor: '#fff',
-        color: '#667eea',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        cursor: 'pointer',
-        fontSize: '1.3rem',
-        border: '3px solid #667eea',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-    },
-    profileInfo: {
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '8px',
-    },
-    profileName: {
-        fontSize: '2.2rem',
-        fontWeight: '800',
-        margin: 0,
-        textShadow: '0 2px 4px rgba(0,0,0,0.1)',
-    },
-    profileMeta: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '12px',
-        fontSize: '1rem',
-        opacity: 0.95,
-    },
-    profileRole: {
-        fontWeight: '600',
-        backgroundColor: 'rgba(255,255,255,0.2)',
-        padding: '4px 12px',
-        borderRadius: '20px',
-    },
-    profileDept: {
-        fontWeight: '500',
-    },
-    profileDivider: {
-        opacity: 0.5,
-    },
-    profileId: {
-        fontWeight: '500',
-        fontFamily: 'monospace',
-    },
-    profileRight: {
-        display: 'flex',
-        gap: '12px',
-        flexWrap: 'wrap',
-    },
-    
-    editButton: {
-        padding: '12px 24px',
-        backgroundColor: '#fff',
-        color: '#667eea',
-        border: 'none',
-        borderRadius: '12px',
-        fontSize: '0.95rem',
-        fontWeight: '700',
-        cursor: 'pointer',
-        transition: 'transform 0.2s, box-shadow 0.2s',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-    },
-    passwordButton: {
-        padding: '12px 24px',
-        backgroundColor: '#fff',
-        color: '#10b981',
-        border: 'none',
-        borderRadius: '12px',
-        fontSize: '0.95rem',
-        fontWeight: '700',
-        cursor: 'pointer',
-        transition: 'transform 0.2s, box-shadow 0.2s',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-    },
-    saveButton: {
-        padding: '12px 24px',
-        background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-        color: '#fff',
-        border: 'none',
-        borderRadius: '12px',
-        fontSize: '0.95rem',
-        fontWeight: '700',
-        cursor: 'pointer',
-        boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
-    },
-    cancelButton: {
-        padding: '12px 24px',
-        backgroundColor: '#64748b',
-        color: '#fff',
-        border: 'none',
-        borderRadius: '12px',
-        fontSize: '0.95rem',
-        fontWeight: '700',
-        cursor: 'pointer',
-    },
-    managerLoginButton: {
-        padding: '10px 20px',
-        background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
-        color: '#fff',
-        border: 'none',
-        borderRadius: '10px',
-        fontSize: '0.95rem',
-        fontWeight: '700',
-        cursor: 'pointer',
-        boxShadow: '0 4px 12px rgba(139, 92, 246, 0.3)',
-    },
-    instructionButton: {
-        padding: '10px 20px',
-        background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-        color: '#fff',
-        border: 'none',
-        borderRadius: '10px',
-        fontSize: '0.95rem',
-        fontWeight: '700',
-        cursor: 'pointer',
-        boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)',
-    },
-    editButtons: {
-        display: 'flex',
-        gap: '12px',
-    },
-    
-    container: {
-        maxWidth: 1400,
-        margin: '0 auto',
-        padding: '32px',
-    },
-    
-    quickInfoGrid: {
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-        gap: '24px',
-        marginBottom: '32px',
-    },
-    infoCard: {
-        backgroundColor: '#fff',
-        borderRadius: '16px',
-        padding: '24px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '20px',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
-        transition: 'transform 0.2s, box-shadow 0.2s',
-        border: '1px solid #e2e8f0',
-    },
-    infoIcon: {
-        fontSize: '2.5rem',
-        width: 64,
-        height: 64,
-        borderRadius: '16px',
-        background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    infoContent: {
-        flex: 1,
-    },
-    infoLabel: {
-        fontSize: '0.85rem',
-        color: '#64748b',
-        fontWeight: '600',
-        marginBottom: '6px',
-        textTransform: 'uppercase',
-        letterSpacing: '0.5px',
-    },
-    infoValue: {
-        fontSize: '1.15rem',
-        fontWeight: '700',
-        color: '#1e293b',
-        wordBreak: 'break-word',
-    },
-    
-    editNameContainer: {
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '8px',
-    },
-    editLabel: {
-        fontSize: '0.95rem',
-        fontWeight: '700',
-        color: '#fff',
-        marginBottom: '10px',
-        display: 'block',
-    },
-    editInput: {
-        width: '100%',
-        padding: '14px',
-        border: '2px solid #e2e8f0',
-        borderRadius: '10px',
-        fontSize: '1rem',
-        transition: 'border-color 0.2s, box-shadow 0.2s',
-        boxSizing: 'border-box',
-    },
-    
-    tabContainer: {
-        backgroundColor: '#fff',
-        borderRadius: '16px',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
-        overflow: 'hidden',
-        border: '1px solid #e2e8f0',
-    },
-    tabNav: {
-        display: 'flex',
-        borderBottom: '2px solid #f1f5f9',
-        overflowX: 'auto',
-        backgroundColor: '#f8fafc',
-    },
-    tabButton: {
-        padding: '18px 28px',
-        border: 'none',
-        backgroundColor: 'transparent',
-        fontSize: '0.95rem',
-        fontWeight: '700',
-        color: '#64748b',
-        cursor: 'pointer',
-        transition: 'color 0.2s, background-color 0.2s, border-color 0.2s',
-        borderBottom: '3px solid transparent',
-        whiteSpace: 'nowrap',
-    },
-    tabButtonActive: {
-        color: '#667eea',
-        borderBottomColor: '#667eea',
-        backgroundColor: '#fff',
-    },
-    tabContent: {
-        padding: '32px',
-        minHeight: '400px',
-    },
-    
-    overviewSection: {
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '24px',
-    },
-    welcomeCard: {
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        borderRadius: '16px',
-        padding: '32px',
-        color: '#fff',
-        textAlign: 'center',
-    },
-    welcomeTitle: {
-        fontSize: '2rem',
-        fontWeight: '800',
-        margin: 0,
-        marginBottom: '8px',
-    },
-    welcomeText: {
-        fontSize: '1.1rem',
-        opacity: 0.9,
-        margin: 0,
-    },
-    statsGrid: {
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-        gap: '20px',
-    },
-    statCard: {
-        backgroundColor: '#f8fafc',
-        borderRadius: '16px',
-        padding: '24px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '16px',
-        border: '2px solid #e2e8f0',
-        transition: 'transform 0.2s, box-shadow 0.2s',
-    },
-    statIcon: {
-        fontSize: '2.5rem',
-        width: 64,
-        height: 64,
-        borderRadius: '16px',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    statContent: {
-        flex: 1,
-    },
-    statLabel: {
-        fontSize: '0.85rem',
-        color: '#64748b',
-        fontWeight: '600',
-        marginBottom: '6px',
-        textTransform: 'uppercase',
-        letterSpacing: '0.5px',
-    },
-    statValue: {
-        fontSize: '1.3rem',
-        fontWeight: '800',
-        color: '#1e293b',
-    },
-    
-    
-   
-    
-    toast: {
-        base: {
-            position: 'fixed',
-            top: 90,
-            right: 32,
-            padding: '18px 28px',
-            borderRadius: '12px',
-            color: '#fff',
-            fontWeight: '700',
-            zIndex: 3000,
-            boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
-            maxWidth: 400,
-        },
-        info: { 
-            background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-        },
-        success: { 
-            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-        },
-        error: { 
-            background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-        },
-        warning: { 
-            background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-        },
-    },
-    
-    modal: {
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(0,0,0,0.6)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 4000,
-        padding: '20px',
-    },
-    modalContent: {
-        backgroundColor: '#fff',
-        borderRadius: '20px',
-        maxWidth: 700,
-        width: '100%',
-        maxHeight: '90vh',
-        overflow: 'auto',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-    },
-    modalHeader: {
-        padding: '28px 32px',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        color: '#fff',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        borderRadius: '20px 20px 0 0',
-    },
-    modalTitle: {
-        fontSize: '1.6rem',
-        fontWeight: '800',
-        margin: 0,
-    },
-    modalClose: {
-        background: 'rgba(255,255,255,0.2)',
-        border: 'none',
-        fontSize: '2rem',
-        color: '#fff',
-        cursor: 'pointer',
-        padding: '0',
-        width: 40,
-        height: 40,
-        borderRadius: '50%',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontWeight: '300',
-        transition: 'background 0.2s',
-    },
-    modalBody: {
-        padding: '32px',
-    },
-    instructionSection: {
-        marginBottom: '28px',
-        paddingBottom: '20px',
-        borderBottom: '2px solid #f1f5f9',
-    },
-    instructionTitle: {
-        fontSize: '1.2rem',
-        fontWeight: '700',
-        color: '#1e293b',
-        marginTop: 0,
-        marginBottom: '12px',
-    },
-    instructionText: {
-        fontSize: '1rem',
-        color: '#64748b',
-        lineHeight: '1.6',
-        margin: 0,
-    },
-    instructionList: {
-        margin: '10px 0',
-        paddingLeft: '20px',
-        color: '#64748b',
-        lineHeight: '1.8',
-    },
-    formGroup: {
-        marginBottom: '20px',
-    },
-    modalLabel: {
-        display: 'block',
-        fontSize: '0.95rem',
-        fontWeight: '700',
-        color: '#334155',
-        marginBottom: '10px',
-    },
-    modalInput: {
-        width: '100%',
-        padding: '14px',
-        border: '2px solid #e2e8f0',
-        borderRadius: '10px',
-        fontSize: '1rem',
-        transition: 'border-color 0.2s, box-shadow 0.2s',
-        boxSizing: 'border-box',
-    },
-    modalActions: {
-        display: 'flex',
-        gap: '12px',
-        marginTop: '28px',
-    },
-    modalSaveButton: {
-        flex: 1,
-        padding: '14px 24px',
-        background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-        color: '#fff',
-        border: 'none',
-        borderRadius: '12px',
-        fontSize: '1rem',
-        fontWeight: '700',
-        cursor: 'pointer',
-        boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
-        transition: 'transform 0.2s',
-    },
-    modalCancelButton: {
-        flex: 1,
-        padding: '14px 24px',
-        backgroundColor: '#64748b',
-        color: '#fff',
-        border: 'none',
-        borderRadius: '12px',
-        fontSize: '1rem',
-        fontWeight: '700',
-        cursor: 'pointer',
-        transition: 'background-color 0.2s',
-    },
+    shell: { display: "flex", height: "100vh", overflow: "hidden", fontFamily: "'DM Sans', 'Segoe UI', system-ui, sans-serif", backgroundColor: "#f1f5f9" },
+    sidebar: { width: SIDEBAR_W, flexShrink: 0, backgroundColor: "#fff", borderRight: "1px solid #e2e8f0", display: "flex", flexDirection: "column", transition: "width 0.25s cubic-bezier(.4,0,.2,1)", overflow: "hidden", zIndex: 100 },
+    sidebarCollapsed: { width: SIDEBAR_COLLAPSED_W },
+    sidebarTop: { padding: "20px 12px 12px", flexShrink: 0 },
+    logoRow: { display: "flex", alignItems: "center", gap: 10, marginBottom: 16, overflow: "hidden" },
+    logoImg: { width: 36, height: 36, borderRadius: 8, flexShrink: 0 },
+    logoName: { fontSize: 13, fontWeight: 700, color: "#1e293b", whiteSpace: "nowrap" },
+    logoSub: { fontSize: 11, color: "#94a3b8", whiteSpace: "nowrap" },
+    profileMini: { display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "16px 12px", background: "#f8fafc", borderRadius: 12, border: "1px solid #e2e8f0" },
+    profileMiniImg: { width: 60, height: 60, borderRadius: "50%", objectFit: "cover", border: "3px solid #e0e7ff" },
+    profileMiniEdit: { position: "absolute", bottom: 0, right: 0, width: 22, height: 22, background: ACCENT, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, cursor: "pointer", border: "2px solid #fff" },
+    profileMiniName: { fontSize: 14, fontWeight: 700, color: "#1e293b", textAlign: "center" },
+    profileMiniRole: { fontSize: 11, color: "#64748b", background: "#ede9fe", padding: "2px 10px", borderRadius: 20 },
+    profileMiniBtns: { display: "flex", gap: 6, marginTop: 4, width: "100%" },
+    miniBtn: { flex: 1, fontSize: 11, fontWeight: 600, padding: "5px 0", background: "transparent", border: `1px solid ${ACCENT}`, borderRadius: 7, color: ACCENT, cursor: "pointer" },
+    editInput: { width: "100%", padding: "8px 10px", fontSize: 13, border: "1px solid #e2e8f0", borderRadius: 8, outline: "none", boxSizing: "border-box" },
+    nav: { flex: 1, overflowY: "auto", padding: "4px 8px" },
+    navSectionLabel: { fontSize: 10, fontWeight: 700, color: "#94a3b8", letterSpacing: "0.06em", textTransform: "uppercase", padding: "10px 8px 4px" },
+    navItem: { display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 10px", borderRadius: 9, border: "none", background: "transparent", cursor: "pointer", fontSize: 13, fontWeight: 500, color: "#64748b", textAlign: "left", marginBottom: 2, transition: "background 0.15s, color 0.15s" },
+    navItemActive: { background: "#ede9fe", color: "#5b21b6", fontWeight: 700 },
+    navIcon: { fontSize: 16, width: 20, textAlign: "center", flexShrink: 0 },
+    navLabel: { flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+    navBadge: { background: "#ef4444", color: "#fff", fontSize: 10, padding: "1px 6px", borderRadius: 10, fontWeight: 700 },
+    sidebarFooter: { padding: "12px 8px", borderTop: "1px solid #f1f5f9", display: "flex", flexDirection: "column", gap: 4 },
+    footerBtn: { display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 500, color: "#64748b", background: "transparent", border: "none", borderRadius: 8, padding: "8px 10px", cursor: "pointer", textAlign: "left", whiteSpace: "nowrap", overflow: "hidden" },
+    main: { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 },
+    topbar: { height: TOPBAR_H, flexShrink: 0, backgroundColor: "#fff", borderBottom: "1px solid #e2e8f0", display: "flex", alignItems: "center", padding: "0 24px", gap: 16, zIndex: 50 },
+    collapseBtn: { background: "transparent", border: "none", fontSize: 14, color: "#94a3b8", cursor: "pointer", padding: "4px 8px", borderRadius: 6 },
+    pageTitle: { flex: 1, fontSize: 16, fontWeight: 700, color: "#1e293b" },
+    topbarRight: { display: "flex", alignItems: "center", gap: 12 },
+    chatPill: { background: "#eef2ff", border: "1px solid #c7d2fe", color: "#6366f1", padding: "5px 12px", borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: "pointer" },
+    avatarCircle: { width: 36, height: 36, borderRadius: "50%", background: ACCENT, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 14, cursor: "pointer" },
+    avatarDropdown: { position: "absolute", top: "calc(100% + 10px)", right: 0, background: "#fff", borderRadius: 12, border: "1px solid #e2e8f0", boxShadow: "0 8px 24px rgba(0,0,0,0.12)", minWidth: 200, overflow: "hidden", zIndex: 200 },
+    avatarDropdownHeader: { padding: "16px 18px", background: "linear-gradient(135deg, #6366f1, #8b5cf6)", color: "#fff" },
+    avatarDropdownItem: { padding: "12px 18px", fontSize: 13, color: "#334155", cursor: "pointer", fontWeight: 500 },
+    content: { flex: 1, overflowY: "auto", padding: 28 },
+    welcomeBanner: { background: "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)", borderRadius: 16, padding: "28px 32px", color: "#fff", marginBottom: 20 },
+    welcomeTitle: { fontSize: 22, fontWeight: 800, margin: 0 },
+    welcomeSub: { fontSize: 14, opacity: 0.88, margin: "6px 0 0" },
+    infoStrip: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14, marginBottom: 20 },
+    infoChip: { background: "#fff", borderRadius: 12, border: "1px solid #e2e8f0", padding: "14px 16px", display: "flex", alignItems: "center", gap: 12 },
+    infoChipIcon: { fontSize: 22, width: 40, height: 40, background: "#f0f4ff", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+    infoChipLabel: { fontSize: 11, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 2 },
+    infoChipVal: { fontSize: 13, fontWeight: 600, color: "#1e293b", wordBreak: "break-word" },
+    quickGrid: { display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 },
+    quickTile: { display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "16px 22px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, cursor: "pointer", minWidth: 90, transition: "all 0.15s" },
+    quickTileIcon: { fontSize: 26 },
+    quickTileLabel: { fontSize: 11, fontWeight: 600, color: "#64748b", whiteSpace: "nowrap" },
+    quickTileBadge: { position: "absolute", top: 8, right: 8, background: "#ef4444", color: "#fff", fontSize: 10, padding: "1px 5px", borderRadius: 10, fontWeight: 700 },
+    sectionCard: { background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: 24, minHeight: 200 },
+    toast: { position: "fixed", top: 20, right: 24, color: "#fff", fontWeight: 600, fontSize: 13, padding: "12px 22px", borderRadius: 12, zIndex: 9999, boxShadow: "0 6px 20px rgba(0,0,0,0.18)" },
+    overlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 5000, padding: 20 },
+    modal: { background: "#fff", borderRadius: 20, maxWidth: 680, width: "100%", maxHeight: "90vh", overflow: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.25)" },
+    modalHeader: { padding: "24px 28px", background: "linear-gradient(135deg, #6366f1, #8b5cf6)", color: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center", borderRadius: "20px 20px 0 0" },
+    modalTitle: { fontSize: 18, fontWeight: 700, margin: 0 },
+    modalClose: { background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", fontSize: 22, width: 36, height: 36, borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" },
+    modalBody: { padding: "28px" },
+    instructionBlock: { marginBottom: 22, paddingBottom: 18, borderBottom: "1px solid #f1f5f9" },
+    instructionTitle: { fontSize: 14, fontWeight: 700, color: "#1e293b", marginBottom: 6 },
+    instructionText: { fontSize: 13, color: "#64748b", lineHeight: 1.6, margin: 0 },
+    instructionList: { margin: "8px 0 0", paddingLeft: 18, color: "#64748b", fontSize: 13, lineHeight: 1.9 },
+    fieldLabel: { display: "block", fontSize: 13, fontWeight: 600, color: "#334155", marginBottom: 8 },
+    fieldInput: { width: "100%", padding: "11px 14px", fontSize: 14, border: "1px solid #e2e8f0", borderRadius: 10, outline: "none", boxSizing: "border-box" },
+    btnPrimary: { flex: 1, padding: "12px 20px", background: "linear-gradient(135deg, #6366f1, #8b5cf6)", color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer" },
+    btnSecondary: { flex: 1, padding: "12px 20px", background: "#f1f5f9", color: "#64748b", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer" },
 };
 
 export default EmployeeDashboard;
