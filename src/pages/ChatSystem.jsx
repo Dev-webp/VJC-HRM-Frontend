@@ -657,7 +657,7 @@ export default function ChatSystem({ currentUser, isChairman=false }) {
   useEffect(()=>{
     const socket=io(BASE,{
       path:"/socket.io/",
-      transports:["polling","websocket"],
+      transports:["websocket"],
       withCredentials:true,
       reconnection:true,
       reconnectionAttempts:Infinity,
