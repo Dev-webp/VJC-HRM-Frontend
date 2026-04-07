@@ -97,6 +97,7 @@ export default function ChairmanAccessPanel({ currentUser }) {
   const [rooms,       setRooms]       = useState([]);
   const [activeRoom,  setActiveRoom]  = useState(null);
   const [messages,    setMessages]    = useState([]);
+  const [roomMembers, setRoomMembers] = useState({});   // { roomId: [member, ...] }
   const [loading,     setLoading]     = useState(false);
   const [loadingRooms,setLoadingRooms]= useState(true);
   const [search,      setSearch]      = useState("");
@@ -111,12 +112,24 @@ export default function ChairmanAccessPanel({ currentUser }) {
     setTimeout(() => setToast(null), 3000);
   };
 
-  /* ── fetch ALL rooms (uses admin endpoint so chairman sees DMs between other employees) ── */
+  /* ── fetch ALL rooms ── */
   const fetchRooms = useCallback(async () => {
     setLoadingRooms(true);
     try {
       const { data } = await axios.get(`${BASE}/chat/admin/all-rooms`, { withCredentials: true });
       setRooms(data);
+      // Pre-fetch members for all DM rooms so we can show participant names
+      const dmRooms = data.filter(r => r.room_type === "dm");
+      const memberMap = {};
+      await Promise.all(
+        dmRooms.map(async (room) => {
+          try {
+            const { data: members } = await axios.get(`${BASE}/chat/room/${room.id}/members`, { withCredentials: true });
+            memberMap[room.id] = members;
+          } catch {}
+        })
+      );
+      setRoomMembers(memberMap);
     } catch {
       try {
         const { data } = await axios.get(`${BASE}/chat/rooms`, { withCredentials: true });
@@ -127,13 +140,38 @@ export default function ChairmanAccessPanel({ currentUser }) {
 
   useEffect(() => { fetchRooms(); }, [fetchRooms]);
 
+  /* ── Derive a human-readable DM label: "Alice ↔ Bob" ── */
+  const getDmLabel = (room) => {
+    const members = roomMembers[room.id];
+    if (members && members.length >= 2) {
+      return members.map(m => m.name?.split(" ")[0] || m.name || "?").join(" ↔ ");
+    }
+    // Fallback to whatever name the server gave
+    return room.name || "Direct Message";
+  };
+
   /* ── open room ── */
   const openRoom = async (room) => {
     setActiveRoom(room);
     setMessages([]);
     setLoading(true);
+    // Also fetch members for non-DM rooms on open
+    if (room.room_type !== "dm" && !roomMembers[room.id]) {
+      try {
+        const { data: members } = await axios.get(`${BASE}/chat/room/${room.id}/members`, { withCredentials: true });
+        setRoomMembers(prev => ({ ...prev, [room.id]: members }));
+      } catch {}
+    }
     try {
-      const { data } = await axios.get(`${BASE}/chat/room/${room.id}/messages`, { withCredentials: true });
+      // Use admin endpoint to fetch ALL messages including deleted ones with original content
+      let data;
+      try {
+        const res = await axios.get(`${BASE}/chat/admin/room/${room.id}/messages`, { withCredentials: true });
+        data = res.data;
+      } catch {
+        const res = await axios.get(`${BASE}/chat/room/${room.id}/messages`, { withCredentials: true });
+        data = res.data;
+      }
       setMessages(data);
     } catch {}
     finally { setLoading(false); }
@@ -150,7 +188,7 @@ export default function ChairmanAccessPanel({ currentUser }) {
       await axios.delete(`${BASE}/chat/room/${room.id}`, { withCredentials: true });
       setRooms(prev => prev.filter(r => r.id !== room.id));
       if (activeRoom?.id === room.id) { setActiveRoom(null); setMessages([]); }
-      showToast(`✅ "${room.name}" deleted`);
+      showToast(`✅ Conversation deleted`);
     } catch { showToast("❌ Failed to delete", "error"); }
     finally { setConfirm(null); }
   };
@@ -164,8 +202,15 @@ export default function ChairmanAccessPanel({ currentUser }) {
     department: { bg:"#dbeafe", color:"#2563eb" },
   }[type] || { bg:"#f1f5f9", color:"#64748b" });
 
+  /* ── Room display name ── */
+  const getRoomDisplayName = (room) => {
+    if (room.room_type === "dm") return getDmLabel(room);
+    return room.name || "Unnamed";
+  };
+
   const filtered = rooms.filter(r => {
-    if (search && !r.name?.toLowerCase().includes(search.toLowerCase())) return false;
+    const displayName = getRoomDisplayName(r);
+    if (search && !displayName.toLowerCase().includes(search.toLowerCase())) return false;
     if (filter === "dm")         return r.room_type === "dm";
     if (filter === "group")      return r.room_type === "group";
     if (filter === "department") return r.room_type === "department";
@@ -186,9 +231,9 @@ export default function ChairmanAccessPanel({ currentUser }) {
       <Lightbox src={lightbox} onClose={() => setLightbox(null)} />
       <ConfirmModal
         open={!!confirm}
-        title={`Delete "${confirm?.room?.name}"?`}
+        title={`Delete this conversation?`}
         body={confirm?.room?.room_type === "dm"
-          ? "This will permanently delete this private conversation and all its messages. This cannot be undone."
+          ? `This will permanently delete the private conversation between ${getRoomDisplayName(confirm.room)} and all its messages. This cannot be undone.`
           : "This will permanently delete this group/channel and all its messages for everyone. This cannot be undone."}
         onConfirm={() => deleteRoom(confirm.room)}
         onCancel={() => setConfirm(null)}
@@ -222,7 +267,7 @@ export default function ChairmanAccessPanel({ currentUser }) {
           <div style={{ padding:"12px 10px 10px", borderBottom:"1px solid #e2e8f0", flexShrink:0 }}>
             <div style={{ position:"relative", marginBottom:8 }}>
               <span style={{ position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",color:"#94a3b8",fontSize:13 }}>🔍</span>
-              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search all chats…"
+              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search by participant name…"
                 style={{ width:"100%",padding:"7px 10px 7px 28px",fontSize:13,borderRadius:9,border:"1px solid #e2e8f0",background:"#fff",boxSizing:"border-box",outline:"none" }}/>
             </div>
             <div style={{ display:"flex",gap:2,background:"#fff",borderRadius:9,padding:3,border:"1px solid #e2e8f0" }}>
@@ -244,15 +289,32 @@ export default function ChairmanAccessPanel({ currentUser }) {
             ) : filtered.map(room => {
               const act   = activeRoom?.id === room.id;
               const badge = typeBadge(room.room_type);
+              const displayName = getRoomDisplayName(room);
+              const members = roomMembers[room.id] || [];
+
               return (
                 <div key={room.id} onClick={()=>openRoom(room)}
                   style={{ padding:"9px 10px", display:"flex", alignItems:"center", gap:9, borderLeft: act?"3px solid #6366f1":"3px solid transparent", background: act?"#ede9fe":"transparent", cursor:"pointer", borderBottom:"1px solid #f1f5f9", transition:"all 0.15s" }}>
-                  <div style={{ width:34,height:34,borderRadius:9,background:"#fff",border:"1px solid #e2e8f0",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,flexShrink:0 }}>
-                    {typeIcon(room)}
-                  </div>
+
+                  {/* Avatar for DMs shows both participant initials */}
+                  {room.room_type === "dm" && members.length >= 2 ? (
+                    <div style={{ position:"relative", width:34, height:34, flexShrink:0 }}>
+                      <div style={{ position:"absolute",top:0,left:0,width:22,height:22,borderRadius:"50%",background:colorFor(members[0]?.name||""),display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:"#fff",border:"2px solid #f8fafc",zIndex:2 }}>
+                        {(members[0]?.name||"?")[0].toUpperCase()}
+                      </div>
+                      <div style={{ position:"absolute",bottom:0,right:0,width:22,height:22,borderRadius:"50%",background:colorFor(members[1]?.name||""),display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:"#fff",border:"2px solid #f8fafc",zIndex:1 }}>
+                        {(members[1]?.name||"?")[0].toUpperCase()}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ width:34,height:34,borderRadius:9,background:"#fff",border:"1px solid #e2e8f0",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,flexShrink:0 }}>
+                      {typeIcon(room)}
+                    </div>
+                  )}
+
                   <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ display:"flex",alignItems:"center",gap:5,marginBottom:2 }}>
-                      <span style={{ fontSize:12,fontWeight:600,color:"#1e293b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:110 }}>{room.name}</span>
+                      <span style={{ fontSize:12,fontWeight:600,color:"#1e293b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:130 }}>{displayName}</span>
                       <span style={{ fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:6,background:badge.bg,color:badge.color,flexShrink:0 }}>{room.room_type}</span>
                       {room.unread_count > 0 && <span style={{ marginLeft:"auto",background:"#ef4444",color:"#fff",fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:8,flexShrink:0 }}>{room.unread_count}</span>}
                     </div>
@@ -262,6 +324,7 @@ export default function ChairmanAccessPanel({ currentUser }) {
                       </div>
                     )}
                   </div>
+
                   {/* delete btn — dm & group only */}
                   {(room.room_type==="dm"||room.room_type==="group") && (
                     <button onClick={e=>{e.stopPropagation();setConfirm({room});}}
@@ -284,16 +347,27 @@ export default function ChairmanAccessPanel({ currentUser }) {
               {/* header */}
               <div style={{ padding:"12px 18px", borderBottom:"1px solid #e2e8f0", display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0, background:"#fff", boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
                 <div style={{ display:"flex",alignItems:"center",gap:12 }}>
-                  <div style={{ width:38,height:38,borderRadius:10,background:"#ede9fe",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20 }}>
-                    {typeIcon(activeRoom)}
-                  </div>
+                  {/* Dual avatar in header for DMs */}
+                  {activeRoom.room_type === "dm" && (roomMembers[activeRoom.id]||[]).length >= 2 ? (
+                    <div style={{ position:"relative", width:40, height:40, flexShrink:0 }}>
+                      <div style={{ position:"absolute",top:0,left:0,width:26,height:26,borderRadius:"50%",background:colorFor((roomMembers[activeRoom.id]||[])[0]?.name||""),display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#fff",border:"2px solid #fff",zIndex:2 }}>
+                        {((roomMembers[activeRoom.id]||[])[0]?.name||"?")[0].toUpperCase()}
+                      </div>
+                      <div style={{ position:"absolute",bottom:0,right:0,width:26,height:26,borderRadius:"50%",background:colorFor((roomMembers[activeRoom.id]||[])[1]?.name||""),display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#fff",border:"2px solid #fff",zIndex:1 }}>
+                        {((roomMembers[activeRoom.id]||[])[1]?.name||"?")[0].toUpperCase()}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ width:38,height:38,borderRadius:10,background:"#ede9fe",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20 }}>
+                      {typeIcon(activeRoom)}
+                    </div>
+                  )}
                   <div>
-                    <div style={{ fontSize:15,fontWeight:700,color:"#1e293b" }}>{activeRoom.name}</div>
+                    <div style={{ fontSize:15,fontWeight:700,color:"#1e293b" }}>{getRoomDisplayName(activeRoom)}</div>
                     <div style={{ fontSize:11,color:"#64748b" }}>
                       {activeRoom.room_type==="department" ? "Department channel"
-                       : activeRoom.room_type==="dm"       ? "Private one-to-one conversation"
-                       : "Group conversation"}
-                      {messages.length > 0 && ` · ${messages.length} messages`}
+                       : activeRoom.room_type==="dm"       ? `Private conversation · ${messages.length} messages`
+                       : `Group conversation · ${messages.length} messages`}
                     </div>
                   </div>
                 </div>
@@ -339,7 +413,7 @@ export default function ChairmanAccessPanel({ currentUser }) {
                       )}
 
                       {/* message row */}
-                      <div style={{ display:"flex", gap:9, alignItems:"flex-end", marginBottom: showAvatar&&i>0?12:2, opacity: msg.is_deleted?0.5:1 }}>
+                      <div style={{ display:"flex", gap:9, alignItems:"flex-end", marginBottom: showAvatar&&i>0?12:2 }}>
                         {/* avatar */}
                         <div style={{ width:32,flexShrink:0,paddingBottom:2 }}>
                           {showAvatar && (
@@ -366,17 +440,34 @@ export default function ChairmanAccessPanel({ currentUser }) {
                             </div>
                           )}
 
-                          {/* bubble */}
+                          {/* bubble — deleted messages show original content with red tint */}
                           <div style={{
-                            background:"#f8fafc", color:"#1e293b",
+                            background: msg.is_deleted ? "#fff5f5" : "#f8fafc",
+                            color: msg.is_deleted ? "#991b1b" : "#1e293b",
                             padding: (msg.file_url && isImg(msg.file_url, msg.file_name||"")) ? "6px" : "9px 13px",
                             borderRadius:"4px 18px 18px 18px",
                             fontSize:13.5, lineHeight:1.55, wordBreak:"break-word",
-                            border:"1px solid #e2e8f0",
+                            border: msg.is_deleted ? "1px solid #fecaca" : "1px solid #e2e8f0",
                             boxShadow:"0 1px 3px rgba(0,0,0,0.04)",
                           }}>
                             {msg.is_deleted ? (
-                              <span style={{ fontStyle:"italic",opacity:0.5 }}>🚫 Message deleted</span>
+                              /* ── Chairman sees the original content even if deleted ── */
+                              <div>
+                                <div style={{ display:"flex",alignItems:"center",gap:6,marginBottom: msg.content ? 4 : 0 }}>
+                                  <span style={{ fontSize:11,background:"#fee2e2",color:"#dc2626",padding:"1px 7px",borderRadius:4,fontWeight:600 }}>🗑 Deleted</span>
+                                </div>
+                                {msg.content && (
+                                  <div style={{ whiteSpace:"pre-wrap", opacity:0.8, fontSize:13 }}>{msg.content}</div>
+                                )}
+                                {msg.file_url && (
+                                  <div style={{ marginTop:4 }}>
+                                    <FileAttachment url={msg.file_url} name={msg.file_name} size={msg.file_size} onImgClick={setLightbox}/>
+                                  </div>
+                                )}
+                                {!msg.content && !msg.file_url && (
+                                  <span style={{ fontStyle:"italic", fontSize:12, opacity:0.6 }}>(content unavailable)</span>
+                                )}
+                              </div>
                             ) : (
                               <>
                                 {msg.content && <div style={{ whiteSpace:"pre-wrap", marginBottom: msg.file_url?4:0 }}>{msg.content}</div>}
@@ -421,7 +512,7 @@ export default function ChairmanAccessPanel({ currentUser }) {
               <div style={{ padding:"10px 18px",borderTop:"1px solid #e2e8f0",background:"#fafafa",flexShrink:0,display:"flex",alignItems:"center",gap:8 }}>
                 <span style={{ fontSize:14 }}>👁️</span>
                 <span style={{ fontSize:12,color:"#94a3b8",fontStyle:"italic" }}>
-                  Viewing as administrator — read-only. Click any image to enlarge.
+                  Viewing as administrator — read-only. Deleted messages are visible to chairman. Click any image to enlarge.
                 </span>
               </div>
             </>
@@ -429,8 +520,8 @@ export default function ChairmanAccessPanel({ currentUser }) {
             <div style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12,color:"#94a3b8" }}>
               <span style={{ fontSize:52 }}>👁️</span>
               <div style={{ fontSize:17,fontWeight:700,color:"#475569" }}>Select a chat to monitor</div>
-              <div style={{ fontSize:13,color:"#94a3b8",textAlign:"center",maxWidth:300,lineHeight:1.6 }}>
-                As chairman, you can view <strong style={{color:"#475569"}}>all conversations</strong> — including private one-to-one messages between employees — and delete any DM or group.
+              <div style={{ fontSize:13,color:"#94a3b8",textAlign:"center",maxWidth:320,lineHeight:1.6 }}>
+                As chairman, you can view <strong style={{color:"#475569"}}>all conversations</strong> including private DMs between employees. Deleted messages are shown with their original content.
               </div>
             </div>
           )}
