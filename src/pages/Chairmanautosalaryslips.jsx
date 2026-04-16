@@ -93,20 +93,18 @@ function ChairmanPayrollSlip() {
 
   if (slip) {
     totalSalary = Number(slip.base_salary) || 0;
-    
-    // Calculate based on work days vs total days
+
     const workDaysNum = parseInt(workDays) || parseInt(slip.work_days) || 0;
     const totalDaysNum = parseInt(totalDays) || parseInt(slip.total_days) || 30;
-    
-    // Pro-rated salary based on attendance
+
     const attendanceRatio = workDaysNum / totalDaysNum;
     payable = Math.round(totalSalary * attendanceRatio);
-    
+
     const basic = Math.round(payable * 0.6);
     const hra = Math.round(payable * 0.1);
     const conveyance = Math.round(payable * 0.1);
     const workAllowance = payable - basic - hra - conveyance;
-    
+
     earnings = [
       { desc: "Basic", amount: basic },
       { desc: "House Rent Allowance", amount: hra },
@@ -141,16 +139,90 @@ function ChairmanPayrollSlip() {
   const locationKey = loc.includes("hyderab") ? "hyderabad" : "bangalore";
   const office = officeAddresses[locationKey];
 
-  const payrollMonth = month ? new Date(month + "-01").toLocaleDateString(undefined, { month: "long", year: "numeric" }) : "-";
+  const payrollMonth = month
+    ? new Date(month + "-01").toLocaleDateString(undefined, { month: "long", year: "numeric" })
+    : "-";
 
   const downloadPDF = async () => {
-    const canvas = await html2canvas(slipRef.current, { scale: 2, useCORS: true });
+    const element = slipRef.current;
+
+    // Store original styles
+    const originalWidth = element.style.width;
+    const originalMaxWidth = element.style.maxWidth;
+    const originalOverflow = element.style.overflow;
+
+    // Force full render so nothing is clipped
+    element.style.width = "820px";
+    element.style.maxWidth = "none";
+    element.style.overflow = "visible";
+
+    const canvas = await html2canvas(element, {
+      scale: 2,
+      useCORS: true,
+      allowTaint: true,
+      scrollX: 0,
+      scrollY: 0,
+      windowWidth: 820,
+      width: element.scrollWidth,
+      height: element.scrollHeight,
+      logging: false,
+    });
+
+    // Restore original styles
+    element.style.width = originalWidth;
+    element.style.maxWidth = originalMaxWidth;
+    element.style.overflow = originalOverflow;
+
     const imgData = canvas.toDataURL("image/png");
-    const pdf = new jsPDF();
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-    pdf.addImage(imgData, "PNG", 0, 12, pdfWidth, pdfHeight);
-    pdf.save(`Payslip_${slip?.employee_name || 'employee'}.pdf`);
+
+    // --- Save as PNG image ---
+    const link = document.createElement("a");
+    link.href = imgData;
+    link.download = `Payslip_${slip?.employee_name || "employee"}_${month}.png`;
+    link.click();
+
+    // --- Save as PDF (multi-page safe) ---
+    const pdf = new jsPDF("p", "mm", "a4");
+    const pdfWidth = pdf.internal.pageSize.getWidth();   // 210mm
+    const pdfHeight = pdf.internal.pageSize.getHeight(); // 297mm
+
+    const imgWidthPx = canvas.width;
+    const imgHeightPx = canvas.height;
+
+    // Scale image to fit A4 width
+    const ratio = pdfWidth / imgWidthPx;
+    const scaledHeight = imgHeightPx * ratio; // in mm
+
+    if (scaledHeight <= pdfHeight) {
+      // Fits on one page
+      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, scaledHeight);
+    } else {
+      // Multi-page: slice canvas into A4-sized chunks
+      const pageHeightPx = Math.floor(pdfHeight / ratio);
+      let yOffset = 0;
+      let pageNum = 0;
+
+      while (yOffset < imgHeightPx) {
+        const sliceHeight = Math.min(pageHeightPx, imgHeightPx - yOffset);
+
+        const pageCanvas = document.createElement("canvas");
+        pageCanvas.width = imgWidthPx;
+        pageCanvas.height = sliceHeight;
+        const ctx = pageCanvas.getContext("2d");
+        ctx.drawImage(canvas, 0, yOffset, imgWidthPx, sliceHeight, 0, 0, imgWidthPx, sliceHeight);
+
+        const pageImgData = pageCanvas.toDataURL("image/png");
+        const sliceHeightMM = sliceHeight * ratio;
+
+        if (pageNum > 0) pdf.addPage();
+        pdf.addImage(pageImgData, "PNG", 0, 0, pdfWidth, sliceHeightMM);
+
+        yOffset += sliceHeight;
+        pageNum++;
+      }
+    }
+
+    pdf.save(`Payslip_${slip?.employee_name || "employee"}_${month}.pdf`);
   };
 
   const formatDate = (dateStr) => {
@@ -163,14 +235,14 @@ function ChairmanPayrollSlip() {
 
   return (
     <div style={{ maxWidth: 820, margin: "2rem auto", fontFamily: "Segoe UI, Arial, sans-serif" }}>
-      <h2 style={{ textAlign: "center", marginBottom: 8 }}>  Generate Salary Slip</h2>
-      
+      <h2 style={{ textAlign: "center", marginBottom: 8 }}>Generate Salary Slip</h2>
+
       <div style={{ background: "#f9f9f9", padding: 20, borderRadius: 12, marginBottom: 20, border: "1px solid #ddd" }}>
         <div style={{ display: "flex", gap: 15, flexWrap: "wrap", alignItems: "flex-end" }}>
           <div style={{ flex: 1 }}>
             <label style={{ display: "block", fontWeight: "bold", marginBottom: 5 }}>Employee Email:</label>
-            <input 
-              type="email" 
+            <input
+              type="email"
               placeholder="Enter employee email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -179,8 +251,8 @@ function ChairmanPayrollSlip() {
           </div>
           <div>
             <label style={{ display: "block", fontWeight: "bold", marginBottom: 5 }}>Month:</label>
-            <input 
-              type="month" 
+            <input
+              type="month"
               value={month}
               onChange={(e) => setMonth(e.target.value)}
               style={inputStyle}
@@ -198,34 +270,34 @@ function ChairmanPayrollSlip() {
         <>
           <div style={{ textAlign: "right", marginBottom: 10 }}>
             {!editMode ? (
-              <button onClick={() => setEditMode(true)} style={{...btnStyle, backgroundColor: "#28a745"}}>✏️ Edit Days</button>
+              <button onClick={() => setEditMode(true)} style={{ ...btnStyle, backgroundColor: "#28a745" }}>✏️ Edit Days</button>
             ) : (
-              <button onClick={() => setEditMode(false)} style={{...btnStyle, backgroundColor: "#dc3545"}}>✅ Save</button>
+              <button onClick={() => setEditMode(false)} style={{ ...btnStyle, backgroundColor: "#dc3545" }}>✅ Save</button>
             )}
-            <button onClick={downloadPDF} style={btnStyle}>⏳ Download PDF</button>
+            <button onClick={downloadPDF} style={{ ...btnStyle, marginLeft: 8 }}>⬇️ Download PDF & PNG</button>
           </div>
-          
+
           {editMode && (
             <div style={{ background: "#e7f3ff", padding: 15, borderRadius: 8, marginBottom: 15, border: "2px solid #007bff" }}>
               <div style={{ display: "flex", gap: 15, alignItems: "end" }}>
                 <div style={{ flex: 1 }}>
                   <label style={{ display: "block", fontWeight: "bold", marginBottom: 5 }}>Work Days:</label>
-                  <input 
-                    type="number" 
+                  <input
+                    type="number"
                     value={workDays}
                     onChange={(e) => setWorkDays(e.target.value)}
-                    style={{...inputStyle, backgroundColor: "white"}}
+                    style={{ ...inputStyle, backgroundColor: "white" }}
                     min="0"
                     max="31"
                   />
                 </div>
                 <div style={{ flex: 1 }}>
                   <label style={{ display: "block", fontWeight: "bold", marginBottom: 5 }}>Total Days:</label>
-                  <input 
-                    type="number" 
+                  <input
+                    type="number"
                     value={totalDays}
                     onChange={(e) => setTotalDays(e.target.value)}
-                    style={{...inputStyle, backgroundColor: "white"}}
+                    style={{ ...inputStyle, backgroundColor: "white" }}
                     min="1"
                     max="31"
                   />
@@ -236,7 +308,7 @@ function ChairmanPayrollSlip() {
               </div>
             </div>
           )}
-          
+
           <div ref={slipRef} style={slipContainerStyle}>
             <div style={{ backgroundColor: "#FFB847", color: "black", fontWeight: "800", fontSize: 18, padding: "16px 0", textAlign: "center", letterSpacing: "2px" }}>
               VJC IMMIGRATION AND VISA CONSULTANT (P) LTD.
@@ -287,47 +359,29 @@ function ChairmanPayrollSlip() {
             </div>
 
             <div style={{ fontSize: 13, color: "#333", padding: "24px 32px 40px", borderTop: "1px solid #eee", whiteSpace: "pre-line" }}>
-             {`Dear Associate,
+              {`Dear Associate,
 We thank you for being part of VJC OVERSEAS family!
-Now you can help others looking for job • Ask your friends & family members to visit our VJC OVERSEAS office to submit their resume OR send email to [career@vjcoverseas.com](mailto:career@vjcoverseas.com)
+Now you can help others looking for job • Ask your friends & family members to visit our VJC OVERSEAS office to submit their resume OR send email to career@vjcoverseas.com
 So Hurry!
-Mail your queries to [Info@vjcoverseas.com](mailto:Info@vjcoverseas.com) with Name & Employee ID OR Call our Employee Contact Center +91-4066367000, prefix the nearest VJC OVERSEAS office location.
+Mail your queries to Info@vjcoverseas.com with Name & Employee ID OR Call our Employee Contact Center +91-4066367000, prefix the nearest VJC OVERSEAS office location.
 Contact Center Time 9 Am to 8 Pm Monday to Saturday (excluding general holidays)
 Important: Please call/mail us with your latest Mobile number and Email id to avoid missing out on important communications.
 Note: This is a computer-generated pay slip, no signature is required.`}
             </div>
 
             <div style={{ fontSize: 14, color: "#222", textAlign: "center", padding: "0 32px 32px" }}>
-                 <div
-              style={{
-                marginTop: 16,
-                fontWeight: "bold",
-                color: "#0047ab",
-                fontSize: 15,
-                display: "flex",
-                justifyContent: "center",
-                gap: 24,
-              }}
-            >
-              <a href={`mailto:${office.contact.email}`} style={{ color: "#0047ab", textDecoration: "underline" }}>
-                {office.contact.email}
-              </a>
-              <span>{office.contact.phone}</span>
-            </div>
+              <div style={{ marginTop: 16, fontWeight: "bold", color: "#0047ab", fontSize: 15, display: "flex", justifyContent: "center", gap: 24 }}>
+                <a href={`mailto:${office.contact.email}`} style={{ color: "#0047ab", textDecoration: "underline" }}>
+                  {office.contact.email}
+                </a>
+                <span>{office.contact.phone}</span>
+              </div>
               <span style={{ fontWeight: "bold", color: "#701799", fontSize: 16 }}>{office.title}</span>
               <div style={{ marginTop: 6, fontWeight: "600" }}>{office.lines.join(", ")}</div>
               <div style={{ marginTop: 12, fontWeight: "bold" }}>CIN: U74120TG2015PTC101229</div>
-              <div
-              style={{
-                marginTop: 12,
-                fontSize: 12,
-                color: "#666",
-                fontStyle: "italic",
-                lineHeight: 1.3,
-              }}
-            >
-              This Document issued by VJC OVERSEAS. If any Unauthorized use, disclosure, dissemination or copying of this document is strictly prohibited and may be unlawful.
-            </div>
+              <div style={{ marginTop: 12, fontSize: 12, color: "#666", fontStyle: "italic", lineHeight: 1.3 }}>
+                This Document issued by VJC OVERSEAS. If any Unauthorized use, disclosure, dissemination or copying of this document is strictly prohibited and may be unlawful.
+              </div>
             </div>
           </div>
         </>
@@ -356,7 +410,12 @@ function InfoTable({ data, type }) {
   const sum = data.reduce((acc, item) => acc + Number(item.amount), 0);
   return (
     <table style={tableStyle}>
-      <thead><tr><th style={thStyle}>DESCRIPTION</th><th style={thStyle}>AMOUNT (₹)</th></tr></thead>
+      <thead>
+        <tr>
+          <th style={thStyle}>DESCRIPTION</th>
+          <th style={thStyle}>AMOUNT (₹)</th>
+        </tr>
+      </thead>
       <tbody>
         {data.map((row, idx) => (
           <tr key={idx}>
