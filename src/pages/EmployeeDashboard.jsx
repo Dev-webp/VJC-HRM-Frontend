@@ -344,7 +344,6 @@ function EmployeeDashboard({ defaultTab, openAddLead }) {
         if (t === "leads") setLeadBadge(0);
     };
 
-    // ── Navigate to manager dashboard ──
     const goToManagerDashboard = () => {
         const urlName = employeeName || profile?.name?.toLowerCase().replace(/\s+/g, "-");
         navigate(`/employee/${urlName}/manager-dashboard`);
@@ -477,7 +476,6 @@ function EmployeeDashboard({ defaultTab, openAddLead }) {
 
                 {/* Footer actions */}
                 <div style={{ padding: "10px 10px 14px", borderTop: "1px solid #f1f5f9", display: "flex", flexDirection: "column", gap: 4, flexShrink: 0 }}>
-                    {/* Manager Dashboard button */}
                     {profile?.role === "manager" && (
                         <button
                             onClick={goToManagerDashboard}
@@ -504,7 +502,6 @@ function EmployeeDashboard({ defaultTab, openAddLead }) {
                         </button>
                     )}
 
-                    {/* Instructions */}
                     <button
                         onClick={() => setShowInstructions(true)}
                         style={{
@@ -523,7 +520,6 @@ function EmployeeDashboard({ defaultTab, openAddLead }) {
                         {sidebarOpen && "Instructions"}
                     </button>
 
-                    {/* Logout */}
                     <button
                         onClick={() => axios.get(`${baseUrl}/logout`, { withCredentials: true }).then(() => window.location.href = "/")}
                         style={{
@@ -555,7 +551,6 @@ function EmployeeDashboard({ defaultTab, openAddLead }) {
                     padding: "0 28px", gap: 14, zIndex: 50,
                     boxShadow: "0 2px 10px rgba(59,108,248,0.05)",
                 }}>
-                    {/* Collapse toggle */}
                     <button
                         onClick={() => setSidebarOpen(o => !o)}
                         style={{
@@ -568,7 +563,6 @@ function EmployeeDashboard({ defaultTab, openAddLead }) {
                         title={sidebarOpen ? "Collapse" : "Expand"}
                     >{sidebarOpen ? "◀" : "▶"}</button>
 
-                    {/* Page icon + title */}
                     <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
                         <div style={{
                             width: 34, height: 34, borderRadius: 9, fontSize: 16,
@@ -595,7 +589,6 @@ function EmployeeDashboard({ defaultTab, openAddLead }) {
                                 }}
                             >💬 {chatUnread} new</button>
                         )}
-                        {/* Date */}
                         <div style={{
                             padding: "5px 12px", borderRadius: 20,
                             background: "#f8faff", border: "1px solid #e0e7ff",
@@ -625,7 +618,7 @@ function EmployeeDashboard({ defaultTab, openAddLead }) {
                                 <p style={{ fontSize: 14, opacity: 0.88, margin: "6px 0 0" }}>Here's your snapshot for today.</p>
                             </div>
 
-                            {/* Info chips */}
+                            {/* ── Info chips — SINGLE BLOCK (fixed duplicate) ── */}
                             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14, marginBottom: 20 }}>
                                 {[
                                     { icon: "📧", label: "Email",       val: profile?.email      || "—" },
@@ -651,38 +644,37 @@ function EmployeeDashboard({ defaultTab, openAddLead }) {
                                         </div>
                                     </div>
                                 ))}
-                            </div>
 
-                            {/* Quick action tiles */}
-                            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
-                                {[
-                                    canSeeSection("attendance") && { icon: "🕒", label: "Attendance", tab: "attendance" },
-                                    canSeeSection("leave")      && { icon: "📅", label: "Apply Leave", tab: "leave" },
-                                    canSeeSection("salary")     && { icon: "💰", label: "Salary",      tab: "salary" },
-                                    canSeeSection("chat")       && { icon: "💬", label: "Team Chat",   tab: "chat", badge: chatUnread },
-                                    (canSeeSection("leads") && showLeadTab) && { icon: "🎯", label: "My Leads", tab: "leads" },
-                                ].filter(Boolean).map(({ icon, label, tab, badge }) => (
-                                    <div
-                                        key={tab}
-                                        onClick={() => handleTabChange(tab)}
+                                {/* Offer Letter — VIEW mode (no download attribute) */}
+                                {profile?.offer_letter_url && (
+                                    <a
+                                        href={`${baseUrl}${profile.offer_letter_url}`}
+                                        target="_blank"
+                                        rel="noreferrer"
                                         style={{
-                                            display: "flex", flexDirection: "column", alignItems: "center",
-                                            gap: 6, padding: "16px 22px",
-                                            background: "#fff", border: "1px solid #eaecf5",
-                                            borderRadius: 14, cursor: "pointer", minWidth: 90,
+                                            background: "#fff", borderRadius: 14,
+                                            border: "1px solid #eaecf5", padding: "14px 16px",
+                                            display: "flex", alignItems: "center", gap: 12,
                                             boxShadow: "0 2px 8px rgba(59,108,248,0.04)",
-                                            transition: "all 0.15s", position: "relative",
+                                            textDecoration: "none",
+                                            cursor: "pointer",
+                                            transition: "box-shadow 0.15s, transform 0.15s",
                                         }}
                                         onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 8px 24px rgba(59,108,248,0.14)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
                                         onMouseLeave={e => { e.currentTarget.style.boxShadow = "0 2px 8px rgba(59,108,248,0.04)"; e.currentTarget.style.transform = "translateY(0)"; }}
                                     >
-                                        <span style={{ fontSize: 26 }}>{icon}</span>
-                                        <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", whiteSpace: "nowrap" }}>{label}</span>
-                                        {badge > 0 && (
-                                            <span style={{ position: "absolute", top: 8, right: 8, background: "#ef4444", color: "#fff", fontSize: 10, padding: "1px 5px", borderRadius: 10, fontWeight: 700 }}>{badge}</span>
-                                        )}
-                                    </div>
-                                ))}
+                                        <span style={{
+                                            fontSize: 20, width: 40, height: 40,
+                                            background: "#f0f4ff", borderRadius: 10,
+                                            display: "flex", alignItems: "center", justifyContent: "center",
+                                            flexShrink: 0,
+                                        }}>📄</span>
+                                        <div>
+                                            <div style={{ fontSize: 10.5, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 2, fontWeight: 700 }}>Offer Letter</div>
+                                            <div style={{ fontSize: 13, fontWeight: 700, color: "#3b6cf8" }}>👁 View</div>
+                                        </div>
+                                    </a>
+                                )}
                             </div>
 
                             {/* Analytics */}
