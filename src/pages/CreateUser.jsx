@@ -61,6 +61,7 @@ const ALL_SECTIONS = [
   { key: "sales",      label: "Sales Stats",     emoji: "📈", color: "#f97316", desc: "Targets & performance" },
   { key: "chatlogs",   label: "Chat Logs",       emoji: "📋", color: "#8b5cf6", desc: "MIS: chat log viewer" },
   { key: "fulldata",   label: "Full Data",       emoji: "📊", color: "#0ea5e9", desc: "MIS: employee table" },
+  { key: "resume", label: "Resume Marketing", emoji: "📄", color: "#7c3aed", desc: "CV builder & JD matcher" },
 ];
 
 const DEFAULT_SECTIONS_BY_ROLE = {

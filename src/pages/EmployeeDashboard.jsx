@@ -12,6 +12,7 @@ import AttendanceAnalytics from './Attendanceanalytics.jsx';
 import Fulldata from "./Fulldata.jsx";
 import LeadManagement from "./LeadManagement";
 import ChatSystem from "./ChatSystem";
+import ResumeMarketing from "./ResumeMarketing";
 
 const baseUrl =
     window.location.hostname === "localhost"
@@ -462,7 +463,9 @@ function EmployeeDashboard({ defaultTab, openAddLead }) {
                     {canSeeSection("chat")       && <NavItem icon="💬" label="Team Chat"     tabKey="chat"        activeTab={activeTab} setActiveTab={handleTabChange} badge={chatUnread > 0 ? chatUnread : null} />}
                     {canSeeSection("leads") && showLeadTab && <NavItem icon="🎯" label="My Leads" tabKey="leads" activeTab={activeTab} setActiveTab={handleTabChange} badge={leadBadge > 0 ? leadBadge : null} />}
                     {canSeeSection("sales") && hasSalesTarget && !checkingSalesTarget && <NavItem icon="📈" label="Sales Stats" tabKey="sales" activeTab={activeTab} setActiveTab={handleTabChange} />}
-
+                    {canSeeSection("resume") && (
+  <NavItem icon="📄" label="Resume Marketing" tabKey="resume" activeTab={activeTab} setActiveTab={handleTabChange} />
+)}
                     {(canSeeSection("chatlogs") || isMISExecutive) && (
                         <>
                             {sidebarOpen && <NavLabel>MIS Executive</NavLabel>}
@@ -691,6 +694,8 @@ function EmployeeDashboard({ defaultTab, openAddLead }) {
                         { key: "chatlogs",   sec: null,         el: <AttendanceChatLogs />,   extra: canSeeSection("chatlogs") || isMISExecutive },
                         { key: "fulldata",   sec: null,         el: <Fulldata />,              extra: canSeeSection("fulldata") || isMISExecutive },
                         { key: "leads",      sec: "leads",      el: <LeadManagement isChairman={false} />, extra: showLeadTab },
+                        { key: "resume", sec: "resume", el: <ResumeMarketing /> },
+                        
                     ].map(({ key, sec, el, extra }) => {
                         const show = activeTab === key && (sec ? canSeeSection(sec) : extra !== false);
                         return show ? (
