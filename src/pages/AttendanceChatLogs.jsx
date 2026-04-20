@@ -679,10 +679,14 @@ function HistoryRow({ date, historyLogs }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// LOG TABLE — receives isChairman prop for null-clear permission
+// ─────────────────────────────────────────────────────────────────────────────
 function LogTable({
   attendance, isEditing, editData, editedFields, changedFields,
   historyLogs, historyLoading, lastSavedDate, activeInputId,
   onFieldChange, onFocus, todayStr, month, holidaysMap,
+  isChairman,  // ← NEW PROP
 }) {
   const refs = useRef({});
   useEffect(() => {
@@ -758,11 +762,33 @@ function LogTable({
                     return (
                       <td key={field} style={{ ...CS.td, ...tdBg, ...(isEditing && edF[field] ? CS.cellEdited : !isEditing && chF[field] ? CS.cellChanged : {}) }}>
                         {isEditing
-                          ? <input type="time" ref={(el) => { refs.current[id] = el; }}
-                              value={rowData[field] ? rowData[field].slice(0, 5) : ""}
-                              onChange={(e) => onFieldChange(log.date, field, e.target.value)}
-                              onFocus={() => onFocus(log.date, field)}
-                              style={CS.timeInput} />
+                          ? (
+                            <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+                              <input
+                                type="time"
+                                ref={(el) => { refs.current[id] = el; }}
+                                value={
+                                  // ── FIX: show empty string if value is null/undefined/empty ──
+                                  (rowData[field] && rowData[field] !== "null")
+                                    ? String(rowData[field]).slice(0, 5)
+                                    : ""
+                                }
+                                onChange={(e) => onFieldChange(log.date, field, e.target.value)}
+                                onFocus={() => onFocus(log.date, field)}
+                                style={CS.timeInput}
+                              />
+                              {/* ── CHAIRMAN ONLY: ✕ button to null-clear a field ── */}
+                              {isChairman && (
+                                <button
+                                  title="Clear this field (set to null)"
+                                  onClick={() => onFieldChange(log.date, field, null)}
+                                  style={CS.clearBtn}
+                                >
+                                  ✕
+                                </button>
+                              )}
+                            </div>
+                          )
                           : <span style={CS.timeVal}>{fmt(log[field])}</span>
                         }
                       </td>
@@ -830,6 +856,7 @@ function LogModal({
   todayStr, scrollObj, month, holidaysMap,
   onFieldChange, onFocus,
   onStartEdit, onSave, onCancelEdit, onClose,
+  isChairman,  // ← NEW PROP
 }) {
   const bodyRef = useRef(null);
   useLayoutEffect(() => {
@@ -862,6 +889,12 @@ function LogModal({
                 <span key={label} style={{ background: bg, color, borderRadius: 8, padding: "3px 10px", fontSize: 12, fontWeight: 700 }}>{label}</span>
               ))}
             </div>
+            {/* ── Chairman null-clear hint ── */}
+            {isChairman && isEditing && (
+              <div style={{ marginTop: 8, fontSize: 11, color: "rgba(255,255,255,.7)", background: "rgba(0,0,0,.2)", borderRadius: 6, padding: "4px 10px", display: "inline-block" }}>
+                💡 As chairman, click <b>✕</b> next to any time field to clear it completely (set to null)
+              </div>
+            )}
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             {!isEditing && <button style={CS.btnEdit} onClick={onStartEdit}>✏️ Edit</button>}
@@ -889,6 +922,7 @@ function LogModal({
             todayStr={todayStr}
             month={month}
             holidaysMap={holidaysMap}
+            isChairman={isChairman}
           />
         </div>
       </div>
@@ -918,12 +952,15 @@ export default function AttendanceChatLogs() {
   const [changedFields, setChangedFields]   = useState({});
   const [activeInputId, setActiveInputId]   = useState(null);
 
+  // ── Keep a ref so callbacks always see the latest myRole without re-creating ──
+  const myRoleRef = useRef(null);
+  useEffect(() => { myRoleRef.current = myRole; }, [myRole]);
+
   const todayDate      = new Date();
   const todayStr       = todayDate.toISOString().slice(0, 10);
   const currentMonth   = todayStr.slice(0, 7);
   const formattedToday = todayDate.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 
-  // ── Single month selector — controls cards view, modal AND download ──
   const [selectedMonth, setSelectedMonth]     = useState(currentMonth);
   const [downloadLoading, setDownloadLoading] = useState(false);
   const month = selectedMonth;
@@ -1021,14 +1058,36 @@ export default function AttendanceChatLogs() {
     scrollObj.needRestore = false;
   }, [scrollObj]);
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // onFieldChange — THE KEY FIX IS HERE
+  //
+  // Rules:
+  //   • value === null  → always store null (chairman clicked ✕ clear button)
+  //   • value === ""    → chairman: store null | others: keep as "" (no-op / type clearing mid-edit)
+  //   • anything else   → store as-is
+  // ─────────────────────────────────────────────────────────────────────────
   const onFieldChange = useCallback((date, field, value) => {
     const body = document.querySelector("[data-modal-body='1']");
     if (body) scrollObj.saved = body.scrollTop;
     scrollObj.needRestore = true;
     setLastSavedDate(null);
     setEditedFields((prev) => ({ ...prev, [date]: { ...prev[date], [field]: true } }));
-    setEditData((prev) => ({ ...prev, [date]: { ...prev[date], [field]: value } }));
-  }, [scrollObj]);
+
+    // Resolve the final stored value:
+    //   null  → explicit clear (✕ button) — always null regardless of role
+    //   ""    → chairman clears via keyboard → null; others keep "" 
+    //   else  → use as-is
+    let storedValue;
+    if (value === null) {
+      storedValue = null;                               // explicit ✕ clear
+    } else if (value === "") {
+      storedValue = myRoleRef.current === "chairman" ? null : "";
+    } else {
+      storedValue = value;
+    }
+
+    setEditData((prev) => ({ ...prev, [date]: { ...prev[date], [field]: storedValue } }));
+  }, [scrollObj]); // myRoleRef is a ref, no need in deps
 
   const onFocus = useCallback((date, field) => { setActiveInputId(`${date}-${field}`); }, []);
 
@@ -1064,6 +1123,7 @@ export default function AttendanceChatLogs() {
   const presentUsers = noChairman.filter((u) => u.todayAtt.office_in).length;
   const absentUsers  = totalUsers - presentUsers;
   const expandedUser = userLogs.find((u) => u.email === expandedEmail);
+  const isChairman   = myRole === "chairman";
 
   return (
     <div style={CS.root}>
@@ -1088,7 +1148,6 @@ export default function AttendanceChatLogs() {
             {showCards ? "👁 Hide Cards" : "👥 Show Cards"}
           </button>
 
-          {/* ── Month selector — controls view + download ── */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,.12)", border: "1px solid rgba(255,255,255,.2)", borderRadius: 10, padding: "6px 12px" }}>
             <span style={{ color: "rgba(255,255,255,.7)", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap" }}>📅 Month:</span>
             <input
@@ -1185,6 +1244,7 @@ export default function AttendanceChatLogs() {
           onSave={saveEdits}
           onCancelEdit={cancelEdit}
           onClose={closeModal}
+          isChairman={isChairman}
         />
       )}
     </div>
@@ -1235,6 +1295,8 @@ const CS = {
   btnSave:   { background: "#10b981", border: "none", color: "#fff", padding: "8px 18px", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer" },
   btnCancel: { background: "#f59e0b", border: "none", color: "#fff", padding: "8px 18px", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer" },
   btnClose:  { width: 34, height: 34, borderRadius: "50%", border: "2px solid rgba(255,255,255,.3)", background: "rgba(255,255,255,.15)", color: "#fff", fontSize: 18, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" },
+  // ── NEW: clear button shown only to chairman ──
+  clearBtn:  { width: 18, height: 18, borderRadius: "50%", border: "1px solid #ef4444", background: "#fee2e2", color: "#dc2626", fontSize: 9, fontWeight: 900, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, padding: 0, lineHeight: 1 },
   tableScroll: { overflowX: "auto", padding: 16 },
   table: { width: "100%", minWidth: 1500, borderCollapse: "collapse", fontSize: 13 },
   th: { padding: "11px 9px", textAlign: "center", fontSize: 11, fontWeight: 700, background: "#1e3a8a", color: "#fff", borderRight: "1px solid rgba(255,255,255,.1)", whiteSpace: "nowrap" },
