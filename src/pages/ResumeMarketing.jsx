@@ -5,8 +5,7 @@
 
 import React, { useState, useRef, useEffect, useCallback, useReducer } from "react";
 
-const BASE = process.env.REACT_APP_API_URL || "http://localhost:5000";
-
+const BASE = process.env.REACT_APP_API_URL || "https://backend.vjcoverseas.com";
 // ─── COUNTRY DATA ─────────────────────────────────────────────────────────────
 const COUNTRY_GROUPS = [
   {

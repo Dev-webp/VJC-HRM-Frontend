@@ -6,8 +6,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { io } from "socket.io-client";
 
-const BASE = process.env.REACT_APP_API_URL || "http://localhost:5000";
-
+const BASE = process.env.REACT_APP_API_URL || "https://backend.vjcoverseas.com";
 const FLAG_MAP = {
   uk:"🇬🇧",germany:"🇩🇪",france:"🇫🇷",european:"🇪🇺",netherlands:"🇳🇱",sweden:"🇸🇪",
   denmark:"🇩🇰",norway:"🇳🇴",switzerland:"🇨🇭",spain:"🇪🇸",italy:"🇮🇹",poland:"🇵🇱",
