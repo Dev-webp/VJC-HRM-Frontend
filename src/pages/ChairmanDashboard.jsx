@@ -16,7 +16,7 @@ import SalesManagement from "./SalesManagement";
 import LeadManagement from "./LeadManagement";
 import ChatSystem from "./ChatSystem";
 import ChairmanAccessPanel from "./ChairmanAccessPanel";
-
+import ResumeUsageDashboard from "./ResumeUsageDashboard";
 const BASE =
   window.location.hostname === "localhost"
     ? "http://localhost:5000"
@@ -52,6 +52,7 @@ const SECTIONS = [
       { id: "LEAD_MANAGEMENT",  label: "Lead Management",  emoji: "🎯" },
       { id: "CHAT",             label: "Team Chat",        emoji: "💬", chatBadge: true },
       { id: "ACCESS_PANEL",     label: "Access Control",   emoji: "🔐" },
+      { id: "RESUME_USAGE",     label: "Resume Usage",     emoji: "📄" },
     ],
   },
 ];
@@ -365,6 +366,7 @@ export default function ChairmanDashboard() {
                 {tab === "SHOW_USERS"        && <ShowAllUsers />}
                 {tab === "CREATE_USER"       && <CreateUser />}
                 {tab === "OFFER_LETTER"      && <Offerletter />}
+                {tab === "RESUME_USAGE"      && <ResumeUsageDashboard />}
                 {tab === "SALES_MANAGEMENT"  && <SalesManagement />}
                 {tab === "PAYROLL"           && <Payroll />}
                 {tab === "SALARY_UPLOAD"     && <SalaryUpload />}
