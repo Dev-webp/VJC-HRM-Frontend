@@ -534,7 +534,10 @@ function RealtimeEditor({ html, onHtmlChange, onDownload, fileName, parsedData, 
       .replace(/\s*contenteditable="true"/g, '')
       .replace(/\s*data-editing="true"/g, '')
       .replace(/outline:\s*2px dashed[^;]+;/g, '')
-      .replace(/outline:\s*none;/g, '');
+      .replace(/outline:\s*none;/g, '')
+      .replace(/\s*cursor:\s*text;/g, '')
+      .replace(/\s*min-width:\s*4px;/g, '')
+      .replace(/\s*style="\s*"/g, '');
     const name = fileName || "resume.html";
     const blob = new Blob([clean], { type: "text/html;charset=utf-8" });
     const a = document.createElement("a");
@@ -861,9 +864,12 @@ export default function ResumeMarketing() {
     if (!file) return;
     setFile(file); setError(null); setGenerating(true); setLoadMsg("Reading resume file…");
     try {
-      const text = await extractText(file, setLoadMsg);
-      setLoadMsg("Parsing resume with AI…");
-      const raw = await callGroq(`
+     const text = await extractText(file, setLoadMsg);
+if (!text || text.trim().length < 50) {
+  throw new Error("Could not read resume content. Please use .TXT format for best results.");
+}
+setLoadMsg("Parsing resume with AI…");
+const raw = await callGroq(`
 Parse this resume and return ONLY a raw JSON object (no markdown, no backticks).
 Resume: ${text.slice(0, 4000)}
 Return exactly this structure:
