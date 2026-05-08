@@ -213,8 +213,8 @@ const buildResumePrompt = ({ data: d, country, tmpl, hasPhoto, jdText }) => {
   const langs  = (d.languages || []).join(", ") || "English";
   const certs  = (d.certifications || []).join(", ") || "N/A";
   const hobby  = (d.hobbies || []).join(", ");
-  const dob    = d.dob     || "[Date of Birth]";
-  const nat    = d.nationality || "[Nationality]";
+  const dob = (d.dob && d.dob.trim()) ? d.dob : "";
+const nat = (d.nationality && d.nationality.trim()) ? d.nationality : "";
 
   const photoHtml = hasPhoto
     ? `<img src="__PHOTO__" id="resume-photo" style="width:110px;height:138px;object-fit:cover;border-radius:3px;border:2px solid ${accentColor};display:block;position:absolute;cursor:move;" data-draggable="true">`
@@ -868,6 +868,7 @@ Parse this resume and return ONLY a raw JSON object (no markdown, no backticks).
 Resume: ${text.slice(0, 4000)}
 Return exactly this structure:
 {"name":"","email":"","phone":"","location":"","linkedin":"","dob":"","nationality":"","summary":"","experience":[{"company":"","role":"","duration":"","location":"","achievements":[""]}],"education":[{"institution":"","degree":"","year":"","grade":""}],"skills":[],"languages":[],"certifications":[],"hobbies":[]}
+IMPORTANT: Extract DOB if mentioned anywhere. Extract Nationality if mentioned. Extract all education details carefully. If not found leave as empty string.
 Start with { end with }. Nothing else.`, 2000, setLoadMsg);
       let cleaned = raw.trim().replace(/```json|```/g, "").trim();
       const s = cleaned.indexOf("{"), e2 = cleaned.lastIndexOf("}");
@@ -898,7 +899,11 @@ Start with { end with }. Nothing else.`, 2000, setLoadMsg);
         buildResumePrompt({ data: parsedData || {}, country, tmpl: selectedTmpl, hasPhoto: !!photoB64, jdText: jd }),
         7000, setLoadMsg
       );
-      const clean = html.replace(/```html|```/g, "").trim();
+      let clean = html.replace(/```html|```/g, "").trim();
+const doctypeIndex = clean.toLowerCase().indexOf("<!doctype html>");
+const htmlIndex = clean.toLowerCase().indexOf("<html");
+if (doctypeIndex !== -1) clean = clean.slice(doctypeIndex);
+else if (htmlIndex !== -1) clean = clean.slice(htmlIndex);
       const final = injectPhoto(clean, photoB64);
       setHtml(final); setStep(3);
       await logUsage({ action: jd ? "jd_rebuild" : "generate", candidateName: parsedData?.name || "Unknown", country, template: selectedTmpl?.name });
