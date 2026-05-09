@@ -7,6 +7,8 @@
 //           Works identically for TXT / DOCX / PDF uploads
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
+import * as htmlDocx from "html-docx-js/dist/html-docx";
+import { saveAs } from "file-saver";
 
 const BASE = process.env.REACT_APP_API_URL || "https://backend.vjcoverseas.com";
 
@@ -169,41 +171,23 @@ const injectPhoto = (html, b64) => {
 };
 
 // ─── DOWNLOAD AS WORD ─────────────────────────────────────────────────────────
-const downloadAsWord = (html, name) => {
+const downloadAsWord = async (html, name) => {
+ 
   let clean = html
     .replace(/\s*contenteditable="[^"]*"/g, '')
     .replace(/\s*data-editing="[^"]*"/g, '')
     .replace(/outline:\s*[^;]+dashed[^;]+;/g, '')
     .replace(/cursor:\s*text;/g, '')
     .replace(/<script[\s\S]*?<\/script>/gi, '');
-
-  const wordHtml = `<html xmlns:o="urn:schemas-microsoft-com:office:office"
-      xmlns:w="urn:schemas-microsoft-com:office:word"
-      xmlns="http://www.w3.org/TR/REC-html40">
-<head>
-<meta charset="utf-8">
-<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>90</w:Zoom><w:DoNotOptimizeForBrowser/></w:WordDocument></xml><![endif]-->
-<style>
-  @page { size: A4; margin: 12mm; }
-  body { font-family: 'Times New Roman', Times, serif; margin: 0; padding: 0; }
-  * { font-family: 'Times New Roman', Times, serif !important; }
-</style>
-${clean.match(/<style[\s\S]*?<\/style>/gi)?.join('\n') || ''}
-</head>
-<body>
-${clean.replace(/<html[\s\S]*?<body[^>]*>/i, '').replace(/<\/body>[\s\S]*$/i, '')}
-</body>
-</html>`;
-
-  const blob = new Blob([wordHtml], { type: "application/msword;charset=utf-8" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = name.replace(/\.html$/i, '') + ".doc";
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+ 
+  const fileBuffer = htmlDocx.asBlob(clean);
+ 
+const blob = fileBuffer;
+ 
+saveAs(blob, `${name}.docx`);
+ 
+  saveAs(blob, `${name}.docx`);
 };
-
 const downloadHtml = (html, name) => {
   let clean = html
     .replace(/\s*contenteditable="[^"]*"/g, '')
