@@ -1,11 +1,15 @@
 /* eslint-disable */
 // ResumeMarketing.jsx — VJC Overseas Premium Resume Builder
-// Real-time WYSIWYG editor: drag image anywhere, inline text edit, format toolbar
-// Times New Roman throughout, 5 premium layouts, 35 countries
+// FIXED v3: Rigid hardcoded HTML shell templates — AI fills ONLY content (no structure)
+//           Photo is CSS-locked (no drag, no float, flexbox only)
+//           Perfect consistent layout every single generation
+//           Left/right edge gaps enforced
+//           Works identically for TXT / DOCX / PDF uploads
 
-import React, { useState, useRef, useEffect, useCallback, useReducer } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 
 const BASE = process.env.REACT_APP_API_URL || "https://backend.vjcoverseas.com";
+
 // ─── COUNTRY DATA ─────────────────────────────────────────────────────────────
 const COUNTRY_GROUPS = [
   {
@@ -60,53 +64,23 @@ const ALL_COUNTRIES = COUNTRY_GROUPS.flatMap(g => g.countries);
 
 // ─── TEMPLATE DEFINITIONS ─────────────────────────────────────────────────────
 const TEMPLATE_DEFS = [
-  {
-    id: "executive",
-    name: "Executive Dark",
-    icon: "◼",
-    desc: "Dark header, gold accents, serif gravitas",
-    preview: { bg: "#1a1a2e", accent: "#c9a84c", layout: "classic" }
-  },
-  {
-    id: "modern",
-    name: "Modern Split",
-    icon: "▨",
-    desc: "Bold two-column sidebar layout",
-    preview: { bg: "#1e3a8a", accent: "#60a5fa", layout: "two-col" }
-  },
-  {
-    id: "minimal",
-    name: "Minimal Pro",
-    icon: "—",
-    desc: "Ultra clean, hairline rules, whitespace",
-    preview: { bg: "#111827", accent: "#111827", layout: "minimal" }
-  },
-  {
-    id: "creative",
-    name: "Prestige",
-    icon: "◈",
-    desc: "Rich burgundy, gold ruled, magazine feel",
-    preview: { bg: "#6b1c1c", accent: "#c9a84c", layout: "sidebar" }
-  },
-  {
-    id: "classic",
-    name: "Classic Pro",
-    icon: "≡",
-    desc: "Traditional, formal, elegant serif",
-    preview: { bg: "#1a3a1a", accent: "#2d6a2d", layout: "classic" }
-  },
+  { id:"executive", name:"Executive Dark",  icon:"◼", desc:"Dark header, gold accents, serif gravitas",    preview:{ bg:"#1a1a2e", accent:"#c9a84c", layout:"classic"  } },
+  { id:"modern",    name:"Modern Split",    icon:"▨", desc:"Bold two-column sidebar layout",              preview:{ bg:"#1e3a8a", accent:"#60a5fa", layout:"two-col"  } },
+  { id:"minimal",   name:"Minimal Pro",     icon:"—", desc:"Ultra clean, hairline rules, whitespace",     preview:{ bg:"#111827", accent:"#111827", layout:"minimal"  } },
+  { id:"creative",  name:"Prestige",        icon:"◈", desc:"Rich burgundy, gold ruled, magazine feel",    preview:{ bg:"#6b1c1c", accent:"#c9a84c", layout:"sidebar"  } },
+  { id:"classic",   name:"Classic Pro",     icon:"≡", desc:"Traditional, formal, elegant serif",         preview:{ bg:"#1a3a1a", accent:"#2d6a2d", layout:"classic"  } },
 ];
 
 const COUNTRY_COLORS = {
-  uk:{ executive:"#1a2e3b", modern:"#1e3a8a", minimal:"#2d3748", creative:"#6b1c1c", classic:"#1e3a5f" },
-  germany:{ executive:"#1a1a2e", modern:"#7f1d1d", minimal:"#2d3748", creative:"#1a3a1a", classic:"#1a237e" },
-  france:{ executive:"#1d1d6e", modern:"#be123c", minimal:"#1f2937", creative:"#4a1942", classic:"#1d4ed8" },
-  india:{ executive:"#7c2d12", modern:"#1d4ed8", minimal:"#2d3748", creative:"#6b1c1c", classic:"#c2410c" },
-  us:{ executive:"#111827", modern:"#1e3a8a", minimal:"#2d3748", creative:"#6b1c1c", classic:"#0f5132" },
-  dubai:{ executive:"#78350f", modern:"#1e3a8a", minimal:"#2d3748", creative:"#6b1c1c", classic:"#78350f" },
-  gulf:{ executive:"#78350f", modern:"#1e40af", minimal:"#2d3748", creative:"#6b1c1c", classic:"#78350f" },
-  australian:{ executive:"#1d5c37", modern:"#c2410c", minimal:"#2d3748", creative:"#1a3a4a", classic:"#1e3a8a" },
-  japan:{ executive:"#1f2937", modern:"#be123c", minimal:"#2d3748", creative:"#1a1a2e", classic:"#1a1a1a" },
+  uk:         { executive:"#1a2e3b", modern:"#1e3a8a", minimal:"#2d3748", creative:"#6b1c1c", classic:"#1e3a5f" },
+  germany:    { executive:"#1a1a2e", modern:"#7f1d1d", minimal:"#2d3748", creative:"#1a3a1a", classic:"#1a237e" },
+  france:     { executive:"#1d1d6e", modern:"#be123c", minimal:"#1f2937", creative:"#4a1942", classic:"#1d4ed8" },
+  india:      { executive:"#7c2d12", modern:"#1d4ed8", minimal:"#2d3748", creative:"#6b1c1c", classic:"#c2410c" },
+  us:         { executive:"#111827", modern:"#1e3a8a", minimal:"#2d3748", creative:"#6b1c1c", classic:"#0f5132" },
+  dubai:      { executive:"#78350f", modern:"#1e3a8a", minimal:"#2d3748", creative:"#6b1c1c", classic:"#78350f" },
+  gulf:       { executive:"#78350f", modern:"#1e40af", minimal:"#2d3748", creative:"#6b1c1c", classic:"#78350f" },
+  australian: { executive:"#1d5c37", modern:"#c2410c", minimal:"#2d3748", creative:"#1a3a4a", classic:"#1e3a8a" },
+  japan:      { executive:"#1f2937", modern:"#be123c", minimal:"#2d3748", creative:"#1a1a2e", classic:"#1a1a1a" },
 };
 
 // ─── GROQ API CALL ────────────────────────────────────────────────────────────
@@ -188,239 +162,746 @@ const extractText = (file, onProgress) => new Promise((res, rej) => {
   } else { rej(new Error(`Unsupported: .${ext}. Use .txt, .pdf, .docx`)); }
 });
 
+// ─── INJECT PHOTO ─────────────────────────────────────────────────────────────
 const injectPhoto = (html, b64) => {
   if (!b64 || !html) return html;
   return html.replace(/src="__PHOTO__"/g, `src="${b64}"`);
 };
 
-const downloadHtml = (html, name) => {
-  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+// ─── DOWNLOAD AS WORD ─────────────────────────────────────────────────────────
+const downloadAsWord = (html, name) => {
+  let clean = html
+    .replace(/\s*contenteditable="[^"]*"/g, '')
+    .replace(/\s*data-editing="[^"]*"/g, '')
+    .replace(/outline:\s*[^;]+dashed[^;]+;/g, '')
+    .replace(/cursor:\s*text;/g, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '');
+
+  const wordHtml = `<html xmlns:o="urn:schemas-microsoft-com:office:office"
+      xmlns:w="urn:schemas-microsoft-com:office:word"
+      xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>90</w:Zoom><w:DoNotOptimizeForBrowser/></w:WordDocument></xml><![endif]-->
+<style>
+  @page { size: A4; margin: 12mm; }
+  body { font-family: 'Times New Roman', Times, serif; margin: 0; padding: 0; }
+  * { font-family: 'Times New Roman', Times, serif !important; }
+</style>
+${clean.match(/<style[\s\S]*?<\/style>/gi)?.join('\n') || ''}
+</head>
+<body>
+${clean.replace(/<html[\s\S]*?<body[^>]*>/i, '').replace(/<\/body>[\s\S]*$/i, '')}
+</body>
+</html>`;
+
+  const blob = new Blob([wordHtml], { type: "application/msword;charset=utf-8" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = name;
+  a.download = name.replace(/\.html$/i, '') + ".doc";
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+};
+
+const downloadHtml = (html, name) => {
+  let clean = html
+    .replace(/\s*contenteditable="[^"]*"/g, '')
+    .replace(/\s*data-editing="[^"]*"/g, '')
+    .replace(/outline:\s*[^;]+dashed[^;]+;/g, '')
+    .replace(/cursor:\s*text;/g, '');
+  const blob = new Blob([clean], { type: "text/html;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 };
 
-// ─── BUILD AI PROMPT (Times New Roman everywhere) ────────────────────────────
-const buildResumePrompt = ({ data: d, country, tmpl, hasPhoto, jdText }) => {
+// ═══════════════════════════════════════════════════════════════════════════════
+// ─── HARDCODED HTML SHELL BUILDERS ───────────────────────────────────────────
+// KEY FIX: The entire HTML structure is hardcoded here in JS.
+// AI only fills in TEXT CONTENT (names, bullets, etc.) — never touches layout/CSS.
+// This guarantees 100% consistent rendering every single time.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const getAccentColor = (country, tmplId) => {
   const cc = COUNTRY_COLORS[country] || {};
-  const accentColor = cc[tmpl.id] || tmpl.preview.bg;
-  const countryObj = ALL_COUNTRIES.find(c => c.key === country) || {};
+  const defaults = { executive:"#1a1a2e", modern:"#1e3a8a", minimal:"#111827", creative:"#6b1c1c", classic:"#1a3a1a" };
+  return cc[tmplId] || defaults[tmplId] || "#1a1a2e";
+};
 
-  const name   = d.name    || "Candidate";
-  const skills = (d.skills || []).join(", ") || "Listed in experience";
-  const langs  = (d.languages || []).join(", ") || "English";
-  const certs  = (d.certifications || []).join(", ") || "N/A";
-  const hobby  = (d.hobbies || []).join(", ");
-  const dob = (d.dob && d.dob.trim()) ? d.dob : "";
-const nat = (d.nationality && d.nationality.trim()) ? d.nationality : "";
-
-  const photoHtml = hasPhoto
-    ? `<img src="__PHOTO__" id="resume-photo" style="width:110px;height:138px;object-fit:cover;border-radius:3px;border:2px solid ${accentColor};display:block;position:absolute;cursor:move;" data-draggable="true">`
-    : `<div id="resume-photo-placeholder" style="width:110px;height:138px;background:#f5f5f5;border:2px dashed #ccc;border-radius:3px;display:flex;align-items:center;justify-content:center;color:#aaa;font-size:11px;font-family:'Times New Roman',serif;flex-direction:column;gap:4px;position:absolute;cursor:move;" data-draggable="true"><span style="font-size:28px;">👤</span><span>PHOTO</span></div>`;
+// ─── CONTENT-ONLY PROMPT ──────────────────────────────────────────────────────
+// AI returns ONLY a structured JSON with text fields — no HTML, no CSS
+const buildContentPrompt = ({ data: d, country, tmpl, hasPhoto, jdText }) => {
+  const countryObj  = ALL_COUNTRIES.find(c => c.key === country) || {};
+  const name        = d.name    || "Candidate";
+  const skills      = (d.skills || []).join(", ") || "Listed in experience";
+  const langs       = (d.languages || []).join(", ") || "English";
+  const certs       = (d.certifications || []).join(", ") || "";
+  const hobby       = (d.hobbies || []).join(", ") || "";
+  const dob         = (d.dob && d.dob.trim()) ? d.dob : "";
+  const nat         = (d.nationality && d.nationality.trim()) ? d.nationality : "";
+  const jdSection   = jdText ? `\nJOB DESCRIPTION (tailor every bullet to match):\n${jdText.slice(0, 1000)}` : "";
 
   const expBlock = (d.experience || []).map((e, i) =>
-    `ROLE ${i+1}: ${e.role || "Role"} at ${e.company || "Company"}\nDates: ${e.duration || ""} | Location: ${e.location || ""}\nAchievements:\n${(e.achievements || []).map(a => `  • ${a}`).join("\n")}`
-  ).join("\n\n");
-
-  const eduBlock = (d.education || []).map(e =>
-    `• ${e.degree || ""} | ${e.institution || ""} | ${e.year || ""} | ${e.grade || ""}`
+    `Role ${i+1}: ${e.role || "Role"} at ${e.company || "Company"}, ${e.duration || ""}, ${e.location || ""}\nAchievements: ${(e.achievements || []).join(" | ")}`
   ).join("\n");
 
-  const FONT = "'Times New Roman', Times, serif";
-
-  const layouts = {
-    executive: `
-LAYOUT — EXECUTIVE DARK (single column, gold on dark):
-• ENTIRE DOCUMENT: font-family: 'Times New Roman', Times, serif — NO exceptions.
-• Full-width header: background:${accentColor}; padding:36px 48px 32px; position:relative;
-  - Name: 38px, color:#ffffff, font-weight:bold, letter-spacing:2px, font-family:'Times New Roman',Times,serif
-  - Title beneath: 15px, color:rgba(255,255,255,0.75), font-style:italic, margin-top:4px
-  - Thin gold rule 2px solid rgba(201,168,76,0.5) between name and contact
-  - Contact row: 11px, color:rgba(255,255,255,0.65), display:flex, gap:24px, margin-top:12px
-  ${countryObj.photoRequired ? `- Photo: ${photoHtml} positioned top:24px; right:48px;` : ""}
-• Body: background:#ffffff; padding:0 48px 48px;
-• Section headers: font-size:11px; font-weight:bold; color:${accentColor}; letter-spacing:3px; text-transform:uppercase; padding:18px 0 6px; border-bottom:1.5px solid ${accentColor}; margin-bottom:14px; font-family:'Times New Roman',Times,serif;
-• Left sidebar accent: none — single column
-• Experience entries: role name bold 13px ${accentColor}, company 12px #444, date right-aligned 11px #888, bullets 11.5px #333 line-height:1.9
-• Skills: displayed as comma-separated inline text, wrapped in a light ${accentColor}11 background box, 12px, italic
-• Color scheme: white body, ${accentColor} header, gold accent lines`,
-
-    modern: `
-LAYOUT — MODERN SPLIT (two-column, bold left sidebar):
-• ENTIRE DOCUMENT: font-family: 'Times New Roman', Times, serif — NO exceptions.
-• Outer wrapper: display:flex; min-height:1123px; (A4 height)
-• LEFT SIDEBAR (width:300px; min-width:300px; background:${accentColor}; padding:36px 28px; color:#ffffff):
-  - ${countryObj.photoRequired ? `Photo at top: ${photoHtml} position:relative; margin-bottom:20px; width:100%; height:160px; object-fit:cover; object-position:top; border-radius:4px; border:none;` : ""}
-  - Name: 22px bold white, font-family:'Times New Roman',serif; margin-bottom:4px
-  - Title: 13px italic rgba(255,255,255,0.75)
-  - Divider: 1px solid rgba(255,255,255,0.25) margin:16px 0
-  - Contact items: 11px white, line-height:2, each item with small icon prefix (📱 📧 📍 🔗)
-  - Section label: 9px ALL CAPS letter-spacing:3px rgba(255,255,255,0.5), margin:20px 0 10px
-  - Skills: each as white pill tag, background:rgba(255,255,255,0.15), padding:4px 12px, border-radius:20px, font-size:11px, display:inline-block, margin:3px 3px
-  - Languages: name + dot-indicator (●●●●○) for level
-  - Education: 11.5px white, institution bold, degree italic, year small
-• RIGHT COLUMN (flex:1; background:#ffffff; padding:36px 36px):
-  - Professional Summary: box with left-border 4px solid ${accentColor}, padding:14px 16px, background:#fafafa, font-size:13px italic, line-height:1.9
-  - Section headers: 12px CAPS letter-spacing:2px color:${accentColor} border-bottom:2px solid ${accentColor} padding-bottom:6px margin:24px 0 14px
-  - Experience: role 14px bold ${accentColor}, company 13px #555, dates badge background:${accentColor}11 color:${accentColor} font-size:10px padding:2px 8px border-radius:4px
-  - Bullet achievements: 12px #333 line-height:1.8, left-border 2px solid ${accentColor}22, padding-left:12px margin-left:4px`,
-
-    minimal: `
-LAYOUT — MINIMAL PRO (ultra clean, maximum whitespace):
-• ENTIRE DOCUMENT: font-family: 'Times New Roman', Times, serif — NO exceptions.
-• Body: background:#ffffff; max-width:794px; padding:64px 72px;
-• Header: NO background — just typography on white
-  - Name: 44px font-weight:300 color:#111 letter-spacing:1px font-family:'Times New Roman',serif
-  - Title: 14px font-weight:400 color:#666 font-style:italic margin-top:2px
-  - Contact: 11px color:#888 border-top:1px solid #e5e5e5 padding-top:12px margin-top:14px display:flex gap:32px
-  ${countryObj.photoRequired ? `- Photo floated: ${photoHtml} float:right; margin-left:32px; margin-top:-60px;` : ""}
-• Section headers: font-size:10px; ALL CAPS; letter-spacing:5px; color:#999; padding:28px 0 10px; border-bottom:0.5px solid #e0e0e0; margin-bottom:16px; font-family:'Times New Roman',serif;
-• Section content: font-size:12px color:#333 line-height:2
-• Experience: role 13px #111 font-style:italic, dates 11px #aaa float:right, company 12px #555, bullets minimal — left-padded 16px, no bullets just em-dash "— "
-• Skills: comma-separated inline prose, no pills, no colors
-• Very generous whitespace: margin-bottom:32px between sections`,
-
-    creative: `
-LAYOUT — PRESTIGE (burgundy/gold magazine editorial):
-• ENTIRE DOCUMENT: font-family: 'Times New Roman', Times, serif — NO exceptions.
-• Header: background:${accentColor}; padding:0; display:flex; overflow:hidden; min-height:220px;
-  - Left photo column (width:180px): background:${accentColor}dd; display:flex; align-items:center; justify-content:center; padding:28px;
-    ${countryObj.photoRequired ? `Photo: ${photoHtml} position:relative; width:140px; height:175px; object-fit:cover; border:3px solid rgba(201,168,76,0.6);` : "Left decorative pattern with initials in 64px gold"}
-  - Right info column (flex:1; padding:36px 36px; background:${accentColor}):
-    Name: 36px bold white font-family:'Times New Roman',serif; letter-spacing:1px
-    Decorative rule: 2px solid rgba(201,168,76,0.7) width:80px margin:10px 0
-    Title: 14px italic rgba(255,255,255,0.75)
-    Contact grid: 2-col, 11px white, gap:8px 24px margin-top:16px
-• Body: two columns using CSS grid (grid-template-columns:2fr 1fr; gap:0)
-  - Main column (padding:36px 32px 36px 48px background:#fff):
-    Section headers: 11px ALL CAPS letter-spacing:3px color:${accentColor} double border-bottom:3px double ${accentColor}22 padding-bottom:8px margin:24px 0 14px
-    Experience: company 14px bold #1a1a1a; role 13px italic ${accentColor}; dates 11px #888 float:right
-    Bullets: 12px #333 line-height:1.85; decorated with thin gold left-border
-  - Right sidebar (width:220px padding:36px 24px background:#fafafa border-left:1px solid #eee):
-    Skills section: label 9px CAPS gray, each skill 11.5px #333 padding:5px 0 border-bottom:1px dotted #e0e0e0
-    Languages: name + proficiency percentage bar (div background #eee with inner div background ${accentColor})
-    Certifications and hobbies: 11px #555`,
-
-    classic: `
-LAYOUT — CLASSIC PRO (traditional academic/formal):
-• ENTIRE DOCUMENT: font-family: 'Times New Roman', Times, serif — NO exceptions.
-• Header: text-align:center; padding:40px 48px 24px; border-bottom:3px double #333; background:#fafaf8;
-  - Name: 32px bold #111 font-family:'Times New Roman',serif; text-transform:uppercase; letter-spacing:3px
-  - Title: 14px italic #555 margin-top:6px
-  - Contact: 12px #666 margin-top:12px; dot-separated (name · email · phone · location)
-  ${countryObj.photoRequired ? `- Photo: ${photoHtml} position:absolute; top:28px; right:48px;` : ""}
-• Body: padding:0 48px 48px; background:#fafaf8;
-• Section headers: full-width background:${accentColor}; color:#ffffff; padding:7px 16px; font-size:12px; font-weight:bold; ALL CAPS; letter-spacing:2px; margin:24px -48px 16px; font-family:'Times New Roman',serif;
-• Experience entries: formatted like academic CV
-  - Role + Company on same line, separated by " — ", 13px bold #111
-  - Date right-aligned 12px italic #666
-  - Bullets: standard • at 12px #333 line-height:1.9 indent:24px
-• Skills: 2-column grid, each item with • prefix, 12px #333
-• Education: tabular with borders, 12px
-• References: "Available upon request" in 11px italic center`,
-  };
-
-  const jdSection = jdText ? `\n\nJOB DESCRIPTION — TAILOR EVERY BULLET:\n${jdText.slice(0, 1000)}` : "";
+  const eduBlock = (d.education || []).map(e =>
+    `${e.degree || ""} | ${e.institution || ""} | ${e.year || ""} | ${e.grade || ""}`
+  ).join("\n");
 
   const countryRules = {
-    uk: "No photo. No DOB. No nationality. Personal Statement 3-4 lines. 'References available on request'.",
-    germany: `Lebenslauf heading. Persönliche Daten: Name, Geburtsdatum: ${dob}, Staatsangehörigkeit: ${nat}. Hobbys: ${hobby || "Sport, Reisen"}. Signature block.`,
-    us: "ZERO images. Pure single font column. ATS-clean. No borders, no columns. Core Competencies keyword grid.",
-    india: `Personal Details: Father's Name, DOB: ${dob}, Nationality: ${nat||"Indian"}, Marital Status. DECLARATION at end.`,
-    gulf: `Personal Details: Nationality: ${nat}, DOB: ${dob}, Visa Status, Languages: ${langs}. Career Objective 4 sentences.`,
-    japan: `履歴書 title. 氏名: ${name}, 生年月日: ${dob}. Self-PR paragraphs. Table layout for education.`,
-    poland: `GDPR footer (9px italic): "Wyrażam zgodę na przetwarzanie moich danych osobowych..."`,
+    uk:      "No photo. No DOB. No nationality. Start with a 3-line Personal Statement. End with 'References available on request'.",
+    germany: `Lebenslauf. Include: Geburtsdatum: ${dob}, Staatsangehörigkeit: ${nat}. Add Hobbys section.`,
+    us:      "ATS-clean. No decorative language. Use Core Competencies keyword grid. Quantify everything.",
+    india:   `Include Personal Details: Father's Name, DOB: ${dob}, Nationality: ${nat||"Indian"}, Marital Status. End with DECLARATION.`,
+    gulf:    `Include: Nationality: ${nat}, DOB: ${dob}, Visa Status, Languages: ${langs}. Add Career Objective.`,
+    japan:   `Include: 氏名: ${name}, 生年月日: ${dob}. Add Self-PR paragraph.`,
+    poland:  `Add GDPR footer: "Wyrażam zgodę na przetwarzanie moich danych osobowych..."`,
   };
 
-  return `You are a world-class resume designer and HTML/CSS expert specialising in Times New Roman typography. Generate a complete, print-ready, recruiter-approved resume as a SINGLE self-contained HTML file with an embedded WYSIWYG editor script.
+  return `You are a professional resume writer. Return ONLY a raw JSON object, no markdown, no backticks.
 
-CANDIDATE DATA:
+CANDIDATE:
 Name: ${name}
 Phone: ${d.phone || ""} | Email: ${d.email || ""} | Location: ${d.location || ""} | LinkedIn: ${d.linkedin || ""}
 DOB: ${dob} | Nationality: ${nat}
-Summary: ${d.summary || "Write a strong professional summary from their experience"}
+Summary: ${d.summary || "Write a compelling 3-sentence professional summary from their experience"}
 Skills: ${skills}
 Languages: ${langs}
 Certifications: ${certs}
-Hobbies: ${hobby || "Not mentioned"}
+Hobbies: ${hobby}
 ${jdSection}
 
 WORK EXPERIENCE:
-${expBlock || "Write 2 appropriate senior roles for their inferred industry"}
+${expBlock || "Create 2 realistic senior roles for their inferred industry"}
 
 EDUCATION:
-${eduBlock || "Add appropriate placeholders"}
+${eduBlock || "Add appropriate education placeholders"}
 
-═══════════════════════════════════════
-COUNTRY STANDARD: ${countryObj.label || country.toUpperCase()}
-${countryRules[country] || ""}
-
+COUNTRY: ${countryObj.label || country}
+COUNTRY RULES: ${countryRules[country] || "Standard professional format"}
 TEMPLATE: ${tmpl.name}
-${layouts[tmpl.id] || layouts.classic}
-═══════════════════════════════════════
 
-MANDATORY FONT RULE: Every single element — name, headers, body text, labels, pills, footers — MUST use font-family: 'Times New Roman', Times, serif. This is non-negotiable.
-
-CONTENT RULES:
-1. USE ONLY real data above — never invent companies, degrees, or dates.
-2. Every bullet: [Action Verb] + [What you did] + [Metric].
-3. Add plausible metrics where missing (%, team sizes, timeframes).
-4. Minimum 2 full A4 pages of dense, rich content.
-5. Weave skills keywords naturally through experience bullets.
-
-HTML/CSS RULES:
-- body: background:#eef0f4; font-family:'Times New Roman',Times,serif;
-- .resume: background:white; max-width:794px; margin:0 auto; box-shadow:0 0 40px rgba(0,0,0,.18); min-height:1123px; position:relative;
-- @media print { body{background:white} .resume{box-shadow:none;margin:0;max-width:100%} @page{size:A4;margin:12mm} }
-- All text: 'Times New Roman', Times, serif — on every element explicitly.
-- Body text: 11px, line-height:1.85.
-
-EMBEDDED EDITOR SCRIPT — Include this exact <script> block at the end of <body>:
-<script>
-(function(){
-  // Make all text elements contenteditable on click
-  document.querySelectorAll('p,span,h1,h2,h3,h4,li,td,div:not([data-no-edit])').forEach(function(el){
-    if(el.children.length < 3 && el.textContent.trim().length > 0){
-      el.setAttribute('contenteditable','true');
-      el.style.outline='none';
-      el.style.cursor='text';
-      el.addEventListener('focus',function(){this.style.outline='2px dashed rgba(37,99,235,0.4)';this.style.borderRadius='2px';});
-      el.addEventListener('blur',function(){this.style.outline='none';});
+Return this EXACT JSON structure (no extra fields):
+{
+  "name": "Full Name",
+  "title": "Professional Title / Role",
+  "phone": "+91 XXXXX XXXXX",
+  "email": "email@example.com",
+  "location": "City, Country",
+  "linkedin": "linkedin.com/in/profile",
+  "dob": "",
+  "nationality": "",
+  "summary": "3-4 sentence professional summary with strong opening",
+  "personalStatement": "3-4 sentence personal statement (UK only, else same as summary)",
+  "coreCompetencies": ["keyword1","keyword2","keyword3","keyword4","keyword5","keyword6","keyword7","keyword8","keyword9","keyword10"],
+  "experience": [
+    {
+      "company": "Company Name",
+      "role": "Job Title",
+      "duration": "Jan 2020 – Present",
+      "location": "City",
+      "bullets": [
+        "Led cross-functional team of 12 engineers, delivering 3 major product releases 15% ahead of schedule",
+        "Reduced operational costs by 28% through process automation and vendor renegotiation",
+        "Grew revenue pipeline from $2M to $5.8M in 18 months by implementing data-driven sales strategy",
+        "Mentored 6 junior developers, achieving 100% team retention and 2 internal promotions"
+      ]
     }
-  });
-  // Drag any image or photo placeholder
-  document.querySelectorAll('[data-draggable="true"], img').forEach(function(el){
-    el.style.cursor='move';
-    el.style.position='absolute';
-    var ox=0,oy=0,mx=0,my=0,dragging=false;
-    el.addEventListener('mousedown',function(e){
-      e.preventDefault();
-      dragging=true;
-      mx=e.clientX; my=e.clientY;
-      var rect=el.getBoundingClientRect();
-      ox=e.clientX-rect.left; oy=e.clientY-rect.top;
-      el.style.zIndex=9999; el.style.opacity='0.85';
-    });
-    document.addEventListener('mousemove',function(e){
-      if(!dragging)return;
-      var parent=el.offsetParent||document.body;
-      var pr=parent.getBoundingClientRect();
-      el.style.left=(e.clientX-pr.left-ox)+'px';
-      el.style.top=(e.clientY-pr.top-oy)+'px';
-    });
-    document.addEventListener('mouseup',function(){
-      if(dragging){dragging=false;el.style.opacity='1';el.style.zIndex='';}
-    });
-  });
-})();
-</script>
+  ],
+  "education": [
+    { "degree": "B.Tech Computer Science", "institution": "University Name", "year": "2018", "grade": "8.5 CGPA" }
+  ],
+  "skills": ["Skill 1","Skill 2","Skill 3","Skill 4","Skill 5","Skill 6","Skill 7","Skill 8"],
+  "languages": ["English (Fluent)","Hindi (Native)"],
+  "certifications": ["Cert 1 – Issuer (2023)","Cert 2 – Issuer (2022)"],
+  "hobbies": ["Hobby 1","Hobby 2","Hobby 3"],
+  "declaration": "I hereby declare that all the information furnished above is true and correct to the best of my knowledge.",
+  "gdprClause": "Wyrażam zgodę na przetwarzanie moich danych osobowych dla celów rekrutacji.",
+  "visaStatus": "Employment Visa",
+  "extras": ""
+}
 
-⚠️ OUTPUT RULE: Output ONLY the HTML document.
-Start with: <!DOCTYPE html>
-End with: </html>
-NO markdown. NO backticks. NO explanations.`;
+RULES:
+1. Use ONLY real data provided — never invent companies, degrees, or dates
+2. Every bullet: [Strong Action Verb] + [What] + [Quantified Result with %, numbers, $, team sizes]
+3. Minimum 4 bullets per role, maximum 6
+4. At least 2 roles in experience array
+5. Skills: exactly 8 items
+6. Return ONLY the JSON. Start with { end with }. Nothing else.`;
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ─── HARDCODED HTML SHELL TEMPLATES ──────────────────────────────────────────
+// Structure is 100% fixed. Only text content slots are filled from JSON.
+// Photo: ALWAYS flexbox last-child in header — never position:absolute, never float
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const buildExecutiveHtml = (c, accent, hasPhoto) => {
+  const photoSlot = hasPhoto
+    ? `<img src="__PHOTO__" style="width:108px;height:135px;object-fit:cover;object-position:center top;border-radius:4px;border:2.5px solid ${accent};display:block;flex-shrink:0;pointer-events:none;user-select:none;">`
+    : '';
+
+  const expRows = (c.experience||[]).map(e => `
+    <div style="margin-bottom:20px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;">
+        <div>
+          <span style="font-size:13px;font-weight:700;color:${accent};font-family:'Times New Roman',Times,serif;">${e.role||''}</span>
+          <span style="font-size:12px;color:#555;font-family:'Times New Roman',Times,serif;"> — ${e.company||''}</span>
+          ${e.location ? `<span style="font-size:11px;color:#888;font-family:'Times New Roman',Times,serif;"> · ${e.location}</span>` : ''}
+        </div>
+        <span style="font-size:11px;color:#888;font-style:italic;font-family:'Times New Roman',Times,serif;white-space:nowrap;margin-left:12px;">${e.duration||''}</span>
+      </div>
+      <ul style="margin:6px 0 0 0;padding-left:18px;">
+        ${(e.bullets||[]).map(b=>`<li style="font-size:11.5px;color:#333;line-height:1.85;font-family:'Times New Roman',Times,serif;margin-bottom:3px;">${b}</li>`).join('')}
+      </ul>
+    </div>`).join('');
+
+  const eduRows = (c.education||[]).map(e =>
+    `<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">
+      <div>
+        <span style="font-size:12px;font-weight:700;color:#1e293b;font-family:'Times New Roman',Times,serif;">${e.degree||''}</span>
+        <span style="font-size:11.5px;color:#555;font-family:'Times New Roman',Times,serif;"> — ${e.institution||''}</span>
+      </div>
+      <span style="font-size:11px;color:#888;font-family:'Times New Roman',Times,serif;">${e.year||''} ${e.grade ? '· '+e.grade : ''}</span>
+    </div>`).join('');
+
+  const skillsHtml = (c.skills||[]).map(s=>
+    `<span style="display:inline-block;background:${accent}15;color:${accent};font-size:11px;padding:3px 10px;border-radius:4px;margin:2px;font-family:'Times New Roman',Times,serif;font-weight:600;">${s}</span>`
+  ).join('');
+
+  const contactItems = [c.phone,c.email,c.location,c.linkedin].filter(Boolean);
+  const extraMeta = [c.dob&&`DOB: ${c.dob}`,c.nationality&&`Nationality: ${c.nationality}`,c.visaStatus&&`Visa: ${c.visaStatus}`].filter(Boolean);
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;font-family:'Times New Roman',Times,serif;}
+  html,body{background:#eef0f4;}
+  .rw{background:#eef0f4;padding:24px 0;}
+  .resume{background:#fff;width:794px;max-width:794px;margin:0 auto;box-shadow:0 4px 40px rgba(0,0,0,.18);min-height:1123px;overflow:hidden;}
+  .sec-label{font-size:10.5px;font-weight:700;color:${accent};letter-spacing:3px;text-transform:uppercase;padding:18px 0 7px;border-bottom:1.5px solid ${accent};margin-bottom:14px;display:block;}
+  @media print{body,html{background:#fff;padding:0}.rw{padding:0}.resume{box-shadow:none;margin:0;width:100%;max-width:100%}@page{size:A4;margin:10mm}}
+</style>
+</head>
+<body>
+<div class="rw">
+<div class="resume">
+
+  <!-- HEADER — flexbox, photo is last child = always top-right -->
+  <div style="background:${accent};padding:32px 48px;display:flex;align-items:flex-start;justify-content:space-between;gap:24px;">
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:34px;color:#fff;font-weight:700;letter-spacing:2px;line-height:1.1;font-family:'Times New Roman',Times,serif;">${c.name||''}</div>
+      <div style="font-size:13.5px;color:rgba(255,255,255,0.75);font-style:italic;margin:6px 0 14px;font-family:'Times New Roman',Times,serif;">${c.title||''}</div>
+      <div style="border-bottom:1.5px solid rgba(201,168,76,0.45);margin-bottom:12px;"></div>
+      <div style="display:flex;flex-wrap:wrap;gap:14px;">
+        ${contactItems.map(x=>`<span style="font-size:11px;color:rgba(255,255,255,0.65);font-family:'Times New Roman',Times,serif;">${x}</span>`).join('')}
+      </div>
+      ${extraMeta.length ? `<div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;">${extraMeta.map(x=>`<span style="font-size:11px;color:rgba(255,255,255,0.55);font-family:'Times New Roman',Times,serif;">${x}</span>`).join('')}</div>` : ''}
+    </div>
+    ${photoSlot}
+  </div>
+
+  <!-- BODY -->
+  <div style="padding:30px 48px 48px;">
+
+    <!-- Summary -->
+    <span class="sec-label">Professional Summary</span>
+    <p style="font-size:12px;color:#333;line-height:1.9;font-style:italic;margin-bottom:6px;font-family:'Times New Roman',Times,serif;">${c.summary||''}</p>
+
+    ${(c.coreCompetencies||[]).length ? `
+    <span class="sec-label" style="margin-top:6px;">Core Competencies</span>
+    <div style="margin-bottom:4px;">${(c.coreCompetencies||[]).map(s=>`<span style="display:inline-block;background:${accent}12;color:${accent};font-size:11px;padding:3px 10px;border-radius:3px;margin:2px;font-family:'Times New Roman',Times,serif;font-weight:600;">${s}</span>`).join('')}</div>
+    ` : ''}
+
+    <!-- Experience -->
+    <span class="sec-label">Professional Experience</span>
+    ${expRows}
+
+    <!-- Education -->
+    <span class="sec-label">Education</span>
+    ${eduRows}
+
+    <!-- Skills -->
+    <span class="sec-label">Technical Skills</span>
+    <div style="margin-bottom:8px;">${skillsHtml}</div>
+
+    ${(c.certifications||[]).length ? `
+    <span class="sec-label">Certifications</span>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:4px;">
+      ${(c.certifications||[]).map(x=>`<span style="font-size:11.5px;color:#333;font-family:'Times New Roman',Times,serif;">• ${x}</span>`).join('')}
+    </div>` : ''}
+
+    ${(c.languages||[]).length ? `
+    <span class="sec-label">Languages</span>
+    <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:4px;">
+      ${(c.languages||[]).map(x=>`<span style="font-size:11.5px;color:#333;font-family:'Times New Roman',Times,serif;">• ${x}</span>`).join('')}
+    </div>` : ''}
+
+    ${(c.hobbies||[]).length ? `
+    <span class="sec-label">Interests & Hobbies</span>
+    <p style="font-size:11.5px;color:#333;font-family:'Times New Roman',Times,serif;">${(c.hobbies||[]).join(' · ')}</p>` : ''}
+
+    ${c.declaration ? `
+    <span class="sec-label">Declaration</span>
+    <p style="font-size:11px;color:#555;font-style:italic;font-family:'Times New Roman',Times,serif;">${c.declaration}</p>` : ''}
+
+    ${c.gdprClause ? `<p style="font-size:9px;color:#999;font-style:italic;margin-top:18px;font-family:'Times New Roman',Times,serif;">${c.gdprClause}</p>` : ''}
+
+  </div>
+</div>
+</div>
+</body>
+</html>`;
+};
+
+// ─── MODERN SPLIT (two-column sidebar) ────────────────────────────────────────
+const buildModernHtml = (c, accent, hasPhoto) => {
+  const photoSlot = hasPhoto
+    ? `<img src="__PHOTO__" style="width:180px;height:210px;object-fit:cover;object-position:center top;border-radius:6px;border:3px solid rgba(255,255,255,0.25);display:block;margin:0 auto 18px;pointer-events:none;user-select:none;">`
+    : '';
+
+  const expRows = (c.experience||[]).map(e => `
+    <div style="margin-bottom:18px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px;margin-bottom:4px;">
+        <div>
+          <div style="font-size:13px;font-weight:700;color:${accent};font-family:'Times New Roman',Times,serif;">${e.role||''}</div>
+          <div style="font-size:11.5px;color:#555;font-family:'Times New Roman',Times,serif;">${e.company||''} ${e.location ? '· '+e.location : ''}</div>
+        </div>
+        <span style="font-size:10px;background:${accent}18;color:${accent};padding:2px 9px;border-radius:4px;font-weight:700;white-space:nowrap;font-family:'Times New Roman',Times,serif;">${e.duration||''}</span>
+      </div>
+      <div style="border-left:2.5px solid ${accent}33;padding-left:10px;margin-top:6px;">
+        ${(e.bullets||[]).map(b=>`<div style="font-size:11.5px;color:#333;line-height:1.85;margin-bottom:3px;font-family:'Times New Roman',Times,serif;">• ${b}</div>`).join('')}
+      </div>
+    </div>`).join('');
+
+  const eduRows = (c.education||[]).map(e =>
+    `<div style="margin-bottom:10px;">
+      <div style="font-size:11.5px;font-weight:700;color:#fff;font-family:'Times New Roman',Times,serif;">${e.degree||''}</div>
+      <div style="font-size:11px;color:rgba(255,255,255,0.7);font-family:'Times New Roman',Times,serif;">${e.institution||''}</div>
+      <div style="font-size:10.5px;color:rgba(255,255,255,0.5);font-family:'Times New Roman',Times,serif;">${e.year||''} ${e.grade ? '· '+e.grade : ''}</div>
+    </div>`).join('');
+
+  const sideLbl = (txt) => `<div style="font-size:9px;text-transform:uppercase;letter-spacing:3px;color:rgba(255,255,255,0.45);margin:16px 0 8px;font-family:'Times New Roman',Times,serif;">${txt}</div>`;
+  const contactItems = [c.phone,c.email,c.location,c.linkedin].filter(Boolean);
+  const extraMeta = [c.dob&&`DOB: ${c.dob}`,c.nationality&&`Nationality: ${c.nationality}`,c.visaStatus&&`Visa: ${c.visaStatus}`].filter(Boolean);
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;font-family:'Times New Roman',Times,serif;}
+  html,body{background:#eef0f4;}
+  .rw{background:#eef0f4;padding:24px 0;}
+  .resume{background:#fff;width:794px;max-width:794px;margin:0 auto;box-shadow:0 4px 40px rgba(0,0,0,.18);min-height:1123px;overflow:hidden;display:flex;}
+  .sec-label{font-size:10.5px;font-weight:700;color:${accent};letter-spacing:2.5px;text-transform:uppercase;border-bottom:2px solid ${accent};padding-bottom:5px;margin:20px 0 12px;display:block;}
+  @media print{body,html{background:#fff;padding:0}.rw{padding:0}.resume{box-shadow:none;margin:0;width:100%;max-width:100%}@page{size:A4;margin:10mm}}
+</style>
+</head>
+<body>
+<div class="rw">
+<div class="resume">
+
+  <!-- SIDEBAR -->
+  <div style="width:250px;min-width:250px;background:${accent};padding:28px 20px;color:#fff;display:flex;flex-direction:column;">
+    ${photoSlot}
+    <div style="font-size:19px;font-weight:700;color:#fff;font-family:'Times New Roman',Times,serif;line-height:1.2;text-align:center;">${c.name||''}</div>
+    <div style="font-size:11.5px;font-style:italic;color:rgba(255,255,255,0.7);margin:5px 0 14px;text-align:center;font-family:'Times New Roman',Times,serif;">${c.title||''}</div>
+    <div style="border-bottom:1px solid rgba(255,255,255,0.2);margin-bottom:2px;"></div>
+
+    ${sideLbl('Contact')}
+    ${contactItems.map(x=>`<div style="font-size:11px;color:rgba(255,255,255,0.85);line-height:2;font-family:'Times New Roman',Times,serif;word-break:break-all;">${x}</div>`).join('')}
+
+    ${extraMeta.length ? sideLbl('Personal') + extraMeta.map(x=>`<div style="font-size:11px;color:rgba(255,255,255,0.75);line-height:2;font-family:'Times New Roman',Times,serif;">${x}</div>`).join('') : ''}
+
+    ${(c.skills||[]).length ? sideLbl('Skills') + (c.skills||[]).map(s=>`<span style="display:inline-block;background:rgba(255,255,255,0.15);color:#fff;font-size:10.5px;padding:3px 9px;border-radius:20px;margin:2px;font-family:'Times New Roman',Times,serif;">${s}</span>`).join('') : ''}
+
+    ${(c.languages||[]).length ? sideLbl('Languages') + (c.languages||[]).map(x=>`<div style="font-size:11px;color:rgba(255,255,255,0.8);line-height:2;font-family:'Times New Roman',Times,serif;">${x}</div>`).join('') : ''}
+
+    ${(c.certifications||[]).length ? sideLbl('Certifications') + (c.certifications||[]).map(x=>`<div style="font-size:10.5px;color:rgba(255,255,255,0.75);line-height:1.7;margin-bottom:4px;font-family:'Times New Roman',Times,serif;">${x}</div>`).join('') : ''}
+
+    ${eduRows.length ? sideLbl('Education') + eduRows : ''}
+
+    ${(c.hobbies||[]).length ? sideLbl('Interests') + `<div style="font-size:11px;color:rgba(255,255,255,0.7);font-family:'Times New Roman',Times,serif;">${(c.hobbies||[]).join(' · ')}</div>` : ''}
+
+    ${c.gdprClause ? `<div style="font-size:8.5px;color:rgba(255,255,255,0.4);margin-top:auto;padding-top:16px;line-height:1.5;font-family:'Times New Roman',Times,serif;">${c.gdprClause}</div>` : ''}
+  </div>
+
+  <!-- MAIN COLUMN -->
+  <div style="flex:1;padding:32px 28px;overflow:hidden;">
+
+    <!-- Summary box -->
+    <div style="border-left:4px solid ${accent};padding:12px 16px;background:#fafafa;font-size:12px;font-style:italic;color:#333;line-height:1.9;margin-bottom:4px;font-family:'Times New Roman',Times,serif;">${c.summary||''}</div>
+
+    ${(c.coreCompetencies||[]).length ? `
+    <span class="sec-label">Core Competencies</span>
+    <div style="margin-bottom:4px;">${(c.coreCompetencies||[]).map(s=>`<span style="display:inline-block;background:${accent}12;color:${accent};font-size:10.5px;padding:2px 9px;border-radius:3px;margin:2px;font-family:'Times New Roman',Times,serif;font-weight:600;">${s}</span>`).join('')}</div>
+    ` : ''}
+
+    <span class="sec-label">Professional Experience</span>
+    ${expRows}
+
+    ${c.declaration ? `
+    <span class="sec-label">Declaration</span>
+    <p style="font-size:11px;color:#555;font-style:italic;font-family:'Times New Roman',Times,serif;">${c.declaration}</p>` : ''}
+  </div>
+
+</div>
+</div>
+</body>
+</html>`;
+};
+
+// ─── MINIMAL PRO ──────────────────────────────────────────────────────────────
+const buildMinimalHtml = (c, accent, hasPhoto) => {
+  const photoSlot = hasPhoto
+    ? `<img src="__PHOTO__" style="width:100px;height:125px;object-fit:cover;object-position:center top;border-radius:2px;border:1px solid #ddd;display:block;flex-shrink:0;pointer-events:none;user-select:none;">`
+    : '';
+
+  const expRows = (c.experience||[]).map(e => `
+    <div style="margin-bottom:18px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px;">
+        <div>
+          <span style="font-size:13px;font-style:italic;color:#111;font-weight:600;font-family:'Times New Roman',Times,serif;">${e.role||''}</span>
+          <span style="font-size:11.5px;color:#555;font-family:'Times New Roman',Times,serif;"> — ${e.company||''}</span>
+        </div>
+        <span style="font-size:11px;color:#aaa;font-family:'Times New Roman',Times,serif;white-space:nowrap;margin-left:12px;">${e.duration||''}</span>
+      </div>
+      ${e.location ? `<div style="font-size:10.5px;color:#bbb;margin-bottom:5px;font-family:'Times New Roman',Times,serif;">${e.location}</div>` : ''}
+      ${(e.bullets||[]).map(b=>`<div style="font-size:11.5px;color:#444;line-height:1.9;padding-left:16px;font-family:'Times New Roman',Times,serif;">— ${b}</div>`).join('')}
+    </div>`).join('');
+
+  const eduRows = (c.education||[]).map(e =>
+    `<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px;">
+      <div>
+        <span style="font-size:12px;font-weight:600;color:#111;font-family:'Times New Roman',Times,serif;">${e.degree||''}</span>
+        <span style="font-size:11.5px;color:#666;font-family:'Times New Roman',Times,serif;"> — ${e.institution||''}</span>
+      </div>
+      <span style="font-size:11px;color:#aaa;font-family:'Times New Roman',Times,serif;">${e.year||''} ${e.grade ? '· '+e.grade : ''}</span>
+    </div>`).join('');
+
+  const contactItems = [c.phone,c.email,c.location,c.linkedin].filter(Boolean);
+  const extraMeta = [c.dob&&`DOB: ${c.dob}`,c.nationality&&`Nationality: ${c.nationality}`].filter(Boolean);
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;font-family:'Times New Roman',Times,serif;}
+  html,body{background:#eef0f4;}
+  .rw{background:#eef0f4;padding:24px 0;}
+  .resume{background:#fff;width:794px;max-width:794px;margin:0 auto;box-shadow:0 4px 40px rgba(0,0,0,.18);min-height:1123px;overflow:hidden;padding:50px 56px 56px;}
+  .sec-label{font-size:9.5px;text-transform:uppercase;letter-spacing:5px;color:#bbb;padding:22px 0 8px;border-bottom:0.5px solid #e0e0e0;margin-bottom:14px;display:block;}
+  @media print{body,html{background:#fff;padding:0}.rw{padding:0}.resume{box-shadow:none;margin:0;width:100%;max-width:100%;padding:20px 24px}@page{size:A4;margin:10mm}}
+</style>
+</head>
+<body>
+<div class="rw">
+<div class="resume">
+
+  <!-- HEADER — flexbox, photo last-child = top-right -->
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:32px;padding-bottom:22px;border-bottom:0.5px solid #ddd;margin-bottom:28px;">
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:38px;font-weight:300;color:#111;letter-spacing:0.5px;line-height:1.1;font-family:'Times New Roman',Times,serif;">${c.name||''}</div>
+      <div style="font-size:13px;color:#777;font-style:italic;margin:6px 0 14px;font-family:'Times New Roman',Times,serif;">${c.title||''}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:20px;">
+        ${contactItems.map(x=>`<span style="font-size:11px;color:#999;font-family:'Times New Roman',Times,serif;">${x}</span>`).join('')}
+      </div>
+      ${extraMeta.length ? `<div style="display:flex;flex-wrap:wrap;gap:16px;margin-top:6px;">${extraMeta.map(x=>`<span style="font-size:11px;color:#bbb;font-family:'Times New Roman',Times,serif;">${x}</span>`).join('')}</div>` : ''}
+    </div>
+    ${photoSlot}
+  </div>
+
+  <!-- Summary -->
+  <span class="sec-label">Summary</span>
+  <p style="font-size:12px;color:#444;line-height:1.95;font-style:italic;margin-bottom:6px;font-family:'Times New Roman',Times,serif;">${c.summary||''}</p>
+
+  ${(c.coreCompetencies||[]).length ? `
+  <span class="sec-label">Core Competencies</span>
+  <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px;">${(c.coreCompetencies||[]).map(s=>`<span style="font-size:11px;color:#666;border:0.5px solid #ddd;padding:2px 9px;border-radius:2px;font-family:'Times New Roman',Times,serif;">${s}</span>`).join('')}</div>
+  ` : ''}
+
+  <span class="sec-label">Experience</span>
+  ${expRows}
+
+  <span class="sec-label">Education</span>
+  ${eduRows}
+
+  <span class="sec-label">Skills</span>
+  <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px;">
+    ${(c.skills||[]).map(s=>`<span style="font-size:11px;color:#555;border:0.5px solid #ddd;padding:2px 9px;border-radius:2px;font-family:'Times New Roman',Times,serif;">${s}</span>`).join('')}
+  </div>
+
+  ${(c.certifications||[]).length ? `
+  <span class="sec-label">Certifications</span>
+  <div style="display:flex;flex-wrap:wrap;gap:10px;">${(c.certifications||[]).map(x=>`<span style="font-size:11.5px;color:#444;font-family:'Times New Roman',Times,serif;">• ${x}</span>`).join('')}</div>
+  ` : ''}
+
+  ${(c.languages||[]).length ? `
+  <span class="sec-label">Languages</span>
+  <div style="display:flex;flex-wrap:wrap;gap:12px;">${(c.languages||[]).map(x=>`<span style="font-size:11.5px;color:#555;font-family:'Times New Roman',Times,serif;">${x}</span>`).join('')}</div>
+  ` : ''}
+
+  ${(c.hobbies||[]).length ? `
+  <span class="sec-label">Interests</span>
+  <p style="font-size:11.5px;color:#666;font-family:'Times New Roman',Times,serif;">${(c.hobbies||[]).join(' · ')}</p>
+  ` : ''}
+
+  ${c.declaration ? `
+  <span class="sec-label">Declaration</span>
+  <p style="font-size:11px;color:#888;font-style:italic;font-family:'Times New Roman',Times,serif;">${c.declaration}</p>
+  ` : ''}
+
+  ${c.gdprClause ? `<p style="font-size:9px;color:#bbb;font-style:italic;margin-top:16px;font-family:'Times New Roman',Times,serif;">${c.gdprClause}</p>` : ''}
+
+</div>
+</div>
+</body>
+</html>`;
+};
+
+// ─── PRESTIGE (creative, magazine sidebar) ────────────────────────────────────
+const buildCreativeHtml = (c, accent, hasPhoto) => {
+  const photoSlot = hasPhoto
+    ? `<img src="__PHOTO__" style="width:130px;height:163px;object-fit:cover;object-position:center top;border-radius:4px;border:3px solid rgba(201,168,76,0.6);display:block;pointer-events:none;user-select:none;">`
+    : `<div style="width:130px;height:163px;border-radius:4px;border:2px dashed rgba(201,168,76,0.4);display:flex;align-items:center;justify-content:center;font-size:36px;">👤</div>`;
+
+  const expRows = (c.experience||[]).map(e => `
+    <div style="margin-bottom:20px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;">
+        <div>
+          <span style="font-size:13px;font-weight:700;color:#1e293b;font-family:'Times New Roman',Times,serif;">${e.company||''}</span>
+          <span style="font-size:12px;font-style:italic;color:${accent};font-family:'Times New Roman',Times,serif;"> · ${e.role||''}</span>
+        </div>
+        <span style="font-size:11px;color:#888;font-family:'Times New Roman',Times,serif;white-space:nowrap;margin-left:12px;">${e.duration||''}</span>
+      </div>
+      ${e.location ? `<div style="font-size:10.5px;color:#aaa;margin-bottom:5px;font-family:'Times New Roman',Times,serif;">${e.location}</div>` : ''}
+      <div style="border-left:2px solid #c9a84c44;padding-left:10px;margin-top:5px;">
+        ${(e.bullets||[]).map(b=>`<div style="font-size:11.5px;color:#333;line-height:1.85;margin-bottom:3px;font-family:'Times New Roman',Times,serif;">• ${b}</div>`).join('')}
+      </div>
+    </div>`).join('');
+
+  const contactItems = [c.phone,c.email,c.location,c.linkedin].filter(Boolean);
+  const extraMeta = [c.dob&&`DOB: ${c.dob}`,c.nationality&&`Nationality: ${c.nationality}`,c.visaStatus&&`Visa: ${c.visaStatus}`].filter(Boolean);
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;font-family:'Times New Roman',Times,serif;}
+  html,body{background:#eef0f4;}
+  .rw{background:#eef0f4;padding:24px 0;}
+  .resume{background:#fff;width:794px;max-width:794px;margin:0 auto;box-shadow:0 4px 40px rgba(0,0,0,.18);min-height:1123px;overflow:hidden;}
+  .sec-label-main{font-size:10.5px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:${accent};border-bottom:2px double ${accent}33;padding-bottom:5px;margin:20px 0 12px;display:block;}
+  .sec-label-side{font-size:9px;text-transform:uppercase;letter-spacing:3px;color:rgba(255,255,255,0.5);margin:16px 0 8px;display:block;font-family:'Times New Roman',Times,serif;}
+  @media print{body,html{background:#fff;padding:0}.rw{padding:0}.resume{box-shadow:none;margin:0;width:100%;max-width:100%}@page{size:A4;margin:10mm}}
+</style>
+</head>
+<body>
+<div class="rw">
+<div class="resume">
+
+  <!-- HEADER -->
+  <div style="background:${accent};display:flex;align-items:stretch;min-height:190px;">
+    <!-- Photo column -->
+    <div style="width:160px;min-width:160px;display:flex;align-items:center;justify-content:center;padding:24px;background:${accent}cc;flex-shrink:0;">
+      ${photoSlot}
+    </div>
+    <!-- Info -->
+    <div style="flex:1;padding:28px 32px;display:flex;flex-direction:column;justify-content:center;">
+      <div style="font-size:30px;font-weight:700;color:#fff;letter-spacing:1px;font-family:'Times New Roman',Times,serif;">${c.name||''}</div>
+      <div style="width:64px;border-bottom:2px solid rgba(201,168,76,0.7);margin:10px 0;"></div>
+      <div style="font-size:13px;font-style:italic;color:rgba(255,255,255,0.72);font-family:'Times New Roman',Times,serif;">${c.title||''}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 18px;margin-top:14px;">
+        ${contactItems.map(x=>`<span style="font-size:11px;color:rgba(255,255,255,0.7);font-family:'Times New Roman',Times,serif;">${x}</span>`).join('')}
+        ${extraMeta.map(x=>`<span style="font-size:11px;color:rgba(255,255,255,0.6);font-family:'Times New Roman',Times,serif;">${x}</span>`).join('')}
+      </div>
+    </div>
+  </div>
+
+  <!-- BODY: two-column grid -->
+  <div style="display:grid;grid-template-columns:2fr 1fr;">
+
+    <!-- MAIN -->
+    <div style="padding:28px 24px 36px 36px;border-right:1px solid #eee;">
+      <span class="sec-label-main">Professional Summary</span>
+      <p style="font-size:12px;color:#333;line-height:1.9;font-style:italic;font-family:'Times New Roman',Times,serif;">${c.summary||''}</p>
+
+      ${(c.coreCompetencies||[]).length ? `
+      <span class="sec-label-main">Core Competencies</span>
+      <div>${(c.coreCompetencies||[]).map(s=>`<span style="display:inline-block;background:${accent}12;color:${accent};font-size:10.5px;padding:2px 9px;border-radius:3px;margin:2px;font-family:'Times New Roman',Times,serif;font-weight:600;">${s}</span>`).join('')}</div>
+      ` : ''}
+
+      <span class="sec-label-main">Professional Experience</span>
+      ${expRows}
+
+      ${c.declaration ? `
+      <span class="sec-label-main">Declaration</span>
+      <p style="font-size:11px;color:#666;font-style:italic;font-family:'Times New Roman',Times,serif;">${c.declaration}</p>` : ''}
+
+      ${c.gdprClause ? `<p style="font-size:8.5px;color:#bbb;font-style:italic;margin-top:12px;font-family:'Times New Roman',Times,serif;">${c.gdprClause}</p>` : ''}
+    </div>
+
+    <!-- SIDEBAR -->
+    <div style="padding:28px 18px;background:#fafafa;">
+      ${(c.skills||[]).length ? `
+      <span class="sec-label-main" style="color:#666;">Skills</span>
+      ${(c.skills||[]).map(s=>`<div style="font-size:11.5px;color:#333;padding:4px 0;border-bottom:1px dotted #e0e0e0;font-family:'Times New Roman',Times,serif;">• ${s}</div>`).join('')}` : ''}
+
+      ${(c.education||[]).length ? `
+      <span class="sec-label-main" style="color:#666;margin-top:18px;">Education</span>
+      ${(c.education||[]).map(e=>`<div style="margin-bottom:10px;"><div style="font-size:11.5px;font-weight:700;color:#333;font-family:'Times New Roman',Times,serif;">${e.degree||''}</div><div style="font-size:11px;color:#666;font-family:'Times New Roman',Times,serif;">${e.institution||''}</div><div style="font-size:10.5px;color:#aaa;font-family:'Times New Roman',Times,serif;">${e.year||''} ${e.grade?'· '+e.grade:''}</div></div>`).join('')}` : ''}
+
+      ${(c.languages||[]).length ? `
+      <span class="sec-label-main" style="color:#666;margin-top:18px;">Languages</span>
+      ${(c.languages||[]).map(x=>`<div style="font-size:11.5px;color:#333;padding:3px 0;font-family:'Times New Roman',Times,serif;">${x}</div>`).join('')}` : ''}
+
+      ${(c.certifications||[]).length ? `
+      <span class="sec-label-main" style="color:#666;margin-top:18px;">Certifications</span>
+      ${(c.certifications||[]).map(x=>`<div style="font-size:11px;color:#444;padding:3px 0;line-height:1.5;border-bottom:1px dotted #eee;font-family:'Times New Roman',Times,serif;">${x}</div>`).join('')}` : ''}
+
+      ${(c.hobbies||[]).length ? `
+      <span class="sec-label-main" style="color:#666;margin-top:18px;">Interests</span>
+      ${(c.hobbies||[]).map(x=>`<div style="font-size:11px;color:#666;padding:2px 0;font-family:'Times New Roman',Times,serif;">• ${x}</div>`).join('')}` : ''}
+    </div>
+
+  </div>
+</div>
+</div>
+</body>
+</html>`;
+};
+
+// ─── CLASSIC PRO ──────────────────────────────────────────────────────────────
+const buildClassicHtml = (c, accent, hasPhoto) => {
+  // Classic uses position:relative header with photo — but photo is INSIDE flex, not absolute
+  const photoSlot = hasPhoto
+    ? `<img src="__PHOTO__" style="width:100px;height:125px;object-fit:cover;object-position:center top;border-radius:2px;border:2px solid #ddd;display:block;flex-shrink:0;pointer-events:none;user-select:none;">`
+    : '';
+
+  const expRows = (c.experience||[]).map(e => `
+    <div style="margin-bottom:18px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px;">
+        <div style="font-size:13px;font-weight:700;color:#111;font-family:'Times New Roman',Times,serif;">${e.role||''} — ${e.company||''}</div>
+        <span style="font-size:11.5px;font-style:italic;color:#666;font-family:'Times New Roman',Times,serif;white-space:nowrap;margin-left:12px;">${e.duration||''}</span>
+      </div>
+      ${e.location ? `<div style="font-size:11px;color:#999;margin-bottom:5px;font-family:'Times New Roman',Times,serif;">${e.location}</div>` : ''}
+      <ul style="margin:5px 0 0 22px;padding:0;">
+        ${(e.bullets||[]).map(b=>`<li style="font-size:12px;color:#333;line-height:1.9;margin-bottom:2px;font-family:'Times New Roman',Times,serif;">${b}</li>`).join('')}
+      </ul>
+    </div>`).join('');
+
+  const eduRows = (c.education||[]).map(e =>
+    `<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">
+      <div>
+        <span style="font-size:12px;font-weight:700;color:#111;font-family:'Times New Roman',Times,serif;">${e.degree||''}</span>
+        <span style="font-size:11.5px;color:#555;font-family:'Times New Roman',Times,serif;"> — ${e.institution||''}</span>
+      </div>
+      <span style="font-size:11.5px;font-style:italic;color:#666;font-family:'Times New Roman',Times,serif;">${e.year||''} ${e.grade?'· '+e.grade:''}</span>
+    </div>`).join('');
+
+  const contactItems = [c.phone,c.email,c.location,c.linkedin].filter(Boolean);
+  const extraMeta = [c.dob&&`DOB: ${c.dob}`,c.nationality&&`Nationality: ${c.nationality}`,c.visaStatus&&`Visa: ${c.visaStatus}`].filter(Boolean);
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;font-family:'Times New Roman',Times,serif;}
+  html,body{background:#eef0f4;}
+  .rw{background:#eef0f4;padding:24px 0;}
+  .resume{background:#fafaf8;width:794px;max-width:794px;margin:0 auto;box-shadow:0 4px 40px rgba(0,0,0,.18);min-height:1123px;overflow:hidden;}
+  .sec-label{background:${accent};color:#fff;padding:5px 48px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:2.5px;margin:20px -48px 14px;display:block;}
+  .body-wrap{padding:0 48px 48px;}
+  @media print{body,html{background:#fff;padding:0}.rw{padding:0}.resume{box-shadow:none;margin:0;width:100%;max-width:100%}@page{size:A4;margin:10mm}}
+</style>
+</head>
+<body>
+<div class="rw">
+<div class="resume">
+
+  <!-- HEADER — centred text, photo is flex last-child pushed right -->
+  <div style="padding:34px 48px 22px;border-bottom:3px double #ccc;background:#fafaf8;display:flex;align-items:flex-start;gap:20px;">
+    <div style="flex:1;text-align:center;">
+      <div style="font-size:28px;font-weight:700;color:#111;text-transform:uppercase;letter-spacing:3px;font-family:'Times New Roman',Times,serif;">${c.name||''}</div>
+      <div style="font-size:13px;font-style:italic;color:#555;margin-top:5px;font-family:'Times New Roman',Times,serif;">${c.title||''}</div>
+      <div style="font-size:12px;color:#666;margin-top:9px;font-family:'Times New Roman',Times,serif;">${contactItems.join(' · ')}</div>
+      ${extraMeta.length ? `<div style="font-size:11.5px;color:#999;margin-top:5px;font-family:'Times New Roman',Times,serif;">${extraMeta.join(' · ')}</div>` : ''}
+    </div>
+    ${photoSlot}
+  </div>
+
+  <div class="body-wrap">
+
+    <!-- Summary / Personal Statement -->
+    <span class="sec-label">Professional Summary</span>
+    <p style="font-size:12px;color:#333;line-height:1.9;font-family:'Times New Roman',Times,serif;">${c.personalStatement || c.summary || ''}</p>
+
+    ${(c.coreCompetencies||[]).length ? `
+    <span class="sec-label">Core Competencies</span>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 20px;">
+      ${(c.coreCompetencies||[]).map(s=>`<div style="font-size:12px;color:#333;font-family:'Times New Roman',Times,serif;">• ${s}</div>`).join('')}
+    </div>
+    ` : ''}
+
+    <span class="sec-label">Professional Experience</span>
+    ${expRows}
+
+    <span class="sec-label">Education</span>
+    ${eduRows}
+
+    <span class="sec-label">Skills</span>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 20px;">
+      ${(c.skills||[]).map(s=>`<div style="font-size:12px;color:#333;font-family:'Times New Roman',Times,serif;">• ${s}</div>`).join('')}
+    </div>
+
+    ${(c.certifications||[]).length ? `
+    <span class="sec-label">Certifications</span>
+    <div style="display:flex;flex-wrap:wrap;gap:8px 20px;">${(c.certifications||[]).map(x=>`<span style="font-size:12px;color:#333;font-family:'Times New Roman',Times,serif;">• ${x}</span>`).join('')}</div>
+    ` : ''}
+
+    ${(c.languages||[]).length ? `
+    <span class="sec-label">Languages</span>
+    <div style="display:flex;flex-wrap:wrap;gap:8px 20px;">${(c.languages||[]).map(x=>`<span style="font-size:12px;color:#333;font-family:'Times New Roman',Times,serif;">${x}</span>`).join('')}</div>
+    ` : ''}
+
+    ${(c.hobbies||[]).length ? `
+    <span class="sec-label">Interests & Hobbies</span>
+    <p style="font-size:12px;color:#333;font-family:'Times New Roman',Times,serif;">${(c.hobbies||[]).join(' · ')}</p>
+    ` : ''}
+
+    ${c.declaration ? `
+    <span class="sec-label">Declaration</span>
+    <p style="font-size:11px;color:#555;font-style:italic;font-family:'Times New Roman',Times,serif;">${c.declaration}</p>
+    ` : ''}
+
+    ${c.gdprClause ? `<p style="font-size:9px;color:#aaa;font-style:italic;margin-top:16px;font-family:'Times New Roman',Times,serif;">${c.gdprClause}</p>` : ''}
+
+  </div>
+</div>
+</div>
+</body>
+</html>`;
+};
+
+// ─── TEMPLATE DISPATCHER ──────────────────────────────────────────────────────
+const buildResumeHtml = (contentJson, country, tmplId, hasPhoto) => {
+  const accent = getAccentColor(country, tmplId);
+  switch(tmplId) {
+    case 'modern':   return buildModernHtml(contentJson, accent, hasPhoto);
+    case 'minimal':  return buildMinimalHtml(contentJson, accent, hasPhoto);
+    case 'creative': return buildCreativeHtml(contentJson, accent, hasPhoto);
+    case 'classic':  return buildClassicHtml(contentJson, accent, hasPhoto);
+    default:         return buildExecutiveHtml(contentJson, accent, hasPhoto);
+  }
 };
 
 // ─── TEMPLATE PREVIEW CARD ────────────────────────────────────────────────────
@@ -442,7 +923,6 @@ function TemplatePreviewCard({ tmpl, country, selected, onClick }) {
         background: "#fff",
       }}
     >
-      {/* Mini preview */}
       <div style={{ height: 130, background: "#f8fafc", position: "relative", overflow: "hidden" }}>
         {tmpl.preview.layout === "two-col" || tmpl.preview.layout === "sidebar" ? (
           <>
@@ -496,13 +976,12 @@ function TemplatePreviewCard({ tmpl, country, selected, onClick }) {
   );
 }
 
-// ─── REAL-TIME WYSIWYG EDITOR ─────────────────────────────────────────────────
+// ─── WYSIWYG EDITOR ───────────────────────────────────────────────────────────
 function RealtimeEditor({ html, onHtmlChange, onDownload, fileName, parsedData, country, selectedTmpl, onRegenerate, onBack, onJD }) {
   const iframeRef = useRef();
   const [mode, setMode] = useState("preview");
   const [sourceHtml, setSourceHtml] = useState(html);
   const newPhotoRef = useRef();
-  // Keep a ref to the LATEST live html so download always gets current state
   const liveHtmlRef = useRef(html);
 
   useEffect(() => {
@@ -510,13 +989,10 @@ function RealtimeEditor({ html, onHtmlChange, onDownload, fileName, parsedData, 
     liveHtmlRef.current = html;
   }, [html]);
 
-  // ── Capture current iframe state (images included as base64) ──────────────
   const captureFromIframe = () => {
     const doc = iframeRef.current?.contentDocument;
     if (!doc) return liveHtmlRef.current;
-    // Inline any blob/object URLs into data URIs (already base64 in our case)
-    const captured = "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
-    return captured;
+    return "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
   };
 
   const syncToParent = () => {
@@ -526,44 +1002,30 @@ function RealtimeEditor({ html, onHtmlChange, onDownload, fileName, parsedData, 
     onHtmlChange(captured);
   };
 
-  // ── Handle download — capture live state first ────────────────────────────
-  const handleDownload = () => {
+  const handleDownloadWord = () => {
     const latest = captureFromIframe();
-    // Strip any editor-injected contenteditable attributes for clean download
-    const clean = latest
-      .replace(/\s*contenteditable="true"/g, '')
-      .replace(/\s*data-editing="true"/g, '')
-      .replace(/outline:\s*2px dashed[^;]+;/g, '')
-      .replace(/outline:\s*none;/g, '')
-      .replace(/\s*cursor:\s*text;/g, '')
-      .replace(/\s*min-width:\s*4px;/g, '')
-      .replace(/\s*style="\s*"/g, '');
-    const name = fileName || "resume.html";
-    const blob = new Blob([clean], { type: "text/html;charset=utf-8" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = name;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    downloadAsWord(latest, fileName || "resume");
   };
 
-  // ── execCommand on the iframe document ───────────────────────────────────
+  const handleDownloadHtml = () => {
+    const latest = captureFromIframe();
+    const name = (fileName || "resume").replace(/\.html$/i, '') + ".html";
+    downloadHtml(latest, name);
+  };
+
   const execCmd = (cmd, val = null) => {
     const doc = iframeRef.current?.contentDocument;
     if (!doc) return;
     doc.execCommand(cmd, false, val);
-    // Don't sync on every keystroke — only on explicit toolbar action
   };
 
-  // ── Swap/inject photo into iframe live ───────────────────────────────────
-  const injectPhoto = (file) => {
+  // Swap photo: replaces img src in iframe — no drag involved
+  const injectNewPhoto = (file) => {
     const r = new FileReader();
     r.onload = (e) => {
       const b64 = e.target.result;
       const doc = iframeRef.current?.contentDocument;
       if (!doc) return;
-
-      // Find existing photo img (any data:image src or __PHOTO__ placeholder)
       const allImgs = doc.querySelectorAll('img');
       let target = null;
       allImgs.forEach(img => {
@@ -571,118 +1033,36 @@ function RealtimeEditor({ html, onHtmlChange, onDownload, fileName, parsedData, 
           if (!target) target = img;
         }
       });
-
       if (target) {
         target.src = b64;
-        target.style.cursor = 'move';
       } else {
-        // No existing photo — create a new draggable one
-        const img = doc.createElement('img');
-        img.src = b64;
-        img.id = 'resume-photo-injected';
-        img.style.cssText = [
-          'width:110px','height:138px','object-fit:cover',
-          'border-radius:3px','position:absolute','top:24px','right:48px',
-          'cursor:move','z-index:100','border:2px solid #c9a84c',
-          'display:block'
-        ].join(';');
-        const container = doc.querySelector('.resume') || doc.querySelector('header') || doc.body;
-        container.style.position = 'relative';
-        container.appendChild(img);
-        attachDrag(img, doc);
+        // Inject into first header flex container as last child
+        const header = doc.querySelector('.resume > div:first-child') || doc.querySelector('.resume');
+        if (header) {
+          const img = doc.createElement('img');
+          img.src = b64;
+          img.style.cssText = 'width:108px;height:135px;object-fit:cover;object-position:center top;border-radius:4px;border:2.5px solid #c9a84c;display:block;flex-shrink:0;pointer-events:none;user-select:none;';
+          header.appendChild(img);
+        }
       }
       syncToParent();
     };
     r.readAsDataURL(file);
   };
 
-  // ── Attach drag-and-drop to an element inside the iframe doc ─────────────
-  const attachDrag = (el, doc) => {
-    let ox = 0, oy = 0, dragging = false;
-    el.addEventListener('mousedown', (e) => {
-      // Only drag on direct click of the image itself, not text
-      if (e.target !== el) return;
-      e.preventDefault();
-      dragging = true;
-      const rect = el.getBoundingClientRect();
-      const frameRect = iframeRef.current.getBoundingClientRect();
-      ox = e.clientX - rect.left;
-      oy = e.clientY - rect.top;
-      el.style.opacity = '0.8';
-      el.style.zIndex = '9999';
-    });
-    doc.addEventListener('mousemove', (e) => {
-      if (!dragging) return;
-      e.preventDefault();
-      const parent = el.offsetParent || doc.body;
-      const pr = parent.getBoundingClientRect();
-      const frameRect = iframeRef.current.getBoundingClientRect();
-      // clientX/Y inside iframe = e.clientX relative to frame origin
-      const relX = e.clientX - pr.left - ox;
-      const relY = e.clientY - pr.top - oy;
-      el.style.left = Math.max(0, relX) + 'px';
-      el.style.top  = Math.max(0, relY) + 'px';
-    });
-    doc.addEventListener('mouseup', () => {
-      if (dragging) {
-        dragging = false;
-        el.style.opacity = '1';
-        el.style.zIndex = '';
-        syncToParent(); // save new position
-      }
-    });
-  };
-
-  // ── On iframe load — inject editing capabilities without designMode ────────
   const onIframeLoad = () => {
     const iframe = iframeRef.current;
     if (!iframe) return;
     const doc = iframe.contentDocument;
     if (!doc || !doc.body) return;
-
-    // 1. Make all text-bearing leaf nodes contenteditable
-    const editableSelectors = 'p, span, h1, h2, h3, h4, h5, li, td, th, a, strong, em, b, i, div';
-    doc.querySelectorAll(editableSelectors).forEach(el => {
-      // Skip wrapper divs that have many children
-      const hasBlockChildren = [...el.children].some(c =>
-        ['DIV','P','UL','OL','TABLE','SECTION','HEADER','FOOTER','ARTICLE'].includes(c.tagName)
-      );
-      if (hasBlockChildren) return;
+    doc.querySelectorAll('p, span, h1, h2, h3, h4, h5, li, td, th, b, strong, em, i, div[style]').forEach(el => {
       if (el.textContent.trim().length === 0) return;
+      if (el.children.length > 2) return; // skip container divs
       el.setAttribute('contenteditable', 'true');
       el.style.outline = 'none';
       el.style.cursor = 'text';
-      el.style.minWidth = '4px';
-      el.addEventListener('focus', function() {
-        this.style.outline = '1.5px dashed rgba(37,99,235,0.5)';
-        this.style.borderRadius = '2px';
-      });
-      el.addEventListener('blur', function() {
-        this.style.outline = 'none';
-        syncToParent();
-      });
-      el.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter' && !e.shiftKey) {
-          // Allow normal enter
-        }
-      });
-    });
-
-    // 2. Attach drag to ALL images
-    doc.querySelectorAll('img').forEach(img => {
-      img.style.cursor = 'move';
-      // Make sure parent is positioned
-      if (img.parentElement) {
-        const pos = window.getComputedStyle(img.parentElement).position;
-        if (pos === 'static') img.parentElement.style.position = 'relative';
-      }
-      attachDrag(img, doc);
-    });
-
-    // 3. Also attach drag to photo placeholder divs
-    doc.querySelectorAll('[data-draggable="true"]').forEach(el => {
-      el.style.cursor = 'move';
-      attachDrag(el, doc);
+      el.addEventListener('focus', function() { this.style.outline = '1.5px dashed rgba(37,99,235,0.35)'; this.style.borderRadius = '2px'; });
+      el.addEventListener('blur', function() { this.style.outline = 'none'; syncToParent(); });
     });
   };
 
@@ -693,20 +1073,20 @@ function RealtimeEditor({ html, onHtmlChange, onDownload, fileName, parsedData, 
   };
 
   const TOOLBAR = [
-    { label:"B",  cmd:"bold",                title:"Bold"          },
-    { label:"I",  cmd:"italic",              title:"Italic"        },
-    { label:"U",  cmd:"underline",           title:"Underline"     },
-    { label:"S̶", cmd:"strikeThrough",        title:"Strikethrough" },
-    { label:"H1", cmd:"formatBlock", val:"h2", title:"Large heading"},
-    { label:"H2", cmd:"formatBlock", val:"h3", title:"Sub heading" },
-    { label:"¶",  cmd:"formatBlock", val:"p",  title:"Paragraph"   },
-    { label:"•",  cmd:"insertUnorderedList", title:"Bullet list"   },
-    { label:"1.", cmd:"insertOrderedList",   title:"Numbered list" },
-    { label:"⬅", cmd:"justifyLeft",          title:"Align left"    },
-    { label:"⬛", cmd:"justifyCenter",        title:"Center"        },
-    { label:"➡", cmd:"justifyRight",         title:"Align right"   },
-    { label:"↩",  cmd:"undo",               title:"Undo"          },
-    { label:"↪",  cmd:"redo",               title:"Redo"          },
+    { label:"B",  cmd:"bold"                        },
+    { label:"I",  cmd:"italic"                      },
+    { label:"U",  cmd:"underline"                   },
+    { label:"S̶", cmd:"strikeThrough"               },
+    { label:"H1", cmd:"formatBlock", val:"h2"       },
+    { label:"H2", cmd:"formatBlock", val:"h3"       },
+    { label:"¶",  cmd:"formatBlock", val:"p"        },
+    { label:"•",  cmd:"insertUnorderedList"         },
+    { label:"1.", cmd:"insertOrderedList"           },
+    { label:"⬅", cmd:"justifyLeft"                  },
+    { label:"⬛", cmd:"justifyCenter"               },
+    { label:"➡", cmd:"justifyRight"                 },
+    { label:"↩",  cmd:"undo"                        },
+    { label:"↪",  cmd:"redo"                        },
   ];
 
   const COLOR_OPTIONS = ["#000000","#1a1a2e","#6b1c1c","#1e3a8a","#1a3a1a","#c9a84c","#ffffff","#555555","#888888","#dc2626"];
@@ -715,95 +1095,95 @@ function RealtimeEditor({ html, onHtmlChange, onDownload, fileName, parsedData, 
   return (
     <div style={{ background:"#0f172a", borderRadius:"18px 18px 0 0", overflow:"hidden", border:"1.5px solid #1e293b" }}>
 
-      {/* ── TOP NAV ── */}
+      {/* TOP NAV */}
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 16px", background:"#0f172a", borderBottom:"1px solid #1e293b", flexWrap:"wrap", gap:8 }}>
         <div style={{ display:"flex", gap:6 }}>
           {["preview","source"].map(m => (
             <button key={m}
               onClick={() => { if (m==="preview" && mode==="source") applySource(); else setMode(m); }}
-              style={{ padding:"6px 16px", borderRadius:8, border:"none", cursor:"pointer", background:mode===m?"#2563eb":"#1e293b", color:mode===m?"#fff":"#94a3b8", fontWeight:700, fontSize:12 }}>
+              style={{ padding:"6px 16px", borderRadius:8, border:"none", cursor:"pointer", background:mode===m?"#2563eb":"#1e293b", color:mode===m?"#fff":"#94a3b8", fontWeight:700, fontSize:12, fontFamily:"'Times New Roman',serif" }}>
               {m === "preview" ? "👁 Preview & Edit" : "{ } Source HTML"}
             </button>
           ))}
         </div>
         <div style={{ display:"flex", gap:6, alignItems:"center", flexWrap:"wrap" }}>
           <input ref={newPhotoRef} type="file" accept="image/*" style={{display:"none"}}
-            onChange={e => e.target.files[0] && injectPhoto(e.target.files[0])} />
+            onChange={e => e.target.files[0] && injectNewPhoto(e.target.files[0])} />
           <button onClick={() => newPhotoRef.current?.click()}
-            style={{ padding:"6px 14px", borderRadius:8, border:"none", background:"#7c3aed", color:"#fff", fontWeight:700, fontSize:12, cursor:"pointer" }}>
+            style={{ padding:"6px 14px", borderRadius:8, border:"none", background:"#7c3aed", color:"#fff", fontWeight:700, fontSize:12, cursor:"pointer", fontFamily:"'Times New Roman',serif" }}>
             📷 Swap Photo
           </button>
           <button onClick={onRegenerate}
-            style={{ padding:"6px 14px", borderRadius:8, border:"none", background:"#1e293b", color:"#94a3b8", fontWeight:700, fontSize:12, cursor:"pointer" }}>
+            style={{ padding:"6px 14px", borderRadius:8, border:"none", background:"#1e293b", color:"#94a3b8", fontWeight:700, fontSize:12, cursor:"pointer", fontFamily:"'Times New Roman',serif" }}>
             🔄 Regenerate
           </button>
           <button onClick={onBack}
-            style={{ padding:"6px 14px", borderRadius:8, border:"none", background:"#1e293b", color:"#94a3b8", fontWeight:700, fontSize:12, cursor:"pointer" }}>
+            style={{ padding:"6px 14px", borderRadius:8, border:"none", background:"#1e293b", color:"#94a3b8", fontWeight:700, fontSize:12, cursor:"pointer", fontFamily:"'Times New Roman',serif" }}>
             ← Templates
           </button>
           <button onClick={onJD}
-            style={{ padding:"6px 14px", borderRadius:8, border:"none", background:"#92400e", color:"#fbbf24", fontWeight:700, fontSize:12, cursor:"pointer" }}>
+            style={{ padding:"6px 14px", borderRadius:8, border:"none", background:"#92400e", color:"#fbbf24", fontWeight:700, fontSize:12, cursor:"pointer", fontFamily:"'Times New Roman',serif" }}>
             📋 JD Match
           </button>
-          <button onClick={handleDownload}
-            style={{ padding:"7px 20px", borderRadius:8, border:"none", background:"linear-gradient(135deg,#2563eb,#1d4ed8)", color:"#fff", fontWeight:800, fontSize:12, cursor:"pointer", boxShadow:"0 3px 12px #2563eb44" }}>
-            ⬇ Download HTML
-          </button>
+          <div style={{ display:"flex", gap:4 }}>
+            <button onClick={handleDownloadWord}
+              style={{ padding:"7px 18px", borderRadius:"8px 0 0 8px", border:"none", background:"linear-gradient(135deg,#1d4ed8,#1e40af)", color:"#fff", fontWeight:800, fontSize:12, cursor:"pointer", boxShadow:"0 3px 12px #2563eb44", fontFamily:"'Times New Roman',serif" }}>
+              ⬇ Download Word
+            </button>
+            <button onClick={handleDownloadHtml}
+              style={{ padding:"7px 12px", borderRadius:"0 8px 8px 0", border:"none", borderLeft:"1px solid rgba(255,255,255,0.2)", background:"linear-gradient(135deg,#1d4ed8,#1e40af)", color:"#fff", fontWeight:700, fontSize:11, cursor:"pointer", fontFamily:"'Times New Roman',serif" }}>
+              HTML
+            </button>
+          </div>
         </div>
       </div>
 
       {mode === "preview" && (
         <>
-          {/* ── FORMAT TOOLBAR ── */}
+          {/* FORMAT TOOLBAR */}
           <div style={{ display:"flex", alignItems:"center", gap:2, padding:"7px 12px", background:"#1e293b", borderBottom:"1px solid #334155", flexWrap:"wrap" }}>
             {TOOLBAR.map((t, i) => (
-              <button key={i} title={t.title}
+              <button key={i} title={t.label}
                 onClick={() => execCmd(t.cmd, t.val || null)}
-                style={{ padding:"4px 9px", borderRadius:5, border:"1px solid #334155", background:"#0f172a", color:"#cbd5e1", fontWeight:t.label==="B"?"bold":"normal", fontStyle:t.label==="I"?"italic":"normal", fontSize:12, cursor:"pointer", minWidth:28, textAlign:"center" }}>
+                style={{ padding:"4px 9px", borderRadius:5, border:"1px solid #334155", background:"#0f172a", color:"#cbd5e1", fontWeight:t.label==="B"?"bold":"normal", fontStyle:t.label==="I"?"italic":"normal", fontSize:12, cursor:"pointer", minWidth:28, textAlign:"center", fontFamily:"'Times New Roman',serif" }}>
                 {t.label}
               </button>
             ))}
             <div style={{ width:1, height:22, background:"#334155", margin:"0 6px" }} />
-            {/* Font size */}
             <select onChange={e => execCmd("fontSize", e.target.value)}
-              style={{ padding:"3px 6px", borderRadius:5, border:"1px solid #334155", background:"#0f172a", color:"#cbd5e1", fontSize:12, cursor:"pointer" }}>
+              style={{ padding:"3px 6px", borderRadius:5, border:"1px solid #334155", background:"#0f172a", color:"#cbd5e1", fontSize:12, cursor:"pointer", fontFamily:"'Times New Roman',serif" }}>
               <option value="">Size</option>
               {[1,2,3,4,5,6,7].map(s => <option key={s} value={s}>{[8,10,12,14,18,24,36][s-1]}px</option>)}
             </select>
             <div style={{ width:1, height:22, background:"#334155", margin:"0 6px" }} />
-            {/* Text colors */}
             <span style={{ fontSize:10, color:"#64748b" }}>Color:</span>
             {COLOR_OPTIONS.map(c => (
               <div key={c} onClick={() => execCmd("foreColor", c)}
-                title={c}
                 style={{ width:16, height:16, borderRadius:"50%", background:c, border:c==="#ffffff"?"1.5px solid #475569":"1.5px solid transparent", cursor:"pointer", flexShrink:0 }} />
             ))}
             <div style={{ width:1, height:22, background:"#334155", margin:"0 6px" }} />
-            {/* Highlight */}
             <span style={{ fontSize:10, color:"#64748b" }}>Hi:</span>
             {HIGHLIGHT_OPTIONS.map(c => (
               <div key={c} onClick={() => execCmd("hiliteColor", c === "transparent" ? "transparent" : c)}
-                title="Highlight"
                 style={{ width:16, height:16, borderRadius:"50%", background:c==="transparent"?"#1e293b":c, border:"1.5px solid #475569", cursor:"pointer", flexShrink:0 }} />
             ))}
           </div>
 
-          {/* ── HINT BAR ── */}
+          {/* HINT BAR */}
           <div style={{ padding:"5px 16px", background:"#0c1520", borderBottom:"1px solid #1e293b", display:"flex", gap:20, alignItems:"center", flexWrap:"wrap" }}>
-            <span style={{ fontSize:11, color:"#475569" }}>✏️ <strong style={{color:"#94a3b8"}}>Click text</strong> to edit</span>
-            <span style={{ fontSize:11, color:"#475569" }}>🖱 <strong style={{color:"#94a3b8"}}>Drag photo</strong> to move</span>
-            <span style={{ fontSize:11, color:"#475569" }}>📷 <strong style={{color:"#94a3b8"}}>Swap Photo</strong> to replace</span>
-            <span style={{ fontSize:11, color:"#475569" }}>💾 <strong style={{color:"#22c55e"}}>Download</strong> saves all edits + photo</span>
-            <span style={{ fontSize:11, color:"#475569" }}>🖨 Ctrl+P → PDF</span>
+            <span style={{ fontSize:11, color:"#475569" }}>✏️ <strong style={{color:"#94a3b8"}}>Click text</strong> to edit inline</span>
+            <span style={{ fontSize:11, color:"#475569" }}>📷 <strong style={{color:"#94a3b8"}}>Swap Photo</strong> to replace profile image</span>
+            <span style={{ fontSize:11, color:"#22c55e", fontWeight:600 }}>⬇ Download Word → opens in MS Word directly</span>
+            <span style={{ fontSize:11, color:"#475569" }}>🖨 Ctrl+P to print as PDF</span>
           </div>
 
-          {/* ── LIVE IFRAME ── */}
+          {/* IFRAME */}
           <iframe
             ref={iframeRef}
             srcDoc={html}
             sandbox="allow-same-origin allow-scripts"
             title="Resume Preview"
-            style={{ width:"100%", height:1060, border:"none", display:"block", background:"#eef0f4" }}
+            style={{ width:"100%", height:1080, border:"none", display:"block", background:"#eef0f4" }}
             onLoad={onIframeLoad}
           />
         </>
@@ -821,11 +1201,11 @@ function RealtimeEditor({ html, onHtmlChange, onDownload, fileName, parsedData, 
           />
           <div style={{ padding:"10px 16px", background:"#1e293b", display:"flex", gap:10 }}>
             <button onClick={applySource}
-              style={{ padding:"8px 20px", borderRadius:8, border:"none", background:"#2563eb", color:"#fff", fontWeight:700, fontSize:12, cursor:"pointer" }}>
+              style={{ padding:"8px 20px", borderRadius:8, border:"none", background:"#2563eb", color:"#fff", fontWeight:700, fontSize:12, cursor:"pointer", fontFamily:"'Times New Roman',serif" }}>
               ✓ Apply & Preview
             </button>
             <button onClick={() => setSourceHtml(liveHtmlRef.current)}
-              style={{ padding:"8px 16px", borderRadius:8, border:"1px solid #334155", background:"transparent", color:"#94a3b8", fontWeight:700, fontSize:12, cursor:"pointer" }}>
+              style={{ padding:"8px 16px", borderRadius:8, border:"1px solid #334155", background:"transparent", color:"#94a3b8", fontWeight:700, fontSize:12, cursor:"pointer", fontFamily:"'Times New Roman',serif" }}>
               ✕ Discard
             </button>
           </div>
@@ -837,22 +1217,21 @@ function RealtimeEditor({ html, onHtmlChange, onDownload, fileName, parsedData, 
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function ResumeMarketing() {
-  const [step, setStep]           = useState(1);
-  const [parsedData, setParsed]   = useState(null);
-  const [resumeFile, setFile]     = useState(null);
-  const [country, setCountry]     = useState("");
-  const [template, setTemplate]   = useState("executive");
-  const [photoB64, setPhotoB64]   = useState(null);
-  const [photoPreview, setPhotoPr]= useState(null);
-  const [generatedHtml, setHtml]  = useState(null);
+  const [step, setStep]             = useState(1);
+  const [parsedData, setParsed]     = useState(null);
+  const [country, setCountry]       = useState("");
+  const [template, setTemplate]     = useState("executive");
+  const [photoB64, setPhotoB64]     = useState(null);
+  const [photoPreview, setPhotoPr]  = useState(null);
+  const [generatedHtml, setHtml]    = useState(null);
   const [generating, setGenerating] = useState(false);
-  const [loadMsg, setLoadMsg]     = useState("");
-  const [error, setError]         = useState(null);
-  const [jdText, setJdText]       = useState("");
-  const [analysis, setAnalysis]   = useState(null);
-  const [analysing, setAnalysing] = useState(false);
-  const [searchQ, setSearchQ]     = useState("");
-  const [openGroup, setOpenGroup] = useState(null);
+  const [loadMsg, setLoadMsg]       = useState("");
+  const [error, setError]           = useState(null);
+  const [jdText, setJdText]         = useState("");
+  const [analysis, setAnalysis]     = useState(null);
+  const [analysing, setAnalysing]   = useState(false);
+  const [searchQ, setSearchQ]       = useState("");
+  const [openGroup, setOpenGroup]   = useState(null);
 
   const fileRef  = useRef();
   const photoRef = useRef();
@@ -860,31 +1239,44 @@ export default function ResumeMarketing() {
   const selectedCountry = ALL_COUNTRIES.find(c => c.key === country);
   const selectedTmpl    = TEMPLATE_DEFS.find(t => t.id === template);
 
+  // ── FILE UPLOAD ──────────────────────────────────────────────────────────────
   const handleFileUpload = async (file) => {
     if (!file) return;
-    setFile(file); setError(null); setGenerating(true); setLoadMsg("Reading resume file…");
+    setHtml(null); setParsed(null); setError(null);
+    setGenerating(true); setLoadMsg("Reading resume file…");
     try {
-     const text = await extractText(file, setLoadMsg);
-if (!text || text.trim().length < 50) {
-  throw new Error("Could not read resume content. Please use .TXT format for best results.");
-}
-setLoadMsg("Parsing resume with AI…");
-const raw = await callGroq(`
-Parse this resume and return ONLY a raw JSON object (no markdown, no backticks).
-Resume: ${text.slice(0, 4000)}
-Return exactly this structure:
+      const text = await extractText(file, setLoadMsg);
+      if (!text || text.trim().length < 50) throw new Error("Could not read resume content. Please use .TXT for best results.");
+      setLoadMsg("Parsing resume with AI…");
+      const raw = await callGroq(`
+Parse this resume and return ONLY a raw JSON object (no markdown, no backticks, no extra text).
+Resume text:
+${text.slice(0, 4000)}
+
+Return exactly this structure (fill every field you can find, leave others as empty string or empty array):
 {"name":"","email":"","phone":"","location":"","linkedin":"","dob":"","nationality":"","summary":"","experience":[{"company":"","role":"","duration":"","location":"","achievements":[""]}],"education":[{"institution":"","degree":"","year":"","grade":""}],"skills":[],"languages":[],"certifications":[],"hobbies":[]}
-IMPORTANT: Extract DOB if mentioned anywhere. Extract Nationality if mentioned. Extract all education details carefully. If not found leave as empty string.
-Start with { end with }. Nothing else.`, 2000, setLoadMsg);
+
+Rules:
+- Extract DOB if mentioned anywhere (look for "Date of Birth", "DOB", "Born", etc.)
+- Extract Nationality if mentioned
+- Extract all work experience roles with their achievements/bullets
+- Extract all education entries
+- Start with { end with }. Nothing else.`, 2000, setLoadMsg);
       let cleaned = raw.trim().replace(/```json|```/g, "").trim();
       const s = cleaned.indexOf("{"), e2 = cleaned.lastIndexOf("}");
       if (s !== -1 && e2 !== -1) cleaned = cleaned.slice(s, e2 + 1);
       let parsed;
       try { parsed = JSON.parse(cleaned); } catch { parsed = { name: file.name.replace(/\.[^.]+$/, "") }; }
-      setParsed(parsed); setStep(2);
+      setParsed(parsed);
+      setStep(2);
     } catch (e) {
-      setError(e.message); setParsed({ name: file.name.replace(/\.[^.]+$/, "") }); setStep(2);
-    } finally { setGenerating(false); }
+      setError(e.message);
+      setParsed({ name: file.name.replace(/\.[^.]+$/, "") });
+      setStep(2);
+    } finally {
+      setGenerating(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
   };
 
   const handlePhotoUpload = (file) => {
@@ -896,33 +1288,44 @@ Start with { end with }. Nothing else.`, 2000, setLoadMsg);
     r.readAsDataURL(file);
   };
 
+  // ── GENERATE RESUME ──────────────────────────────────────────────────────────
+  // KEY FIX: AI generates ONLY JSON content — JS builds the HTML from hardcoded templates
   const generateResume = async (jd = "") => {
     if (!country) { setError("Select a country first"); return; }
-    setError(null); setGenerating(true);
-    setLoadMsg(`✨ Building ${selectedTmpl?.name} resume for ${parsedData?.name || "candidate"}…`);
+    setError(null); setGenerating(true); setHtml(null);
+    setLoadMsg(`✨ Generating content for ${parsedData?.name || "candidate"}…`);
     try {
-      const html = await callGroq(
-        buildResumePrompt({ data: parsedData || {}, country, tmpl: selectedTmpl, hasPhoto: !!photoB64, jdText: jd }),
-        7000, setLoadMsg
+      const raw = await callGroq(
+        buildContentPrompt({ data: parsedData || {}, country, tmpl: selectedTmpl, hasPhoto: !!photoB64, jdText: jd }),
+        3000, setLoadMsg
       );
-      let clean = html.replace(/```html|```/g, "").trim();
-const doctypeIndex = clean.toLowerCase().indexOf("<!doctype html>");
-const htmlIndex = clean.toLowerCase().indexOf("<html");
-if (doctypeIndex !== -1) clean = clean.slice(doctypeIndex);
-else if (htmlIndex !== -1) clean = clean.slice(htmlIndex);
-      const final = injectPhoto(clean, photoB64);
-      setHtml(final); setStep(3);
+      let cleaned = raw.trim().replace(/```json|```/g, "").trim();
+      const s = cleaned.indexOf("{"), e2 = cleaned.lastIndexOf("}");
+      if (s !== -1 && e2 !== -1) cleaned = cleaned.slice(s, e2 + 1);
+
+      setLoadMsg("Building template layout…");
+      let contentJson;
+      try { contentJson = JSON.parse(cleaned); }
+      catch { throw new Error("AI returned invalid content. Please try again."); }
+
+      // Build HTML from hardcoded template (not from AI)
+      const rawHtml  = buildResumeHtml(contentJson, country, template, !!photoB64);
+      const finalHtml = injectPhoto(rawHtml, photoB64);
+
+      setHtml(finalHtml);
+      setStep(3);
       await logUsage({ action: jd ? "jd_rebuild" : "generate", candidateName: parsedData?.name || "Unknown", country, template: selectedTmpl?.name });
     } catch (e) { setError(e.message); }
     finally { setGenerating(false); }
   };
 
+  // ── ANALYSE JD ───────────────────────────────────────────────────────────────
   const analyseJD = async () => {
     if (!jdText.trim() || jdText.split(/\s+/).length < 8) { setError("Paste a longer job description"); return; }
     setAnalysing(true); setError(null);
     try {
       const raw = await callGroq(`
-Analyse this candidate vs job description. Return ONLY raw JSON (no backticks).
+Analyse this candidate vs job description. Return ONLY raw JSON (no backticks, no markdown).
 CANDIDATE: ${parsedData?.name}, Skills: ${(parsedData?.skills||[]).join(", ")}
 Experience: ${(parsedData?.experience||[]).map(e=>`${e.role} at ${e.company}`).join(" | ")}
 JOB DESCRIPTION: ${jdText.slice(0, 1500)}
@@ -945,10 +1348,23 @@ match_label: "Excellent"|"Good"|"Fair"|"Low"`, 1500, () => {});
     countries: searchQ ? g.countries.filter(c => c.label.toLowerCase().includes(sl) || c.key.includes(sl)) : g.countries,
   })).filter(g => g.countries.length > 0);
 
-  // ── STYLES ─────────────────────────────────────────────────────────────────
+  // ── STYLES ──────────────────────────────────────────────────────────────────
   const S = {
-    page: { fontFamily:"'Times New Roman', Times, serif", maxWidth:1080, margin:"0 auto", padding:"0 14px 80px" },
-    card: { background:"#fff", borderRadius:18, border:"1.5px solid #e8ecf0", padding:"24px 26px", marginBottom:18, boxShadow:"0 4px 20px rgba(0,0,0,.05)" },
+    page: {
+      fontFamily:"'Times New Roman', Times, serif",
+      maxWidth: 1080,
+      margin: "0 auto",
+      padding: "0 20px 80px",
+      boxSizing: "border-box",
+    },
+    card: {
+      background:"#fff",
+      borderRadius:18,
+      border:"1.5px solid #e8ecf0",
+      padding:"24px 26px",
+      marginBottom:18,
+      boxShadow:"0 4px 20px rgba(0,0,0,.05)",
+    },
     btn: (bg, fg="#fff", disabled=false) => ({
       padding:"10px 22px", borderRadius:10, border:"none",
       background: disabled?"#e2e8f0":bg, color: disabled?"#94a3b8":fg,
@@ -966,30 +1382,34 @@ match_label: "Excellent"|"Good"|"Fair"|"Low"`, 1500, () => {});
         .fu { animation: fadeUp .35s ease both }
         .ccard:hover { transform:translateY(-3px) !important; box-shadow:0 10px 28px rgba(0,0,0,.12) !important; }
         button:active:not([disabled]) { transform:scale(.97) }
-        * { font-family: 'Times New Roman', Times, serif !important; }
+        * { font-family: 'Times New Roman', Times, serif !important; box-sizing: border-box; }
         input, textarea, select { font-family: 'Times New Roman', Times, serif !important; }
         ::-webkit-scrollbar { width:5px } ::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:3px }
       `}</style>
 
+      {/* Hidden shared file input */}
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".txt,.pdf,.doc,.docx"
+        style={{ display:"none" }}
+        onChange={e => e.target.files[0] && handleFileUpload(e.target.files[0])}
+      />
+
       <div style={S.page}>
 
-        {/* ── HEADER ─────────────────────────────────────────────────────── */}
+        {/* HEADER */}
         <div style={{
           background:"linear-gradient(135deg, #0a0f1e 0%, #111827 50%, #1a1a2e 100%)",
-          borderRadius:22, padding:"32px 40px", marginBottom:26, color:"#fff",
-          position:"relative", overflow:"hidden"
+          borderRadius:22, padding:"32px 40px", marginBottom:26, color:"#fff", position:"relative", overflow:"hidden",
         }}>
           <div style={{ position:"absolute", top:-100, right:-60, width:380, height:380, borderRadius:"50%", background:"radial-gradient(circle, rgba(201,168,76,.08), transparent 70%)", pointerEvents:"none" }} />
           <div style={{ position:"absolute", bottom:-60, left:160, width:240, height:240, borderRadius:"50%", background:"radial-gradient(circle, rgba(37,99,235,.08), transparent 70%)", pointerEvents:"none" }} />
           <div style={{ fontFamily:"'Playfair Display',serif", fontSize:9, fontWeight:700, letterSpacing:6, textTransform:"uppercase", opacity:.4, marginBottom:10, color:"#c9a84c" }}>VJC Overseas — HR Excellence</div>
-          <div style={{ fontFamily:"'Playfair Display',serif", fontSize:32, fontWeight:900, letterSpacing:-0.5, marginBottom:6, color:"#fff" }}>
-            📄 AI Resume Builder
-          </div>
-          <div style={{ fontSize:13, opacity:.5, marginBottom:22, fontStyle:"italic" }}>
-            35 countries · 5 premium templates · Real-time WYSIWYG editing · JD matching
-          </div>
+          <div style={{ fontFamily:"'Playfair Display',serif", fontSize:32, fontWeight:900, letterSpacing:-0.5, marginBottom:6, color:"#fff" }}>📄 AI Resume Builder</div>
+          <div style={{ fontSize:13, opacity:.5, marginBottom:22, fontStyle:"italic" }}>35 countries · 5 premium templates · Real-time WYSIWYG editing · JD matching</div>
           <div style={{ display:"flex", gap:28, flexWrap:"wrap" }}>
-            {[["35+","Countries"],["5","Templates each"],["Real-time","WYSIWYG Edit"],["Drag","& Drop Photo"]].map(([v,l]) => (
+            {[["35+","Countries"],["5","Templates each"],["Real-time","WYSIWYG Edit"],["Word","Download"]].map(([v,l]) => (
               <div key={l} style={{ textAlign:"center" }}>
                 <div style={{ fontFamily:"'Playfair Display',serif", fontSize:22, fontWeight:900, color:"#c9a84c" }}>{v}</div>
                 <div style={{ fontSize:10, opacity:.45, marginTop:2 }}>{l}</div>
@@ -998,7 +1418,7 @@ match_label: "Excellent"|"Good"|"Fair"|"Low"`, 1500, () => {});
           </div>
         </div>
 
-        {/* ── STEP INDICATOR ─────────────────────────────────────────────── */}
+        {/* STEP INDICATOR */}
         <div style={{ display:"flex", gap:0, marginBottom:22, background:"#f1f5f9", borderRadius:14, padding:4, width:"fit-content" }}>
           {["Upload","Country & Style","Edit & Download","JD Match"].map((s,i) => {
             const n=i+1, active=step===n, done=step>n;
@@ -1022,7 +1442,7 @@ match_label: "Excellent"|"Good"|"Fair"|"Low"`, 1500, () => {});
           })}
         </div>
 
-        {/* ── ERROR ────────────────────────────────────────────────────────── */}
+        {/* ERROR */}
         {error && (
           <div style={{ background:"#fef2f2", border:"1.5px solid #fca5a5", borderRadius:12, padding:"12px 16px", marginBottom:16, display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
             <span style={{ fontSize:13, color:"#dc2626", fontWeight:600 }}>{error}</span>
@@ -1030,26 +1450,23 @@ match_label: "Excellent"|"Good"|"Fair"|"Low"`, 1500, () => {});
           </div>
         )}
 
-        {/* ── LOADING ─────────────────────────────────────────────────────── */}
+        {/* LOADING */}
         {(generating || analysing) && (
           <div style={{ ...S.card, textAlign:"center", padding:"64px 20px" }}>
             <div style={{ width:56, height:56, border:"3.5px solid #e2e8f0", borderTop:"3.5px solid #c9a84c", borderRadius:"50%", margin:"0 auto 24px", animation:"spin .8s linear infinite" }} />
-            <div style={{ fontFamily:"'Playfair Display',serif", fontSize:18, fontWeight:700, color:"#0f172a", marginBottom:8 }}>{loadMsg || "Analysing…"}</div>
-            <div style={{ fontSize:12, color:"#94a3b8", fontStyle:"italic" }}>AI crafting your resume — typically 15–30 seconds</div>
+            <div style={{ fontFamily:"'Playfair Display',serif", fontSize:18, fontWeight:700, color:"#0f172a", marginBottom:8 }}>{loadMsg || "Processing…"}</div>
+            <div style={{ fontSize:12, color:"#94a3b8", fontStyle:"italic" }}>AI crafting your resume — typically 10–20 seconds</div>
           </div>
         )}
 
-        {/* ══════════════════════════════════════════════════════════════════
-            STEP 1 — UPLOAD
-        ══════════════════════════════════════════════════════════════════ */}
+        {/* ══ STEP 1 — UPLOAD ══ */}
         {!generating && !analysing && step === 1 && (
           <div style={S.card} className="fu">
             <div style={{ fontFamily:"'Playfair Display',serif", fontSize:20, fontWeight:700, color:"#0f172a", marginBottom:4 }}>Upload Your Resume</div>
             <div style={{ fontSize:13, color:"#64748b", marginBottom:24, fontStyle:"italic" }}>AI reads every detail — experience, skills, education — to power all 5 premium templates.</div>
-            <input ref={fileRef} type="file" accept=".txt,.pdf,.doc,.docx" style={{ display:"none" }}
-              onChange={e => e.target.files[0] && handleFileUpload(e.target.files[0])} />
+
             <div
-              onClick={() => fileRef.current.click()}
+              onClick={() => fileRef.current?.click()}
               onDragOver={e => e.preventDefault()}
               onDrop={e => { e.preventDefault(); const f=e.dataTransfer.files[0]; if(f) handleFileUpload(f); }}
               style={{
@@ -1065,13 +1482,17 @@ match_label: "Excellent"|"Good"|"Fair"|"Low"`, 1500, () => {});
               <div style={{ fontFamily:"'Playfair Display',serif", fontSize:17, fontWeight:700, color:"#1e293b", marginBottom:6 }}>Drop resume here or click to browse</div>
               <div style={{ fontSize:12, color:"#94a3b8" }}>TXT · PDF · DOC · DOCX — max 5MB</div>
             </div>
+
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginTop:16 }}>
               {[
-                { f:".TXT", icon:"📝", note:"Best results", clr:"#16a34a", bg:"#f0fdf4", bd:"#bbf7d0" },
-                { f:".DOCX", icon:"📘", note:"Good support", clr:"#2563eb", bg:"#eff6ff", bd:"#bfdbfe" },
-                { f:".PDF", icon:"📕", note:"Text PDFs only", clr:"#d97706", bg:"#fffbeb", bd:"#fde68a" },
+                { f:".TXT",  icon:"📝", note:"Best results",   clr:"#16a34a", bg:"#f0fdf4", bd:"#bbf7d0" },
+                { f:".DOCX", icon:"📘", note:"Good support",   clr:"#2563eb", bg:"#eff6ff", bd:"#bfdbfe" },
+                { f:".PDF",  icon:"📕", note:"Text PDFs only", clr:"#d97706", bg:"#fffbeb", bd:"#fde68a" },
               ].map(x => (
-                <div key={x.f} style={{ padding:12, borderRadius:12, background:x.bg, border:`1px solid ${x.bd}`, textAlign:"center" }}>
+                <div key={x.f} onClick={() => fileRef.current?.click()}
+                  style={{ padding:12, borderRadius:12, background:x.bg, border:`1px solid ${x.bd}`, textAlign:"center", cursor:"pointer", transition:"all .15s" }}
+                  onMouseEnter={e => { e.currentTarget.style.transform="translateY(-2px)"; e.currentTarget.style.boxShadow=`0 6px 16px ${x.bd}`; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform="translateY(0)"; e.currentTarget.style.boxShadow="none"; }}>
                   <div style={{ fontSize:22 }}>{x.icon}</div>
                   <div style={{ fontSize:12, fontWeight:800, color:x.clr, marginTop:2 }}>{x.f}</div>
                   <div style={{ fontSize:11, color:"#64748b", marginTop:2 }}>{x.note}</div>
@@ -1081,9 +1502,7 @@ match_label: "Excellent"|"Good"|"Fair"|"Low"`, 1500, () => {});
           </div>
         )}
 
-        {/* ══════════════════════════════════════════════════════════════════
-            STEP 2 — COUNTRY + TEMPLATE
-        ══════════════════════════════════════════════════════════════════ */}
+        {/* ══ STEP 2 — COUNTRY + TEMPLATE ══ */}
         {!generating && !analysing && step === 2 && (
           <div className="fu">
             {parsedData && (
@@ -1109,7 +1528,7 @@ match_label: "Excellent"|"Good"|"Fair"|"Low"`, 1500, () => {});
               <div style={{ position:"relative", marginBottom:16 }}>
                 <span style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", fontSize:15 }}>🔍</span>
                 <input value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder="Search country…"
-                  style={{ width:"100%", padding:"10px 36px", borderRadius:10, border:"1.5px solid #e2e8f0", fontSize:13, boxSizing:"border-box", outline:"none", background:"#f8fafc" }}
+                  style={{ width:"100%", padding:"10px 36px", borderRadius:10, border:"1.5px solid #e2e8f0", fontSize:13, outline:"none", background:"#f8fafc" }}
                   onFocus={e => e.target.style.borderColor="#c9a84c"}
                   onBlur={e => e.target.style.borderColor="#e2e8f0"} />
               </div>
@@ -1201,7 +1620,7 @@ match_label: "Excellent"|"Good"|"Fair"|"Low"`, 1500, () => {});
                       {photoPreview ? "🔄 Change Photo" : "📷 Upload Photo"}
                     </button>
                     <div style={{ fontSize:11, color:"#64748b", marginTop:8 }}>JPG · PNG · WEBP · max 3MB</div>
-                    {photoPreview && <div style={{ fontSize:11, color:"#16a34a", marginTop:4, fontWeight:700 }}>✅ Ready — drag to reposition after generating</div>}
+                    {photoPreview && <div style={{ fontSize:11, color:"#16a34a", marginTop:4, fontWeight:700 }}>✅ Photo ready — fixed top-right in resume header</div>}
                   </div>
                 </div>
               </div>
@@ -1215,7 +1634,7 @@ match_label: "Excellent"|"Good"|"Fair"|"Low"`, 1500, () => {});
                 <button onClick={() => { if(!country){setError("Select a country first");return;} setStep(4); }} style={S.btn("#c9a84c","#1a1a2e")}>
                   📋 Match Job Description
                 </button>
-                <button onClick={() => { setStep(1); setFile(null); setParsed(null); setCountry(""); setHtml(null); setError(null); }} style={S.btn("#f1f5f9","#475569")}>
+                <button onClick={() => { setStep(1); setParsed(null); setCountry(""); setHtml(null); setError(null); }} style={S.btn("#f1f5f9","#475569")}>
                   ← Start Over
                 </button>
               </div>
@@ -1223,12 +1642,9 @@ match_label: "Excellent"|"Good"|"Fair"|"Low"`, 1500, () => {});
           </div>
         )}
 
-        {/* ══════════════════════════════════════════════════════════════════
-            STEP 3 — REAL-TIME WYSIWYG EDITOR
-        ══════════════════════════════════════════════════════════════════ */}
+        {/* ══ STEP 3 — WYSIWYG EDITOR ══ */}
         {!generating && !analysing && step === 3 && generatedHtml && (
           <div className="fu">
-            {/* Status badge */}
             <div style={{ ...S.card, marginBottom:0, borderRadius:"18px 18px 0 0", borderBottom:"none", padding:"16px 24px" }}>
               <div style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
                 <div style={{ display:"flex", alignItems:"center", gap:8 }}>
@@ -1237,15 +1653,13 @@ match_label: "Excellent"|"Good"|"Fair"|"Low"`, 1500, () => {});
                     {parsedData?.name || "Candidate"} · {selectedCountry?.flag} {selectedCountry?.label} · {selectedTmpl?.name}
                   </div>
                 </div>
-                <div style={{ fontSize:11, color:"#64748b", fontStyle:"italic" }}>Click any text to edit. Drag photo to move it.</div>
+                <div style={{ fontSize:11, color:"#64748b", fontStyle:"italic" }}>Click any text to edit. Download Word opens in MS Word directly.</div>
               </div>
             </div>
-
             <RealtimeEditor
               html={generatedHtml}
               onHtmlChange={setHtml}
-              fileName={`${(parsedData?.name||"Resume").replace(/\s+/g,"_")}_${country}_${selectedTmpl?.name?.replace(/\s+/g,"_")}.html`}
-              fileName={`${(parsedData?.name||"Resume").replace(/\s+/g,"_")}_${country}.html`}
+              fileName={`${(parsedData?.name||"Resume").replace(/\s+/g,"_")}_${country}_${selectedTmpl?.name?.replace(/\s+/g,"_")}`}
               parsedData={parsedData}
               country={country}
               selectedTmpl={selectedTmpl}
@@ -1256,9 +1670,7 @@ match_label: "Excellent"|"Good"|"Fair"|"Low"`, 1500, () => {});
           </div>
         )}
 
-        {/* ══════════════════════════════════════════════════════════════════
-            STEP 4 — JD MATCHING
-        ══════════════════════════════════════════════════════════════════ */}
+        {/* ══ STEP 4 — JD MATCHING ══ */}
         {!generating && !analysing && step === 4 && (
           <div className="fu">
             <div style={S.card}>
@@ -1326,6 +1738,7 @@ match_label: "Excellent"|"Good"|"Fair"|"Low"`, 1500, () => {});
             })()}
           </div>
         )}
+
       </div>
     </>
   );
