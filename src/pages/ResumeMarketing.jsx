@@ -369,8 +369,7 @@ const buildExecutiveHtml = (c, accent, hasPhoto) => {
   .rw{background:#eef0f4;padding:24px 0;}
   .resume{background:#fff;width:794px;max-width:794px;margin:0 auto;box-shadow:0 4px 40px rgba(0,0,0,.18);min-height:1123px;overflow:hidden;}
   .sec-label{font-size:10.5px;font-weight:700;color:${accent};letter-spacing:3px;text-transform:uppercase;padding:18px 0 7px;border-bottom:1.5px solid ${accent};margin-bottom:14px;display:block;}
-  @media print{body,html{background:#fff;padding:0}.rw{padding:0}.resume{box-shadow:none;margin:0;width:100%;max-width:100%}@page{size:A4;margin:10mm}}
-</style>
+@media print{*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;box-sizing:border-box}html,body{background:#fff;padding:0;margin:0;width:210mm;height:297mm;overflow:hidden}.rw{padding:0;margin:0}.resume{box-shadow:none;margin:0 auto;width:100%;max-width:100%;transform:none!important;overflow:hidden;page-break-inside:avoid;break-inside:avoid}.section,.experience,.project,.education{page-break-inside:avoid;break-inside:avoid}@page{size:A4;margin:8mm}}</style>
 </head>
 <body>
 <div class="rw">
@@ -484,7 +483,7 @@ const buildModernHtml = (c, accent, hasPhoto) => {
   .rw{background:#eef0f4;padding:24px 0;}
   .resume{background:#fff;width:794px;max-width:794px;margin:0 auto;box-shadow:0 4px 40px rgba(0,0,0,.18);min-height:1123px;overflow:hidden;display:flex;}
   .sec-label{font-size:10.5px;font-weight:700;color:${accent};letter-spacing:2.5px;text-transform:uppercase;border-bottom:2px solid ${accent};padding-bottom:5px;margin:20px 0 12px;display:block;}
-  @media print{body,html{background:#fff;padding:0}.rw{padding:0}.resume{box-shadow:none;margin:0;width:100%;max-width:100%}@page{size:A4;margin:10mm}}
+ @media print{*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;box-sizing:border-box}html,body{background:#fff;padding:0;margin:0;width:210mm;height:297mm;overflow:hidden}.rw{padding:0;margin:0}.resume{box-shadow:none;margin:0 auto;width:100%;max-width:100%;transform:none!important;overflow:hidden;page-break-inside:avoid;break-inside:avoid}.section,.experience,.project,.education{page-break-inside:avoid;break-inside:avoid}@page{size:A4;margin:8mm}}
 </style>
 </head>
 <body>
@@ -582,7 +581,7 @@ const buildMinimalHtml = (c, accent, hasPhoto) => {
   .rw{background:#eef0f4;padding:24px 0;}
   .resume{background:#fff;width:794px;max-width:794px;margin:0 auto;box-shadow:0 4px 40px rgba(0,0,0,.18);min-height:1123px;overflow:hidden;padding:50px 56px 56px;}
   .sec-label{font-size:9.5px;text-transform:uppercase;letter-spacing:5px;color:#bbb;padding:22px 0 8px;border-bottom:0.5px solid #e0e0e0;margin-bottom:14px;display:block;}
-  @media print{body,html{background:#fff;padding:0}.rw{padding:0}.resume{box-shadow:none;margin:0;width:100%;max-width:100%;padding:20px 24px}@page{size:A4;margin:10mm}}
+@media print{*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;box-sizing:border-box}html,body{background:#fff;padding:0;margin:0;width:210mm;height:297mm;overflow:hidden}.rw{padding:0;margin:0}.resume{box-shadow:none;margin:0 auto;width:100%;max-width:100%;transform:none!important;overflow:hidden;page-break-inside:avoid;break-inside:avoid}.section,.experience,.project,.education{page-break-inside:avoid;break-inside:avoid}@page{size:A4;margin:8mm}}
 </style>
 </head>
 <body>
@@ -685,8 +684,7 @@ const buildCreativeHtml = (c, accent, hasPhoto) => {
   .resume{background:#fff;width:794px;max-width:794px;margin:0 auto;box-shadow:0 4px 40px rgba(0,0,0,.18);min-height:1123px;overflow:hidden;}
   .sec-label-main{font-size:10.5px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:${accent};border-bottom:2px double ${accent}33;padding-bottom:5px;margin:20px 0 12px;display:block;}
   .sec-label-side{font-size:9px;text-transform:uppercase;letter-spacing:3px;color:rgba(255,255,255,0.5);margin:16px 0 8px;display:block;font-family:'Times New Roman',Times,serif;}
-  @media print{body,html{background:#fff;padding:0}.rw{padding:0}.resume{box-shadow:none;margin:0;width:100%;max-width:100%}@page{size:A4;margin:10mm}}
-</style>
+@media print{*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;box-sizing:border-box}html,body{background:#fff;padding:0;margin:0;width:210mm;height:297mm;overflow:hidden}.rw{padding:0;margin:0}.resume{box-shadow:none;margin:0 auto;width:100%;max-width:100%;transform:none!important;overflow:hidden;page-break-inside:avoid;break-inside:avoid}.section,.experience,.project,.education{page-break-inside:avoid;break-inside:avoid}@page{size:A4;margin:8mm}}
 </head>
 <body>
 <div class="rw">
@@ -805,7 +803,7 @@ const buildClassicHtml = (c, accent, hasPhoto) => {
   .resume{background:#fafaf8;width:794px;max-width:794px;margin:0 auto;box-shadow:0 4px 40px rgba(0,0,0,.18);min-height:1123px;overflow:hidden;}
   .sec-label{background:${accent};color:#fff;padding:5px 48px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:2.5px;margin:20px -48px 14px;display:block;}
   .body-wrap{padding:0 48px 48px;}
-  @media print{body,html{background:#fff;padding:0}.rw{padding:0}.resume{box-shadow:none;margin:0;width:100%;max-width:100%}@page{size:A4;margin:10mm}}
+ @media print{*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;box-sizing:border-box}html,body{background:#fff;padding:0;margin:0;width:210mm;height:297mm;overflow:hidden}.rw{padding:0;margin:0}.resume{box-shadow:none;margin:0 auto;width:100%;max-width:100%;transform:none!important;overflow:hidden;page-break-inside:avoid;break-inside:avoid}.section,.experience,.project,.education{page-break-inside:avoid;break-inside:avoid}@page{size:A4;margin:8mm}}
 </style>
 </head>
 <body>
