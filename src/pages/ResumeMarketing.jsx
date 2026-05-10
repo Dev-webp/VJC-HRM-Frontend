@@ -311,12 +311,12 @@ Return this EXACT JSON structure (no extra fields):
 RULES:
 1. Use ONLY real data provided — never invent companies, degrees, or dates
 2. Every bullet: [Strong Action Verb] + [What] + [Quantified Result with %, numbers, $, team sizes]
-3. Minimum 4 bullets per role, maximum 6
-4. At least 2 roles in experience array
+3. Exactly 3 bullets per role — no more, no less
+4. Maximum 2 roles in experience array only
 5. Skills: exactly 8 items
-6. Return ONLY the JSON. Start with { end with }. Nothing else.`;
+6. Summary: maximum 2 sentences only
+7. Return ONLY the JSON. Start with { end with }. Nothing else.`;
 };
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // ─── HARDCODED HTML SHELL TEMPLATES ──────────────────────────────────────────
 // Structure is 100% fixed. Only text content slots are filled from JSON.
@@ -367,9 +367,9 @@ const buildExecutiveHtml = (c, accent, hasPhoto) => {
   *{margin:0;padding:0;box-sizing:border-box;font-family:'Times New Roman',Times,serif;}
   html,body{background:#eef0f4;}
   .rw{background:#eef0f4;padding:24px 0;}
-  .resume{background:#fff;width:794px;max-width:794px;margin:0 auto;box-shadow:0 4px 40px rgba(0,0,0,.18);min-height:1123px;overflow:hidden;}
+  .resume{background:#fff;width:794px;max-width:794px;margin:0 auto;box-shadow:0 4px 40px rgba(0,0,0,.18);min-height:auto;}
   .sec-label{font-size:10.5px;font-weight:700;color:${accent};letter-spacing:3px;text-transform:uppercase;padding:18px 0 7px;border-bottom:1.5px solid ${accent};margin-bottom:14px;display:block;}
-@media print{*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;box-sizing:border-box}html,body{background:#fff;padding:0;margin:0;width:210mm;height:297mm;overflow:hidden}.rw{padding:0;margin:0}.resume{box-shadow:none;margin:0 auto;width:100%;max-width:100%;transform:none!important;overflow:hidden;page-break-inside:avoid;break-inside:avoid}.section,.experience,.project,.education{page-break-inside:avoid;break-inside:avoid}@page{size:A4;margin:8mm}}</style>
+@media print{*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;box-sizing:border-box}html,body{background:#fff;padding:0;margin:0;width:210mm;overflow:visible}.rw{padding:0;margin:0}.resume{box-shadow:none;margin:0 auto;width:100%;max-width:100%;transform:none!important;overflow:visible;page-break-inside:avoid;break-inside:avoid}.section,.experience,.project,.education{page-break-inside:avoid;break-inside:avoid}@page{size:A4;margin:8mm}}</style>
 </head>
 <body>
 <div class="rw">
@@ -481,9 +481,9 @@ const buildModernHtml = (c, accent, hasPhoto) => {
   *{margin:0;padding:0;box-sizing:border-box;font-family:'Times New Roman',Times,serif;}
   html,body{background:#eef0f4;}
   .rw{background:#eef0f4;padding:24px 0;}
-  .resume{background:#fff;width:794px;max-width:794px;margin:0 auto;box-shadow:0 4px 40px rgba(0,0,0,.18);min-height:1123px;overflow:hidden;display:flex;}
+  .resume{background:#fff;width:794px;max-width:794px;margin:0 auto;box-shadow:0 4px 40px rgba(0,0,0,.18);min-height:auto;display:flex;}
   .sec-label{font-size:10.5px;font-weight:700;color:${accent};letter-spacing:2.5px;text-transform:uppercase;border-bottom:2px solid ${accent};padding-bottom:5px;margin:20px 0 12px;display:block;}
- @media print{*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;box-sizing:border-box}html,body{background:#fff;padding:0;margin:0;width:210mm;height:297mm;overflow:hidden}.rw{padding:0;margin:0}.resume{box-shadow:none;margin:0 auto;width:100%;max-width:100%;transform:none!important;overflow:hidden;page-break-inside:avoid;break-inside:avoid}.section,.experience,.project,.education{page-break-inside:avoid;break-inside:avoid}@page{size:A4;margin:8mm}}
+ @media print{*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;box-sizing:border-box}html,body{background:#fff;padding:0;margin:0;width:210mm;overflow:visible}.rw{padding:0;margin:0}.resume{box-shadow:none;margin:0 auto;width:100%;max-width:100%;transform:none!important;overflow:visible;page-break-inside:avoid;break-inside:avoid}.section,.experience,.project,.education{page-break-inside:avoid;break-inside:avoid}@page{size:A4;margin:8mm}}
 </style>
 </head>
 <body>
@@ -579,9 +579,9 @@ const buildMinimalHtml = (c, accent, hasPhoto) => {
   *{margin:0;padding:0;box-sizing:border-box;font-family:'Times New Roman',Times,serif;}
   html,body{background:#eef0f4;}
   .rw{background:#eef0f4;padding:24px 0;}
-  .resume{background:#fff;width:794px;max-width:794px;margin:0 auto;box-shadow:0 4px 40px rgba(0,0,0,.18);min-height:1123px;overflow:hidden;padding:50px 56px 56px;}
+  .resume{background:#fff;width:794px;max-width:794px;margin:0 auto;box-shadow:0 4px 40px rgba(0,0,0,.18);min-height:auto;padding:50px 56px 56px;}
   .sec-label{font-size:9.5px;text-transform:uppercase;letter-spacing:5px;color:#bbb;padding:22px 0 8px;border-bottom:0.5px solid #e0e0e0;margin-bottom:14px;display:block;}
-@media print{*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;box-sizing:border-box}html,body{background:#fff;padding:0;margin:0;width:210mm;height:297mm;overflow:hidden}.rw{padding:0;margin:0}.resume{box-shadow:none;margin:0 auto;width:100%;max-width:100%;transform:none!important;overflow:hidden;page-break-inside:avoid;break-inside:avoid}.section,.experience,.project,.education{page-break-inside:avoid;break-inside:avoid}@page{size:A4;margin:8mm}}
+@media print{*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;box-sizing:border-box}html,body{background:#fff;padding:0;margin:0;width:210mm;overflow:visible}.rw{padding:0;margin:0}.resume{box-shadow:none;margin:0 auto;width:100%;max-width:100%;transform:none!important;overflow:visible;page-break-inside:avoid;break-inside:avoid}.section,.experience,.project,.education{page-break-inside:avoid;break-inside:avoid}@page{size:A4;margin:8mm}}
 </style>
 </head>
 <body>
@@ -681,10 +681,10 @@ const buildCreativeHtml = (c, accent, hasPhoto) => {
   *{margin:0;padding:0;box-sizing:border-box;font-family:'Times New Roman',Times,serif;}
   html,body{background:#eef0f4;}
   .rw{background:#eef0f4;padding:24px 0;}
-  .resume{background:#fff;width:794px;max-width:794px;margin:0 auto;box-shadow:0 4px 40px rgba(0,0,0,.18);min-height:1123px;overflow:hidden;}
+  .resume{background:#fff;width:794px;max-width:794px;margin:0 auto;box-shadow:0 4px 40px rgba(0,0,0,.18);min-height:auto;}
   .sec-label-main{font-size:10.5px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:${accent};border-bottom:2px double ${accent}33;padding-bottom:5px;margin:20px 0 12px;display:block;}
   .sec-label-side{font-size:9px;text-transform:uppercase;letter-spacing:3px;color:rgba(255,255,255,0.5);margin:16px 0 8px;display:block;font-family:'Times New Roman',Times,serif;}
-@media print{*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;box-sizing:border-box}html,body{background:#fff;padding:0;margin:0;width:210mm;height:297mm;overflow:hidden}.rw{padding:0;margin:0}.resume{box-shadow:none;margin:0 auto;width:100%;max-width:100%;transform:none!important;overflow:hidden;page-break-inside:avoid;break-inside:avoid}.section,.experience,.project,.education{page-break-inside:avoid;break-inside:avoid}@page{size:A4;margin:8mm}}
+@media print{*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;box-sizing:border-box}html,body{background:#fff;padding:0;margin:0;width:210mm;overflow:visible}.rw{padding:0;margin:0}.resume{box-shadow:none;margin:0 auto;width:100%;max-width:100%;transform:none!important;overflow:visible;page-break-inside:avoid;break-inside:avoid}.section,.experience,.project,.education{page-break-inside:avoid;break-inside:avoid}@page{size:A4;margin:8mm}}
 </head>
 <body>
 <div class="rw">
@@ -800,10 +800,10 @@ const buildClassicHtml = (c, accent, hasPhoto) => {
   *{margin:0;padding:0;box-sizing:border-box;font-family:'Times New Roman',Times,serif;}
   html,body{background:#eef0f4;}
   .rw{background:#eef0f4;padding:24px 0;}
-  .resume{background:#fafaf8;width:794px;max-width:794px;margin:0 auto;box-shadow:0 4px 40px rgba(0,0,0,.18);min-height:1123px;overflow:hidden;}
+  .resume{background:#fafaf8;width:794px;max-width:794px;margin:0 auto;box-shadow:0 4px 40px rgba(0,0,0,.18);min-height:auto;}
   .sec-label{background:${accent};color:#fff;padding:5px 48px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:2.5px;margin:20px -48px 14px;display:block;}
   .body-wrap{padding:0 48px 48px;}
- @media print{*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;box-sizing:border-box}html,body{background:#fff;padding:0;margin:0;width:210mm;height:297mm;overflow:hidden}.rw{padding:0;margin:0}.resume{box-shadow:none;margin:0 auto;width:100%;max-width:100%;transform:none!important;overflow:hidden;page-break-inside:avoid;break-inside:avoid}.section,.experience,.project,.education{page-break-inside:avoid;break-inside:avoid}@page{size:A4;margin:8mm}}
+ @media print{*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;box-sizing:border-box}html,body{background:#fff;padding:0;margin:0;width:210mm;overflow:visible}.rw{padding:0;margin:0}.resume{box-shadow:none;margin:0 auto;width:100%;max-width:100%;transform:none!important;overflow:visible;page-break-inside:avoid;break-inside:avoid}.section,.experience,.project,.education{page-break-inside:avoid;break-inside:avoid}@page{size:A4;margin:8mm}}
 </style>
 </head>
 <body>
@@ -1107,16 +1107,26 @@ function RealtimeEditor({ html, onHtmlChange, onDownload, fileName, parsedData, 
             style={{ padding:"6px 14px", borderRadius:8, border:"none", background:"#92400e", color:"#fbbf24", fontWeight:700, fontSize:12, cursor:"pointer", fontFamily:"'Times New Roman',serif" }}>
             📋 JD Match
           </button>
-          <div style={{ display:"flex", gap:4 }}>
-            <button onClick={handleDownloadWord}
-              style={{ padding:"7px 18px", borderRadius:"8px 0 0 8px", border:"none", background:"linear-gradient(135deg,#1d4ed8,#1e40af)", color:"#fff", fontWeight:800, fontSize:12, cursor:"pointer", boxShadow:"0 3px 12px #2563eb44", fontFamily:"'Times New Roman',serif" }}>
-              ⬇ Download Word
-            </button>
-            <button onClick={handleDownloadHtml}
-              style={{ padding:"7px 12px", borderRadius:"0 8px 8px 0", border:"none", borderLeft:"1px solid rgba(255,255,255,0.2)", background:"linear-gradient(135deg,#1d4ed8,#1e40af)", color:"#fff", fontWeight:700, fontSize:11, cursor:"pointer", fontFamily:"'Times New Roman',serif" }}>
-              HTML
-            </button>
-          </div>
+         <div style={{ display:"flex", gap:4 }}>
+  <button onClick={() => {
+     const latest = captureFromIframe();
+const scaled = latest.replace(
+  '@media print{',
+  '@media print{.resume{transform-origin:top left;transform:scale(0.88);width:113.6%!important;max-width:113.6%!important;}'
+);
+const w = window.open('', '_blank');
+w.document.write(scaled);
+w.document.close();
+setTimeout(() => w.print(), 800);
+    }}
+    style={{ padding:"7px 18px", borderRadius:"8px 0 0 8px", border:"none", background:"linear-gradient(135deg,#dc2626,#b91c1c)", color:"#fff", fontWeight:800, fontSize:12, cursor:"pointer", boxShadow:"0 3px 12px #dc262644", fontFamily:"'Times New Roman',serif" }}>
+    🖨 Download PDF
+  </button>
+  <button onClick={handleDownloadHtml}
+    style={{ padding:"7px 12px", borderRadius:"0 8px 8px 0", border:"none", borderLeft:"1px solid rgba(255,255,255,0.2)", background:"linear-gradient(135deg,#dc2626,#b91c1c)", color:"#fff", fontWeight:700, fontSize:11, cursor:"pointer", fontFamily:"'Times New Roman',serif" }}>
+    HTML
+  </button>
+</div>
         </div>
       </div>
 
@@ -1155,8 +1165,7 @@ function RealtimeEditor({ html, onHtmlChange, onDownload, fileName, parsedData, 
           <div style={{ padding:"5px 16px", background:"#0c1520", borderBottom:"1px solid #1e293b", display:"flex", gap:20, alignItems:"center", flexWrap:"wrap" }}>
             <span style={{ fontSize:11, color:"#475569" }}>✏️ <strong style={{color:"#94a3b8"}}>Click text</strong> to edit inline</span>
             <span style={{ fontSize:11, color:"#475569" }}>📷 <strong style={{color:"#94a3b8"}}>Swap Photo</strong> to replace profile image</span>
-            <span style={{ fontSize:11, color:"#22c55e", fontWeight:600 }}>⬇ Download Word → opens in MS Word directly</span>
-            <span style={{ fontSize:11, color:"#475569" }}>🖨 Ctrl+P to print as PDF</span>
+<span style={{ fontSize:11, color:"#22c55e", fontWeight:600 }}>🖨 PDF button → "Save as PDF" select చేయి → perfect layout!</span>            <span style={{ fontSize:11, color:"#475569" }}>🖨 Ctrl+P to print as PDF</span>
           </div>
 
           {/* IFRAME */}
