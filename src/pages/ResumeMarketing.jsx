@@ -315,7 +315,8 @@ RULES:
 4. Maximum 2 roles in experience array only
 5. Skills: exactly 8 items
 6. Summary: maximum 2 sentences only
-7. Return ONLY the JSON. Start with { end with }. Nothing else.`;
+7. declaration field: always use exactly "I hereby declare that all the information furnished above is true and correct to the best of my knowledge." — never leave empty
+8. Return ONLY the JSON. Start with { end with }. Nothing else.`;
 };
 // ═══════════════════════════════════════════════════════════════════════════════
 // ─── HARDCODED HTML SHELL TEMPLATES ──────────────────────────────────────────
@@ -429,9 +430,11 @@ const buildExecutiveHtml = (c, accent, hasPhoto) => {
     <span class="sec-label">Interests & Hobbies</span>
     <p style="font-size:11.5px;color:#333;font-family:'Times New Roman',Times,serif;">${(c.hobbies||[]).join(' · ')}</p>` : ''}
 
-    ${c.declaration ? `
-    <span class="sec-label">Declaration</span>
-    <p style="font-size:11px;color:#555;font-style:italic;font-family:'Times New Roman',Times,serif;">${c.declaration}</p>` : ''}
+   ${c.declaration ? `
+<div style="page-break-inside:avoid;break-inside:avoid;break-before:avoid;">
+<span class="sec-label">Declaration</span>
+<p style="font-size:11px;color:#555;font-style:italic;font-family:'Times New Roman',Times,serif;">${c.declaration}</p>
+</div>` : ''}
 
     ${c.gdprClause ? `<p style="font-size:9px;color:#999;font-style:italic;margin-top:18px;font-family:'Times New Roman',Times,serif;">${c.gdprClause}</p>` : ''}
 
@@ -529,9 +532,11 @@ const buildModernHtml = (c, accent, hasPhoto) => {
     <span class="sec-label">Professional Experience</span>
     ${expRows}
 
-    ${c.declaration ? `
-    <span class="sec-label">Declaration</span>
-    <p style="font-size:11px;color:#555;font-style:italic;font-family:'Times New Roman',Times,serif;">${c.declaration}</p>` : ''}
+   ${c.declaration ? `
+<div style="page-break-inside:avoid;break-inside:avoid;break-before:avoid;">
+<span class="sec-label">Declaration</span>
+<p style="font-size:11px;color:#555;font-style:italic;font-family:'Times New Roman',Times,serif;">${c.declaration}</p>
+</div>` : ''}
   </div>
 
 </div>
@@ -637,9 +642,10 @@ const buildMinimalHtml = (c, accent, hasPhoto) => {
   ` : ''}
 
   ${c.declaration ? `
-  <span class="sec-label">Declaration</span>
-  <p style="font-size:11px;color:#888;font-style:italic;font-family:'Times New Roman',Times,serif;">${c.declaration}</p>
-  ` : ''}
+<div style="page-break-inside:avoid;break-inside:avoid;break-before:avoid;">
+<span class="sec-label">Declaration</span>
+<p style="font-size:11px;color:#555;font-style:italic;font-family:'Times New Roman',Times,serif;">${c.declaration}</p>
+</div>` : ''}
 
   ${c.gdprClause ? `<p style="font-size:9px;color:#bbb;font-style:italic;margin-top:16px;font-family:'Times New Roman',Times,serif;">${c.gdprClause}</p>` : ''}
 
