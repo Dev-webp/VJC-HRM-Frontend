@@ -513,12 +513,19 @@ Achievements from resume: ${(e.achievements || []).join(" | ") || "No specific a
     )
     .join("\n\n");
 
-  const eduBlock = (d.education || [])
+ const eduBlock = (d.education || [])
     .map(
       (e) =>
         `${e.degree || ""} | ${e.institution || ""} | ${e.year || ""} | ${e.grade || ""}`,
     )
     .join("\n");
+
+  const projBlock = (d.projects || [])
+    .map(
+      (p, i) =>
+        `Project ${i + 1}: ${p.name || ""} | Tech: ${p.tech || ""}\nBullets: ${(p.achievements || []).join(" | ") || "write based on project name"}`,
+    )
+    .join("\n\n");
 
   const countryRules = {
     uk: "No photo. No DOB. No nationality. Start with a 3-line Personal Statement. End with 'References available on request'.",
@@ -577,6 +584,9 @@ ${expBlock || "No experience provided — use empty placeholders"}
 EDUCATION:
 ${eduBlock || "No education provided — use empty placeholder"}
 
+PROJECTS (${(d.projects||[]).length} projects — include ALL of them):
+${projBlock || "No projects provided"}
+
 ════════════════════════════════════════
 TARGET COUNTRY: ${countryObj.label || country}
 COUNTRY-SPECIFIC RULES: ${countryRules[country] || "Standard professional format for this country"}
@@ -589,12 +599,13 @@ Return ONLY a raw JSON object. No markdown. No backticks. Start with { end with 
 CRITICAL RULES:
 1. NEVER invent companies, degrees, institutions, or dates not in the candidate data
 2. Use the candidate's REAL company names, role titles, and durations exactly as provided
-3. For bullets: enhance and quantify the provided achievements — if no achievements given for a role, write realistic bullets based on the role title only
+3. For bullets: enhance the provided achievements using ONLY real data from resume. NEVER invent percentage metrics or numbers not present in the original resume. If no achievements given, write realistic bullets based on role title only
 4. Include ALL ${expCount} experience role${expCount !== 1 ? "s" : ""} — do not drop any
 5. Include all education entries exactly as provided
 6. Skills: include ALL skills from the resume (minimum 6, maximum 12)
 7. Summary: 2-3 strong sentences based on their actual experience
-8. declaration: always "I hereby declare that all the information furnished above is true and correct to the best of my knowledge."
+8. declaration: always "I hereby declare that all the information furnished above is true and correct to the best of my knowledge
+9. projects: include ALL projects from the resume with name, tech stack, and 2 bullet points each."
 
 Return this EXACT JSON structure:
 {
@@ -632,11 +643,13 @@ ${expJsonTemplate}
       )
       ? d.languages
       : ["English"],
-  )}  "certifications": ${JSON.stringify(d.certifications && d.certifications.length > 0 ? d.certifications : [])},
+  )},
+    "certifications": ${JSON.stringify(d.certifications && d.certifications.length > 0 ? d.certifications : [])},
   "hobbies": ${JSON.stringify(d.hobbies && d.hobbies.length > 0 ? d.hobbies : [])},
   "declaration": "I hereby declare that all the information furnished above is true and correct to the best of my knowledge.",
   "gdprClause": "${country === "poland" ? "Wyrażam zgodę na przetwarzanie moich danych osobowych dla celów rekrutacji." : ""}",
   "visaStatus": "${country === "gulf" || country === "dubai" || country === "saudi" ? "Employment Visa" : ""}",
+ "projects": ${JSON.stringify((d.projects||[]).map(p=>({name:p.name||"",tech:p.tech||"",bullets:p.achievements&&p.achievements.length?p.achievements.slice(0,2):["Key achievement","Impact result"]})))},
   "extras": ""
 }`;
 };
@@ -771,6 +784,18 @@ const buildExecutiveHtml = (c, accent, hasPhoto) => {
     <!-- Experience -->
     <span class="sec-label">Professional Experience</span>
     ${expRows}
+    ${(c.projects||[]).length?`
+    <span class="sec-label">Projects</span>
+    ${(c.projects||[]).map(p=>`
+    <div style="margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;">
+        <span style="font-size:13px;font-weight:700;color:${accent};font-family:'Times New Roman',Times,serif;">${p.name||""}</span>
+        <span style="font-size:11px;color:#888;font-style:italic;font-family:'Times New Roman',Times,serif;">${p.tech||""}</span>
+      </div>
+      <ul style="margin:4px 0 0 0;padding-left:18px;">
+        ${(p.bullets||[]).map(b=>`<li style="font-size:11.5px;color:#333;line-height:1.85;font-family:'Times New Roman',Times,serif;margin-bottom:3px;">${b}</li>`).join("")}
+      </ul>
+    </div>`).join("")}`:""}
 
     <!-- Education -->
     <span class="sec-label">Education</span>
@@ -2323,7 +2348,14 @@ Return EXACTLY this JSON structure. Extract every field you can find:
   "skills": ["skill1", "skill2"],
  "languages": ["spoken/natural languages only e.g. English, Hindi, Telugu — NOT programming languages"],
   "certifications": ["cert1"],
-  "hobbies": ["hobby1"]
+  "hobbies": ["hobby1"],
+  "projects": [
+    {
+      "name": "exact project name",
+      "tech": "tech stack mentioned",
+      "achievements": ["each bullet point as separate string"]
+    }
+  ]
 }
 
 Rules:
@@ -2331,6 +2363,8 @@ Rules:
 - Include EVERY education entry
 - Extract DOB anywhere it appears (Date of Birth, DOB, Born on, d.o.b.)
 - Extract Nationality anywhere it appears
+- Include EVERY project entry with name, tech stack, and all bullet points
+- Include ALL certifications and achievements listed under certifications section including Hackathon entries
 - Start JSON with { and end with }. Nothing else.`,
         3000,
         setLoadMsg,
