@@ -470,7 +470,11 @@ const downloadHtml = (html, name) => {
     .replace(/\s*contenteditable="[^"]*"/g, "")
     .replace(/\s*data-editing="[^"]*"/g, "")
     .replace(/outline:\s*[^;]+dashed[^;]+;/g, "")
-    .replace(/cursor:\s*text;/g, "");
+    .replace(/cursor:\s*text;/g, "")
+    .replace(
+      "@media print{",
+      "@media print{.resume{transform-origin:top left;transform:scale(0.75);width:133.3%!important;max-width:133.3%!important;}"
+    );
   const blob = new Blob([clean], { type: "text/html;charset=utf-8" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
@@ -571,7 +575,9 @@ Location: ${d.location || ""}
 LinkedIn: ${d.linkedin || ""}
 DOB: ${dob}
 Nationality: ${nat}
-Summary from resume: ${d.summary || "Write from experience below"}
+"summary": "${(d.summary || "").replace(/"/g, '\\"')}",
+
+IMPORTANT: Use the EXACT summary text from resume as-is. Do NOT rewrite it. Copy it word for word into the "summary" field.
 Skills from resume: ${skills}
 Languages: ${langs}
 Certifications: ${certs}
@@ -603,7 +609,7 @@ CRITICAL RULES:
 4. Include ALL ${expCount} experience role${expCount !== 1 ? "s" : ""} — do not drop any
 5. Include all education entries exactly as provided
 6. Skills: include ALL skills from the resume (minimum 6, maximum 12)
-7. Summary: 2-3 strong sentences based on their actual experience
+7. Summary: Copy the EXACT summary text provided above — word for word. DO NOT rewrite, rephrase, or improve it. Use it as-is
 8. declaration: always "I hereby declare that all the information furnished above is true and correct to the best of my knowledge
 9. projects: include ALL projects from the resume with name, tech stack, and 2 bullet points each."
 
@@ -617,8 +623,8 @@ Return this EXACT JSON structure:
   "linkedin": "${d.linkedin || ""}",
   "dob": "${dob}",
   "nationality": "${nat}",
-  "summary": "2-3 sentence professional summary based on their REAL experience",
-  "personalStatement": "3-4 sentence personal statement (UK format) or same as summary",
+"summary": "${(d.summary || "").replace(/"/g, '\\"')}",
+ "personalStatement": "${(d.summary || "").replace(/"/g, '\\"')}",
   "coreCompetencies": ["keyword1","keyword2","keyword3","keyword4","keyword5","keyword6","keyword7","keyword8","keyword9","keyword10"],
   "experience": [
 ${expJsonTemplate}
@@ -719,12 +725,12 @@ const buildExecutiveHtml = (c, accent, hasPhoto) => {
     .join("");
 
   const skillsHtml = (c.skills || [])
-    .map(
-      (s) =>
-        `<span style="display:inline-block;background:${accent}15;color:${accent};font-size:11px;padding:3px 10px;border-radius:4px;margin:2px;font-family:'Times New Roman',Times,serif;font-weight:600;">${s}</span>`,
-    )
-    .join("");
-
+  .filter(s => s && typeof s === "string" && s.trim().length > 0)
+  .map(
+    (s) =>
+      `<span style="display:inline-block;background:${accent}15;color:${accent};font-size:11px;padding:3px 10px;border-radius:4px;margin:2px;font-family:'Times New Roman',Times,serif;font-weight:600;">${s.trim()}</span>`,
+  )
+  .join("");
   const contactItems = [c.phone, c.email, c.location, c.linkedin].filter(
     Boolean,
   );
@@ -745,7 +751,7 @@ const buildExecutiveHtml = (c, accent, hasPhoto) => {
   .resume{background:#fff;width:794px;max-width:794px;margin:0 auto;box-shadow:0 4px 40px rgba(0,0,0,.18);min-height:auto;}
   .sec-label{font-size:10.5px;font-weight:700;color:${accent};letter-spacing:3px;text-transform:uppercase;padding:18px 0 7px;border-bottom:1.5px solid ${accent};margin-bottom:14px;display:block;}
   img{-webkit-user-drag:none;-khtml-user-drag:none;-moz-user-drag:none;-o-user-drag:none;user-drag:none;}
-@media print{*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;box-sizing:border-box}html,body{background:#fff;padding:0;margin:0;width:210mm;overflow:visible}.rw{padding:0;margin:0}.resume{box-shadow:none;margin:0 auto;width:100%;max-width:100%;transform:none!important;overflow:visible;page-break-inside:avoid;break-inside:avoid;zoom:0.75;}.section,.experience,.project,.education{page-break-inside:avoid;break-inside:avoid}span.sec-label{page-break-after:avoid;break-after:avoid;}span.sec-label+*{page-break-before:avoid;break-before:avoid;}@page{size:A4;margin:8mm}}</style>
+@media print{*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;box-sizing:border-box}html,body{background:#fff;padding:0;margin:0;width:210mm;overflow:visible}.rw{padding:0;margin:0}.resume{box-shadow:none;margin:0 auto;width:100%;max-width:100%;transform:none!important;overflow:visible;page-break-inside:avoid;break-inside:avoid;}.section,.experience,.project,.education{page-break-inside:avoid;break-inside:avoid}span.sec-label{page-break-after:avoid;break-after:avoid;}span.sec-label+*{page-break-before:avoid;break-before:avoid;}@page{size:A4;margin:8mm}}</style>
 </head>
 <body>
 <div class="rw">
@@ -1977,10 +1983,10 @@ function RealtimeEditor({
             <button
               onClick={() => {
                 const latest = captureFromIframe();
-                const scaled = latest.replace(
-                  "@media print{",
-                  "@media print{.resume{transform-origin:top left;transform:scale(0.88);width:113.6%!important;max-width:113.6%!important;}",
-                );
+               const scaled = latest.replace(
+  "@media print{",
+  "@media print{.resume{transform-origin:top left;transform:scale(0.75);width:133.3%!important;max-width:133.3%!important;}",
+);
                 const w = window.open("", "_blank");
                 w.document.write(scaled);
                 w.document.close();
@@ -2273,13 +2279,14 @@ function RealtimeEditor({
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function ResumeMarketing() {
-  const [step, setStep] = useState(1);
-  const [parsedData, setParsed] = useState(null);
-  const [country, setCountry] = useState("");
-  const [template, setTemplate] = useState("executive");
+ const [step, setStep] = useState(1);
+const [parsedData, setParsed] = useState(null);
+const [country, setCountry] = useState("");
+const [template, setTemplate] = useState("executive");
   const [photoB64, setPhotoB64] = useState(null);
   const [photoPreview, setPhotoPr] = useState(null);
-  const [generatedHtml, setHtml] = useState(null);
+const [generatedHtml, setHtml] = useState(null);
+
   const [generating, setGenerating] = useState(false);
   const [loadMsg, setLoadMsg] = useState("");
   const [error, setError] = useState(null);
@@ -2288,6 +2295,7 @@ export default function ResumeMarketing() {
   const [analysing, setAnalysing] = useState(false);
   const [searchQ, setSearchQ] = useState("");
   const [openGroup, setOpenGroup] = useState(null);
+ const [savedContentJson, setSavedContentJson] = useState(null);
 
   const fileRef = useRef();
   const photoRef = useRef();
@@ -2298,6 +2306,8 @@ export default function ResumeMarketing() {
   // ── FILE UPLOAD ──────────────────────────────────────────────────────────────
   const handleFileUpload = async (file) => {
     if (!file) return;
+     sessionStorage.clear();        // ← ADD
+  setSavedContentJson(null);     // ← ADD
     setHtml(null);
     setParsed(null);
     setError(null);
@@ -2384,11 +2394,15 @@ Rules:
         parsed = { name: file.name.replace(/\.[^.]+$/, "") };
       }
       setParsed(parsed);
+     
       setStep(2);
+      
     } catch (e) {
       setError(e.message);
       setParsed({ name: file.name.replace(/\.[^.]+$/, "") });
+      
       setStep(2);
+    
     } finally {
       setGenerating(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -2418,7 +2432,7 @@ Rules:
   };
 
   // ── GENERATE RESUME ──────────────────────────────────────────────────────────
-  const generateResume = async (jd = "") => {
+  const generateResume = async (jd = "", reuseContent = false) => {
     if (!country) {
       setError("Select a country first");
       return;
@@ -2426,6 +2440,25 @@ Rules:
     setError(null);
     setGenerating(true);
     setHtml(null);
+
+    // If reuseContent=true AND we have savedContentJson AND no JD change → skip AI
+    if (reuseContent && savedContentJson && !jd) {
+      setLoadMsg("Rebuilding template layout…");
+      try {
+       const rawHtml = buildResumeHtml(savedContentJson, country, template, !!photoB64);
+        const finalHtml = injectPhoto(rawHtml, photoB64);
+        setHtml(finalHtml);
+      
+        setStep(3);
+       
+      } catch (e) {
+        setError(e.message);
+      } finally {
+        setGenerating(false);
+      }
+      return;
+    }
+
     setLoadMsg(`✨ Generating resume for ${parsedData?.name || "candidate"}…`);
     try {
       const raw = await callGroq(
@@ -2448,24 +2481,21 @@ Rules:
       if (s !== -1 && e2 !== -1) cleaned = cleaned.slice(s, e2 + 1);
 
       setLoadMsg("Building template layout…");
-      let contentJson;
+    let contentJson;
       try {
-        contentJson = JSON.parse(cleaned);
+       contentJson = JSON.parse(cleaned);
+        setSavedContentJson(contentJson);
       } catch {
         throw new Error("AI returned invalid content. Please try again.");
       }
 
-      // Build HTML from hardcoded template (AI only fills content, not structure)
-      const rawHtml = buildResumeHtml(
-        contentJson,
-        country,
-        template,
-        !!photoB64,
-      );
+      const rawHtml = buildResumeHtml(contentJson, country, template, !!photoB64);
       const finalHtml = injectPhoto(rawHtml, photoB64);
 
       setHtml(finalHtml);
+    
       setStep(3);
+    
       await logUsage({
         action: jd ? "jd_rebuild" : "generate",
         candidateName: parsedData?.name || "Unknown",
@@ -3128,10 +3158,11 @@ match_label: "Excellent"|"Good"|"Fair"|"Low"`,
                         <div
                           key={c.key}
                           className="ccard"
-                          onClick={() => {
-                            setCountry(c.key);
-                            setError(null);
-                          }}
+                        onClick={() => {
+  setCountry(c.key);
+ 
+  setError(null);
+}}
                           style={{
                             padding: "12px 13px",
                             borderRadius: 12,
@@ -3263,7 +3294,10 @@ match_label: "Excellent"|"Good"|"Fair"|"Low"`,
                       tmpl={t}
                       country={country}
                       selected={template === t.id}
-                      onClick={() => setTemplate(t.id)}
+                     onClick={() => {
+  setTemplate(t.id);
+  
+}}
                     />
                   ))}
                 </div>
@@ -3440,12 +3474,13 @@ match_label: "Excellent"|"Good"|"Fair"|"Low"`,
                 </button>
                 <button
                   onClick={() => {
-                    setStep(1);
-                    setParsed(null);
-                    setCountry("");
-                    setHtml(null);
-                    setError(null);
-                  }}
+  sessionStorage.clear();
+  setStep(1);
+  setParsed(null);
+  setCountry("");
+  setHtml(null);
+  setError(null);
+}}
                   style={S.btn("#f1f5f9", "#475569")}
                 >
                   ← Start Over
@@ -3515,7 +3550,7 @@ match_label: "Excellent"|"Good"|"Fair"|"Low"`,
               parsedData={parsedData}
               country={country}
               selectedTmpl={selectedTmpl}
-              onRegenerate={() => generateResume()}
+             onRegenerate={() => generateResume("", true)}
               onBack={() => setStep(2)}
               onJD={() => setStep(4)}
             />
