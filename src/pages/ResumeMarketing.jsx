@@ -625,7 +625,7 @@ Return this EXACT JSON structure:
   "nationality": "${nat}",
 "summary": "${(d.summary || "").replace(/"/g, '\\"')}",
  "personalStatement": "${(d.summary || "").replace(/"/g, '\\"')}",
-  "coreCompetencies": ["keyword1","keyword2","keyword3","keyword4","keyword5","keyword6","keyword7","keyword8","keyword9","keyword10"],
+  "coreCompetencies": [],
   "experience": [
 ${expJsonTemplate}
   ],
@@ -1778,13 +1778,38 @@ function RealtimeEditor({
     const doc = iframe.contentDocument;
     if (!doc || !doc.body) return;
 
-    // Lock ALL images in iframe — prevent drag completely
+    // Photo images — drag to reposition చేయగలిగేలా చేయి
     doc.querySelectorAll("img").forEach((img) => {
-      img.setAttribute("draggable", "false");
-      img.style.pointerEvents = "none";
-      img.style.webkitUserDrag = "none";
-      img.style.userSelect = "none";
-      img.ondragstart = () => false;
+      img.removeAttribute("draggable");
+      img.style.pointerEvents = "auto";
+      img.style.cursor = "move";
+      img.style.webkitUserDrag = "auto";
+      img.style.position = "relative";
+      img.ondragstart = null;
+
+      let isDragging = false, startX, startY, origLeft, origTop;
+
+      img.addEventListener("mousedown", (e) => {
+        isDragging = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        origLeft = parseInt(img.style.left || 0);
+        origTop = parseInt(img.style.top || 0);
+        e.preventDefault();
+      });
+
+      doc.addEventListener("mousemove", (e) => {
+        if (!isDragging) return;
+        img.style.left = (origLeft + e.clientX - startX) + "px";
+        img.style.top = (origTop + e.clientY - startY) + "px";
+      });
+
+      doc.addEventListener("mouseup", () => {
+        if (isDragging) {
+          isDragging = false;
+          syncToParent();
+        }
+      });
     });
 
     // Make text elements editable

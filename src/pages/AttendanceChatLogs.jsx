@@ -1026,7 +1026,8 @@ export default function AttendanceChatLogs() {
 
   const userLogs = useMemo(() => {
     const f = attendanceData.filter((u) => {
-      if (myRole === "chairman" || myRole === "mis-execuitve") return true;
+      if (myRole === "chairman") return true;
+     if (myRole === "mis-execuitve") return (u.location || "").toLowerCase().trim() === (myLocation || "").toLowerCase().trim();
       if (myRole === "manager") return u.location === myLocation;
       return false;
     });
