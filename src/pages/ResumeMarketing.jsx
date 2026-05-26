@@ -503,6 +503,10 @@ const buildContentPrompt = ({ data: d, country, tmpl, hasPhoto, jdText }) => {
   const hobby = (d.hobbies || []).join(", ") || "";
   const dob = d.dob && d.dob.trim() ? d.dob : "";
   const nat = d.nationality && d.nationality.trim() ? d.nationality : "";
+  const linkedin =
+  d.linkedin && !d.linkedin.startsWith("http")
+    ? `https://${d.linkedin}`
+    : d.linkedin || "";
   const jdSection = jdText
     ? `\nJOB DESCRIPTION (tailor every bullet to match this JD):\n${jdText.slice(0, 1500)}`
     : "";
@@ -620,7 +624,7 @@ Return this EXACT JSON structure:
   "phone": "${d.phone || ""}",
   "email": "${d.email || ""}",
   "location": "${d.location || ""}",
-  "linkedin": "${d.linkedin || ""}",
+  "linkedin": "${linkedin}",
   "dob": "${dob}",
   "nationality": "${nat}",
 "summary": "${(d.summary || "").replace(/"/g, '\\"')}",
@@ -758,18 +762,57 @@ const buildExecutiveHtml = (c, accent, hasPhoto) => {
 <div class="resume">
 
   <!-- HEADER — flexbox, photo is last child = always top-right -->
-  <div style="background:${accent};padding:32px 48px;display:flex;align-items:flex-start;justify-content:space-between;gap:24px;">
+  <div style="background:${accent};padding:32px 48px;display:flex;align-items:flex-start;justify-content:flex-start;gap:24px;">
     <div style="flex:1;min-width:0;">
       <div style="font-size:34px;color:#fff;font-weight:700;letter-spacing:2px;line-height:1.1;font-family:'Times New Roman',Times,serif;">${c.name || ""}</div>
       <div style="font-size:13.5px;color:rgba(255,255,255,0.75);font-style:italic;margin:6px 0 14px;font-family:'Times New Roman',Times,serif;">${c.title || ""}</div>
       <div style="border-bottom:1.5px solid rgba(201,168,76,0.45);margin-bottom:12px;"></div>
-      <div style="display:flex;flex-wrap:wrap;gap:14px;">
-        ${contactItems.map((x) => `<span style="font-size:11px;color:rgba(255,255,255,0.65);font-family:'Times New Roman',Times,serif;">${x}</span>`).join("")}
-      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:14px;position:relative;z-index:9999;">
+  ${contactItems.map((x) => {
+    const isLink =
+      typeof x === "string" &&
+      (x.includes("linkedin.com") || x.startsWith("http"));
+
+    return isLink
+      ? `
+        <a 
+  href="${x}" 
+  target="_blank"
+  rel="noopener noreferrer"
+  onclick="window.open(this.href,'_blank'); return false;"
+  style="
+    font-size:11px;
+    color:#7cc7ff;
+    text-decoration:underline;
+    font-family:'Times New Roman',Times,serif;
+    cursor:pointer;
+    pointer-events:auto !important;
+    position:relative;
+    z-index:999999 !important;
+    display:inline-block;
+  "
+>
+  ${x}
+</a>
+      `
+      : `
+        <span style="
+          font-size:11px;
+          color:rgba(255,255,255,0.65);
+          font-family:'Times New Roman',Times,serif;
+        ">
+          ${x}
+        </span>
+      `;
+  }).join("")}
+</div>
       ${extraMeta.length ? `<div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;">${extraMeta.map((x) => `<span style="font-size:11px;color:rgba(255,255,255,0.55);font-family:'Times New Roman',Times,serif;">${x}</span>`).join("")}</div>` : ""}
-    </div>
-    ${photoSlot}
-  </div>
+</div>
+
+<div style="margin-left:auto;position:relative;z-index:1;">
+  ${photoSlot}
+</div>
+</div>
 
   <!-- BODY -->
   <div style="padding:30px 48px 48px;">
