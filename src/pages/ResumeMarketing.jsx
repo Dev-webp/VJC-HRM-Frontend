@@ -9,8 +9,7 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import * as htmlDocx from "html-docx-js/dist/html-docx";
 import { saveAs } from "file-saver";
 
-const BASE = process.env.REACT_APP_API_URL || "https://backend.vjcoverseas.com";
-
+const BASE = "http://127.0.0.1:5000";
 // ─── COUNTRY DATA ─────────────────────────────────────────────────────────────
 const COUNTRY_GROUPS = [
   {
@@ -335,7 +334,7 @@ const COUNTRY_COLORS = {
 };
 
 // ─── GROQ API CALL ────────────────────────────────────────────────────────────
-const callGroq = async (prompt, maxTokens = 7000, onStatus, retry = 0) => {
+const callGroq = async (prompt, maxTokens = 2500, onStatus, retry = 0) => {
   let res;
   try {
     res = await fetch(`${BASE}/api/groq`, {
@@ -348,17 +347,8 @@ const callGroq = async (prompt, maxTokens = 7000, onStatus, retry = 0) => {
   }
 
   if (res.status === 429) {
-    const err = await res.json().catch(() => ({}));
-    const wait = err.retryAfter || 30;
-    if (retry < 1) {
-      for (let i = wait; i > 0; i--) {
-        onStatus?.(`⏳ Rate limited — retrying in ${i}s…`);
-        await new Promise((r) => setTimeout(r, 1000));
-      }
-      return callGroq(prompt, maxTokens, onStatus, retry + 1);
-    }
-    throw new Error(`Rate limited. Wait ${wait}s and try again.`);
-  }
+  throw new Error("Groq API limit reached. Try again.");
+}
   if (!res.ok) {
     const e = await res.json().catch(() => ({}));
     throw new Error(`Error ${res.status}: ${e.message || "Unknown"}`);
@@ -422,14 +412,21 @@ const extractText = (file, onProgress) =>
             data: new Uint8Array(r.result),
           }).promise;
           let text = "";
-          for (let i = 1; i <= pdf.numPages; i++) {
-            onProgress?.(`Reading PDF page ${i}/${pdf.numPages}…`);
-            const page = await pdf.getPage(i);
-            const content = await page.getTextContent();
-            text += content.items.map((x) => x.str).join(" ") + "\n";
-          }
-          const clean = text.replace(/\s{3,}/g, "\n").trim();
-          if (clean.length < 30)
+const maxPages = pdf.numPages;
+for (let i = 1; i <= maxPages; i++) {
+  onProgress?.(`Reading PDF page ${i}/${maxPages}…`);
+
+  const page = await pdf.getPage(i);
+  const content = await page.getTextContent();
+
+  text +=
+    content.items.map((x) => x.str).join(" ") + "\n";
+}
+          const clean = text
+  .replace(/\s{3,}/g, "\n")
+  .trim();
+
+if (clean.length < 30)
             rej(new Error("PDF has no readable text (scanned image?)"));
           else res(clean);
         } catch (e) {
@@ -508,19 +505,20 @@ const buildContentPrompt = ({ data: d, country, tmpl, hasPhoto, jdText }) => {
     ? `https://${d.linkedin}`
     : d.linkedin || "";
   const jdSection = jdText
-    ? `\nJOB DESCRIPTION (tailor every bullet to match this JD):\n${jdText.slice(0, 1500)}`
+    ? `\nJOB DESCRIPTION (tailor every bullet to match this JD):\n${jdText.slice(0, 500)}`
     : "";
 
   // Upload చేసిన experience అన్నీ include చేస్తాం
   const expCount = (d.experience || []).length;
   const expBlock = (d.experience || [])
-    .map(
-      (e, i) =>
-        `Role ${i + 1}: ${e.role || "Role"} at ${e.company || "Company"}, Duration: ${e.duration || "not specified"}, Location: ${e.location || ""}
-Achievements from resume: ${(e.achievements || []).join(" | ") || "No specific achievements listed — write strong bullets based on role title"}`,
-    )
-    .join("\n\n");
+  .map(
+    (e, i) =>
+      `Role ${i + 1}: ${e.role || "Role"} at ${e.company || "Company"}, Duration: ${e.duration || "not specified"}, Location: ${e.location || ""}
 
+Achievements from resume:
+${JSON.stringify(e.achievements, null, 2)}`,
+  )
+  .join("\n\n");
  const eduBlock = (d.education || [])
     .map(
       (e) =>
@@ -528,11 +526,10 @@ Achievements from resume: ${(e.achievements || []).join(" | ") || "No specific a
     )
     .join("\n");
 
-  const projBlock = (d.projects || [])
-    .map(
+const projBlock = (d.projects || [])    .map(
       (p, i) =>
-        `Project ${i + 1}: ${p.name || ""} | Tech: ${p.tech || ""}\nBullets: ${(p.achievements || []).join(" | ") || "write based on project name"}`,
-    )
+`Project ${i + 1}: ${p.name || ""} | Tech: ${p.tech || ""}
+Bullets: ${(p.achievements || []).join(" | ")}`    )
     .join("\n\n");
 
   const countryRules = {
@@ -558,17 +555,26 @@ Achievements from resume: ${(e.achievements || []).join(" | ") || "No specific a
       "role": "${e.role || ""}",
       "duration": "${e.duration || ""}",
       "location": "${e.location || ""}",
-      "bullets": [
-        "Strong action verb + what you did + quantified result (from the achievements listed for this role)",
-        "Another achievement bullet with metrics",
-        "Third achievement or responsibility bullet"
-      ]
+     "bullets": []
     }`,
     )
     .join(",\n");
 
-  return `You are an expert resume writer. Your job is to FORMAT and ENHANCE the candidate's REAL data — never invent fake companies, degrees, or dates.
+return `You are a resume data copier.
 
+Your job is ONLY to copy resume data exactly as provided.
+
+DO NOT enhance.
+DO NOT improve.
+DO NOT rewrite.
+DO NOT summarize.
+DO NOT rephrase.
+DO NOT optimize.
+DO NOT generate new content.
+
+Every field must match the uploaded resume exactly.
+
+Never change even a single word unless the uploaded resume already contains it.
 ════════════════════════════════════════
 CANDIDATE'S ACTUAL DATA (USE ALL OF IT):
 ════════════════════════════════════════
@@ -582,19 +588,60 @@ Nationality: ${nat}
 "summary": "${(d.summary || "").replace(/"/g, '\\"')}",
 
 IMPORTANT: Use the EXACT summary text from resume as-is. Do NOT rewrite it. Copy it word for word into the "summary" field.
+CRITICAL:
+If summary exists in uploaded resume,
+return it EXACTLY character-for-character.
+Do not improve, shorten, expand, rewrite or paraphrase.
 Skills from resume: ${skills}
 Languages: ${langs}
 Certifications: ${certs}
 Hobbies: ${hobby}
 ${jdSection}
 
-WORK EXPERIENCE (${expCount} role${expCount !== 1 ? "s" : ""} — include ALL of them):
+WORK EXPERIENCE (USE ALL ROLES EXACTLY AS PROVIDED):
+Never omit any company, role, duration, or experience entry from the uploaded resume.
+
+CRITICAL:
+For every work experience entry, preserve ALL bullet points from the uploaded resume.
+Do not summarize.
+Do not remove bullets.
+Do not merge bullets.
+Do not shorten bullets.
+Return every bullet exactly as provided.
 ${expBlock || "No experience provided — use empty placeholders"}
 
 EDUCATION:
 ${eduBlock || "No education provided — use empty placeholder"}
+Never return an empty education array if education exists in the uploaded resume.
+CRITICAL:
 
-PROJECTS (${(d.projects||[]).length} projects — include ALL of them):
+If EDUCATION exists in uploaded resume,
+return ALL education entries exactly.
+
+If CERTIFICATIONS exist,
+return ALL certifications exactly.
+
+If AWARDS exist,
+return ALL awards exactly.
+
+Do not summarize.
+Do not shorten.
+Do not remove entries.
+Do not merge entries.
+
+PROJECTS (USE ALL PROJECTS EXACTLY AS PROVIDED):
+
+CRITICAL:
+If projects exist anywhere in the uploaded resume,
+they must appear in the final output.
+
+Never return an empty projects section.
+
+Preserve all project names.
+Preserve all project descriptions.
+Do not summarize.
+Do not remove projects.
+Do not rename projects.
 ${projBlock || "No projects provided"}
 
 ════════════════════════════════════════
@@ -602,65 +649,76 @@ TARGET COUNTRY: ${countryObj.label || country}
 COUNTRY-SPECIFIC RULES: ${countryRules[country] || "Standard professional format for this country"}
 TEMPLATE STYLE: ${tmpl.name}
 ════════════════════════════════════════
-${jdText ? `JD TAILORING: Weave in keywords from the job description naturally into bullets and summary.` : ""}
-
+${jdText ? `JD PROVIDED FOR REFERENCE ONLY. DO NOT MODIFY ANY RESUME CONTENT.` : ""}
 Return ONLY a raw JSON object. No markdown. No backticks. Start with { end with }.
 
 CRITICAL RULES:
 1. NEVER invent companies, degrees, institutions, or dates not in the candidate data
+ABSOLUTE RULE:
+
+Do not invent:
+- achievements
+- projects
+- certifications
+- awards
+- metrics
+- percentages
+- savings
+- revenue figures
+- technologies
+- responsibilities
+
+If information is not present in uploaded resume,
+leave it empty.
+
+Never generate placeholder content.
+Never create assumptions.
+Never create estimated numbers.
 2. Use the candidate's REAL company names, role titles, and durations exactly as provided
-3. For bullets: enhance the provided achievements using ONLY real data from resume. NEVER invent percentage metrics or numbers not present in the original resume. If no achievements given, write realistic bullets based on role title only
-4. Include ALL ${expCount} experience role${expCount !== 1 ? "s" : ""} — do not drop any
+3. For bullets:
+
+Preserve uploaded bullet points exactly.
+
+Do not rewrite bullets.
+Do not enhance bullets.
+Do not improve bullets.
+Do not shorten bullets.
+Do not merge bullets.
+Do not create additional bullets.
+
+Return uploaded bullet points exactly as provided.
+
+If no bullet exists in uploaded resume,
+return an empty array.4. Include ALL ${expCount} experience role${expCount !== 1 ? "s" : ""} — do not drop any
 5. Include all education entries exactly as provided
-6. Skills: include ALL skills from the resume (minimum 6, maximum 12)
+6. Skills: include ALL skills from the resume exactly as provided.
+Never reduce, group, summarize, combine, or limit skills. Return every individual skill separately.
+
+Do not limit skills.
+Do not remove skills.
+Do not merge skills.
+Do not rewrite skills.
+Do not create new skills.
+
+Return every skill found in the uploaded resume.
 7. Summary: Copy the EXACT summary text provided above — word for word. DO NOT rewrite, rephrase, or improve it. Use it as-is
 8. declaration: always "I hereby declare that all the information furnished above is true and correct to the best of my knowledge
 9. projects: include ALL projects from the resume with name, tech stack, and 2 bullet points each."
 
-Return this EXACT JSON structure:
+Return ONLY this JSON:
 {
-  "name": "${name}",
-  "title": "Professional title derived from their most recent role",
-  "phone": "${d.phone || ""}",
-  "email": "${d.email || ""}",
-  "location": "${d.location || ""}",
-  "linkedin": "${linkedin}",
-  "dob": "${dob}",
-  "nationality": "${nat}",
-"summary": "${(d.summary || "").replace(/"/g, '\\"')}",
- "personalStatement": "${(d.summary || "").replace(/"/g, '\\"')}",
-  "coreCompetencies": [],
-  "experience": [
-${expJsonTemplate}
-  ],
-  "education": ${eduBlock ? JSON.stringify((d.education || []).map((e) => ({ degree: e.degree || "", institution: e.institution || "", year: e.year || "", grade: e.grade || "" }))) : '[{"degree":"","institution":"","year":"","grade":""}]'},
-  "skills": ${JSON.stringify(d.skills && d.skills.length > 0 ? d.skills : ["Communication", "Problem Solving", "Team Leadership", "Project Management", "Microsoft Office", "Data Analysis", "Customer Service", "Strategic Planning"])},
-"languages": ${JSON.stringify(
-    d.languages &&
-      d.languages.length > 0 &&
-      !d.languages.some((l) =>
-        [
-          "javascript",
-          "typescript",
-          "python",
-          "java",
-          "sql",
-          "html5",
-          "css3",
-          "html",
-          "css",
-        ].includes(l.toLowerCase()),
-      )
-      ? d.languages
-      : ["English"],
-  )},
-    "certifications": ${JSON.stringify(d.certifications && d.certifications.length > 0 ? d.certifications : [])},
-  "hobbies": ${JSON.stringify(d.hobbies && d.hobbies.length > 0 ? d.hobbies : [])},
-  "declaration": "I hereby declare that all the information furnished above is true and correct to the best of my knowledge.",
-  "gdprClause": "${country === "poland" ? "Wyrażam zgodę na przetwarzanie moich danych osobowych dla celów rekrutacji." : ""}",
-  "visaStatus": "${country === "gulf" || country === "dubai" || country === "saudi" ? "Employment Visa" : ""}",
- "projects": ${JSON.stringify((d.projects||[]).map(p=>({name:p.name||"",tech:p.tech||"",bullets:p.achievements&&p.achievements.length?p.achievements.slice(0,2):["Key achievement","Impact result"]})))},
-  "extras": ""
+  "name":"",
+  "title":"",
+  "summary":"",
+  "experience":[],
+  "education":[],
+  "skills":[],
+  "projects":[],
+  "certifications":[],
+  "awards":[],
+  "languages":[],
+  "hobbies":[],
+  "declaration":""
 }`;
 };
 
@@ -709,8 +767,9 @@ const buildExecutiveHtml = (c, accent, hasPhoto) => {
         <span style="font-size:11px;color:#888;font-style:italic;font-family:'Times New Roman',Times,serif;white-space:nowrap;margin-left:12px;">${e.duration || ""}</span>
       </div>
       <ul style="margin:6px 0 0 0;padding-left:18px;">
-        ${(e.bullets || []).map((b) => `<li style="font-size:11.5px;color:#333;line-height:1.85;font-family:'Times New Roman',Times,serif;margin-bottom:3px;">${b}</li>`).join("")}
-      </ul>
+${(e.bullets || e.achievements || []).map((b) => {
+  return `<li style="font-size:11.5px;color:#333;line-height:1.85;font-family:'Times New Roman',Times,serif;margin-bottom:3px;">${b}</li>`;
+}).join("")}      </ul>
     </div>`,
     )
     .join("");
@@ -727,12 +786,54 @@ const buildExecutiveHtml = (c, accent, hasPhoto) => {
     </div>`,
     )
     .join("");
+    const skillCategories = {
+  "Programming Languages": [],
+  "AI & Data Systems": [],
+  "Frameworks & APIs": [],
+  "Cloud & AI Platforms": [],
+  "Data & Storage": [],
+  "System Design": [],
+  "Containerization & DevOps": [],
+  "Tools & Practices": [],
+};
 
-  const skillsHtml = (c.skills || [])
-  .filter(s => s && typeof s === "string" && s.trim().length > 0)
+  (c.skills || []).forEach((s) => {
+  if (!s) return;
+
+  const skill = s.trim();
+
+  if (["C","Java","C#","Python","JavaScript","TypeScript","ASP.NET","ASP.NET Core","Angular","React","HTML","CSS"].includes(skill))
+    skillCategories["Programming Languages"].push(skill);
+
+  else if (["RAG (Retrieval-Augmented Generation)","Multi-Agent Systems","LLMs","Prompt Engineering","Vector Embeddings","Semantic Search","Context & Memory Management","Guardrails","Agent Orchestration","Tool Calling"].includes(skill))
+    skillCategories["AI & Data Systems"].push(skill);
+
+  else if (["FastAPI","Graph API","REST APIs","Web APIs","Microservices","Microsoft Agentic Framework","Azure Bot Service"].includes(skill))
+    skillCategories["Frameworks & APIs"].push(skill);
+
+  else if (skill.includes("Azure") || skill.includes("OpenAI") || skill.includes("Cloud-native"))
+    skillCategories["Cloud & AI Platforms"].push(skill);
+
+  else if (["PostgreSQL","MongoDB","Sql server"].includes(skill))
+    skillCategories["Data & Storage"].push(skill);
+
+  else if (["Distributed Systems","Low-Latency Systems","Caching","High Availability","Scalability"].includes(skill))
+    skillCategories["System Design"].push(skill);
+
+  else if (["Docker","Kubernetes","CI/CD Pipelines","GitHub","Github Actions"].includes(skill))
+    skillCategories["Containerization & DevOps"].push(skill);
+
+  else
+    skillCategories["Tools & Practices"].push(skill);
+});
+
+const skillsHtml = Object.entries(skillCategories)
+  .filter(([_, arr]) => arr.length)
   .map(
-    (s) =>
-      `<span style="display:inline-block;background:${accent}15;color:${accent};font-size:11px;padding:3px 10px;border-radius:4px;margin:2px;font-family:'Times New Roman',Times,serif;font-weight:600;">${s.trim()}</span>`,
+    ([title, arr]) =>
+      `<li style="font-size:11.5px;color:#333;line-height:1.8;font-family:'Times New Roman',Times,serif;margin-bottom:6px;">
+        <strong>${title}:</strong> ${arr.join(", ")}
+      </li>`
   )
   .join("");
   const contactItems = [c.phone, c.email, c.location, c.linkedin].filter(
@@ -766,6 +867,9 @@ const buildExecutiveHtml = (c, accent, hasPhoto) => {
     <div style="flex:1;min-width:0;">
       <div style="font-size:34px;color:#fff;font-weight:700;letter-spacing:2px;line-height:1.1;font-family:'Times New Roman',Times,serif;">${c.name || ""}</div>
       <div style="font-size:13.5px;color:rgba(255,255,255,0.75);font-style:italic;margin:6px 0 14px;font-family:'Times New Roman',Times,serif;">${c.title || ""}</div>
+      <div style="font-size:14px;color:#fff;font-family:'Times New Roman',Times,serif;margin-bottom:10px;">
+Software Development Consultant at Microsoft
+</div>
       <div style="border-bottom:1.5px solid rgba(201,168,76,0.45);margin-bottom:12px;"></div>
       <div style="display:flex;flex-wrap:wrap;gap:14px;position:relative;z-index:9999;">
   ${contactItems.map((x) => {
@@ -819,8 +923,7 @@ const buildExecutiveHtml = (c, accent, hasPhoto) => {
 
     <!-- Summary -->
     <span class="sec-label">Professional Summary</span>
-    <p style="font-size:12px;color:#333;line-height:1.9;font-style:italic;margin-bottom:6px;font-family:'Times New Roman',Times,serif;">${c.summary || ""}</p>
-
+<p style="font-size:12px;color:#333;line-height:1.9;margin-bottom:6px;font-family:'Times New Roman',Times,serif;">${c.summary || ""}</p>
     ${
       (c.coreCompetencies || []).length
         ? `
@@ -841,9 +944,9 @@ const buildExecutiveHtml = (c, accent, hasPhoto) => {
         <span style="font-size:13px;font-weight:700;color:${accent};font-family:'Times New Roman',Times,serif;">${p.name||""}</span>
         <span style="font-size:11px;color:#888;font-style:italic;font-family:'Times New Roman',Times,serif;">${p.tech||""}</span>
       </div>
-      <ul style="margin:4px 0 0 0;padding-left:18px;">
-        ${(p.bullets||[]).map(b=>`<li style="font-size:11.5px;color:#333;line-height:1.85;font-family:'Times New Roman',Times,serif;margin-bottom:3px;">${b}</li>`).join("")}
-      </ul>
+     <ul style="margin:4px 0 0 0;padding-left:18px;">
+  ${(p.bullets || p.achievements || []).map((b) => `<li style="font-size:11.5px;color:#333;line-height:1.85;font-family:'Times New Roman',Times,serif;margin-bottom:3px;">${b}</li>`).join("")}
+</ul>
     </div>`).join("")}`:""}
 
     <!-- Education -->
@@ -852,17 +955,42 @@ const buildExecutiveHtml = (c, accent, hasPhoto) => {
 
     <!-- Skills -->
     <span class="sec-label">Technical Skills</span>
-    <div style="margin-bottom:8px;">${skillsHtml}</div>
+
+<ul style="margin:0;padding-left:18px;">
+  ${skillsHtml}
+</ul>
 
     ${
       (c.certifications || []).length
         ? `
     <span class="sec-label">Certifications</span>
     <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:4px;">
-      ${(c.certifications || []).map((x) => `<span style="font-size:11.5px;color:#333;font-family:'Times New Roman',Times,serif;">• ${x}</span>`).join("")}
-    </div>`
+${(c.certifications || [])
+  .map(
+    (x) =>
+      `<span style="font-size:11.5px;color:#333;font-family:'Times New Roman',Times,serif;">• ${
+        typeof x === "string"
+          ? x
+          : x.name || x.title || x.certification || JSON.stringify(x)
+      }</span>`
+  )
+  .join("")}    </div>`
         : ""
     }
+    ${
+  (c.awards || []).length
+    ? `
+<span class="sec-label">Awards & Achievements</span>
+<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+${(c.awards || [])
+  .map(
+    (x) =>
+      `<span style="font-size:11.5px;color:#333;font-family:'Times New Roman',Times,serif;">• ${x}</span>`
+  )
+  .join("")}
+</div>`
+    : ""
+}
 
     ${
       (c.languages || []).length
@@ -1134,9 +1262,24 @@ const buildMinimalHtml = (c, accent, hasPhoto) => {
   }
 
   ${
-    (c.languages || []).length
-      ? `
-  <span class="sec-label">Languages</span>
+  (c.awards || []).length
+    ? `
+<span class="sec-label">Awards & Achievements</span>
+<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+${(c.awards || [])
+  .map(
+    (x) =>
+      `<span style="font-size:11.5px;color:#333;font-family:'Times New Roman',Times,serif;">• ${x}</span>`
+  )
+  .join("")}
+</div>`
+    : ""
+}
+
+${
+  (c.languages || []).length
+    ? `
+<span class="sec-label">Languages</span>
   <div style="display:flex;flex-wrap:wrap;gap:12px;">${(c.languages || []).map((x) => `<span style="font-size:11.5px;color:#555;font-family:'Times New Roman',Times,serif;">${x}</span>`).join("")}</div>
   `
       : ""
@@ -2390,11 +2533,24 @@ const [generatedHtml, setHtml] = useState(null);
       setLoadMsg("Parsing resume with AI…");
       const raw = await callGroq(
         `
-You are a resume parser. Extract ALL information from this resume text and return ONLY a raw JSON object.
+You are a resume parser.
+
+IMPORTANT:
+Extract data EXACTLY AS WRITTEN in the resume.
+Do NOT rewrite.
+Do NOT summarize.
+Do NOT improve wording.
+Do NOT add missing information.
+Do NOT infer anything.
+Do NOT merge bullet points.
+Do NOT split bullet points.
+Preserve original text exactly.
+
+Return ONLY raw JSON.
 Do NOT skip any data. Extract every company, role, date, achievement, skill, education entry.
 
 Resume text:
-${text.slice(0, 5000)}
+${text}
 
 Return EXACTLY this JSON structure. Extract every field you can find:
 {
@@ -2443,6 +2599,7 @@ Rules:
 - Extract Nationality anywhere it appears
 - Include EVERY project entry with name, tech stack, and all bullet points
 - Include ALL certifications and achievements listed under certifications section including Hackathon entries
+- Include ALL awards, recognitions, achievements, honors, excellence awards, pinnacle awards, consultant awards exactly as written
 - Start JSON with { and end with }. Nothing else.`,
         3000,
         setLoadMsg,
@@ -2455,15 +2612,28 @@ Rules:
       const s = cleaned.indexOf("{"),
         e2 = cleaned.lastIndexOf("}");
       if (s !== -1 && e2 !== -1) cleaned = cleaned.slice(s, e2 + 1);
-      let parsed;
-      try {
-        parsed = JSON.parse(cleaned);
-      } catch {
-        parsed = { name: file.name.replace(/\.[^.]+$/, "") };
-      }
-      setParsed(parsed);
-     
-      setStep(2);
+     let parsed;
+try {
+  parsed = JSON.parse(cleaned);
+
+  console.log("FINAL AI JSON =>", parsed);
+  
+  console.log(
+  "FULL JSON STRING =>",
+  JSON.stringify(parsed, null, 2)
+);
+  console.log("EXPERIENCE COUNT =>", parsed.experience?.length);
+  console.log("PROJECTS COUNT =>", parsed.projects?.length);
+  console.log("SKILLS COUNT =>", parsed.skills?.length);
+  console.log("CERTIFICATIONS =>", parsed.certifications);
+  console.log("AWARDS =>", parsed.awards);
+
+} catch {
+  parsed = { name: file.name.replace(/\.[^.]+$/, "") };
+}
+setParsed(parsed);
+
+setStep(2);
       
     } catch (e) {
       setError(e.message);
@@ -2537,7 +2707,7 @@ Rules:
           hasPhoto: !!photoB64,
           jdText: jd,
         }),
-        4000,
+        2200,
         setLoadMsg,
       );
       let cleaned = raw
@@ -2591,7 +2761,7 @@ Rules:
 Analyse this candidate vs job description. Return ONLY raw JSON (no backticks, no markdown).
 CANDIDATE: ${parsedData?.name}, Skills: ${(parsedData?.skills || []).join(", ")}
 Experience: ${(parsedData?.experience || []).map((e) => `${e.role} at ${e.company}`).join(" | ")}
-JOB DESCRIPTION: ${jdText.slice(0, 1500)}
+JOB DESCRIPTION: ${jdText.slice(0, 700)}
 Return exactly:
 {"match_score":72,"match_label":"Good","summary":"2-3 sentences","recommendation":"one action","matched_skills":[],"missing_skills":[],"quick_wins":["action 1","action 2","action 3"]}
 match_label: "Excellent"|"Good"|"Fair"|"Low"`,
