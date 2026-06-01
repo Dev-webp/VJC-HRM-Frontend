@@ -10,6 +10,22 @@ import * as htmlDocx from "html-docx-js/dist/html-docx";
 import { saveAs } from "file-saver";
 
 const BASE = "http://127.0.0.1:5000";
+const FONT_PRESETS = {
+  compact: {
+  heading: 0.90,
+  body: 0.90,
+},
+
+  normal: {
+    heading: 1,
+    body: 1,
+  },
+
+  comfortable: {
+  heading: 1.18,
+  body: 1.18,
+},
+};
 // ─── COUNTRY DATA ─────────────────────────────────────────────────────────────
 const COUNTRY_GROUPS = [
   {
@@ -749,8 +765,22 @@ const photoImgStyle = (w, h, extra = "") =>
   `width:${w}px;height:${h}px;object-fit:cover;object-position:center top;border-radius:4px;display:block;flex-shrink:0;pointer-events:none;user-select:none;-webkit-user-drag:none;${extra}`;
 
 // ─── EXECUTIVE DARK ──────────────────────────────────────────────────────────
-const buildExecutiveHtml = (c, accent, hasPhoto) => {
-  const photoSlot = hasPhoto
+const buildExecutiveHtml = (
+  c,
+  accent,
+  hasPhoto,
+  typography = FONT_PRESETS.normal
+) => {
+  const scale = typography?.body || 1;
+  console.log("EXECUTIVE TYPOGRAPHY =", typography);
+  console.log("EXECUTIVE SCALE =", scale);
+  console.log("EXECUTIVE TEMPLATE LOADED");
+  const fs = (size) =>
+  `${(parseFloat(size) * scale).toFixed(2)}px`;
+  console.log("FS12 =", fs(12));
+console.log("FS14 =", fs(14));
+console.log("FS34 =", fs(34));
+    const photoSlot = hasPhoto
     ? `<img src="__PHOTO__" draggable="false" ondragstart="return false;" style="${photoImgStyle(108, 135, `border-radius:4px;border:2.5px solid ${accent};`)}">`
     : "";
 
@@ -760,15 +790,14 @@ const buildExecutiveHtml = (c, accent, hasPhoto) => {
     <div style="margin-bottom:20px;">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;">
         <div>
-          <span style="font-size:13px;font-weight:700;color:${accent};font-family:'Times New Roman',Times,serif;">${e.role || ""}</span>
-          <span style="font-size:12px;color:#555;font-family:'Times New Roman',Times,serif;"> — ${e.company || ""}</span>
-          ${e.location ? `<span style="font-size:11px;color:#888;font-family:'Times New Roman',Times,serif;"> · ${e.location}</span>` : ""}
+<span style="font-size:${fs(13)};font-weight:700;color:${accent};font-family:'Times New Roman',Times,serif;">${e.role || ""}</span>         
+<span style="font-size:${fs(12)};color:#555;font-family:'Times New Roman',Times,serif;"> — ${e.company || ""}</span>      
+    ${e.location ? `<span style="font-size:${fs(11)};color:#888;font-family:'Times New Roman',Times,serif;"> · ${e.location}</span>` : ""}
         </div>
-        <span style="font-size:11px;color:#888;font-style:italic;font-family:'Times New Roman',Times,serif;white-space:nowrap;margin-left:12px;">${e.duration || ""}</span>
-      </div>
+<span style="font-size:${fs(11)};color:#888;font-style:italic;font-family:'Times New Roman',Times,serif;white-space:nowrap;margin-left:12px;">${e.duration || ""}</span>      </div>
       <ul style="margin:6px 0 0 0;padding-left:18px;">
 ${(e.bullets || e.achievements || []).map((b) => {
-  return `<li style="font-size:11.5px;color:#333;line-height:1.85;font-family:'Times New Roman',Times,serif;margin-bottom:3px;">${b}</li>`;
+  return `<li style="font-size:${fs(11.5)};color:#333;line-height:1.85;font-family:'Times New Roman',Times,serif;margin-bottom:3px;">${b}</li>`;
 }).join("")}      </ul>
     </div>`,
     )
@@ -831,7 +860,7 @@ const skillsHtml = Object.entries(skillCategories)
   .filter(([_, arr]) => arr.length)
   .map(
     ([title, arr]) =>
-      `<li style="font-size:11.5px;color:#333;line-height:1.8;font-family:'Times New Roman',Times,serif;margin-bottom:6px;">
+      `<li style="font-size:${fs(11.5)};color:#333;line-height:1.8;font-family:'Times New Roman',Times,serif;margin-bottom:6px;">
         <strong>${title}:</strong> ${arr.join(", ")}
       </li>`
   )
@@ -853,7 +882,16 @@ const skillsHtml = Object.entries(skillCategories)
   *{margin:0;padding:0;box-sizing:border-box;font-family:'Times New Roman',Times,serif;}
   html,body{background:#eef0f4;}
   .rw{background:#eef0f4;padding:24px 0;}
-  .resume{background:#fff;width:794px;max-width:794px;margin:0 auto;box-shadow:0 4px 40px rgba(0,0,0,.18);min-height:auto;}
+  .resume{
+  background:#fff;
+  width:794px;
+  max-width:794px;
+  margin:0 auto;
+  box-shadow:0 4px 40px rgba(0,0,0,.18);
+  min-height:auto;
+
+/***** FONT PRESET CONTROLLED BY fs() ONLY *****/
+/* zoom:${scale}; */}
   .sec-label{font-size:10.5px;font-weight:700;color:${accent};letter-spacing:3px;text-transform:uppercase;padding:18px 0 7px;border-bottom:1.5px solid ${accent};margin-bottom:14px;display:block;}
   img{-webkit-user-drag:none;-khtml-user-drag:none;-moz-user-drag:none;-o-user-drag:none;user-drag:none;}
 @media print{*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;box-sizing:border-box}html,body{background:#fff;padding:0;margin:0;width:210mm;overflow:visible}.rw{padding:0;margin:0}.resume{box-shadow:none;margin:0 auto;width:100%;max-width:100%;transform:none!important;overflow:visible;page-break-inside:avoid;break-inside:avoid;}.section,.experience,.project,.education{page-break-inside:avoid;break-inside:avoid}span.sec-label{page-break-after:avoid;break-after:avoid;}span.sec-label+*{page-break-before:avoid;break-before:avoid;}@page{size:A4;margin:8mm}}</style>
@@ -865,9 +903,8 @@ const skillsHtml = Object.entries(skillCategories)
   <!-- HEADER — flexbox, photo is last child = always top-right -->
   <div style="background:${accent};padding:32px 48px;display:flex;align-items:flex-start;justify-content:flex-start;gap:24px;">
     <div style="flex:1;min-width:0;">
-      <div style="font-size:34px;color:#fff;font-weight:700;letter-spacing:2px;line-height:1.1;font-family:'Times New Roman',Times,serif;">${c.name || ""}</div>
-      <div style="font-size:13.5px;color:rgba(255,255,255,0.75);font-style:italic;margin:6px 0 14px;font-family:'Times New Roman',Times,serif;">${c.title || ""}</div>
-      <div style="font-size:14px;color:#fff;font-family:'Times New Roman',Times,serif;margin-bottom:10px;">
+<div style="font-size:${fs(34)};color:#fff;font-weight:700;letter-spacing:2px;line-height:1.1;font-family:'Times New Roman',Times,serif;">${c.name || ""}</div>    
+<div style="font-size:${fs(14)};color:#fff;font-family:'Times New Roman',Times,serif;margin-bottom:10px;">
 Software Development Consultant at Microsoft
 </div>
       <div style="border-bottom:1.5px solid rgba(201,168,76,0.45);margin-bottom:12px;"></div>
@@ -879,13 +916,13 @@ Software Development Consultant at Microsoft
 
     return isLink
       ? `
-        <a 
+       <a 
   href="${x}" 
   target="_blank"
   rel="noopener noreferrer"
   onclick="window.open(this.href,'_blank'); return false;"
   style="
-    font-size:11px;
+    font-size:${fs(11)};
     color:#7cc7ff;
     text-decoration:underline;
     font-family:'Times New Roman',Times,serif;
@@ -901,16 +938,17 @@ Software Development Consultant at Microsoft
       `
       : `
         <span style="
-          font-size:11px;
-          color:rgba(255,255,255,0.65);
-          font-family:'Times New Roman',Times,serif;
-        ">
-          ${x}
-        </span>
+  font-size:${fs(11)};
+  color:rgba(255,255,255,0.65);
+  font-family:'Times New Roman',Times,serif;
+">
+  ${x}
+</span>
       `;
   }).join("")}
 </div>
-      ${extraMeta.length ? `<div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;">${extraMeta.map((x) => `<span style="font-size:11px;color:rgba(255,255,255,0.55);font-family:'Times New Roman',Times,serif;">${x}</span>`).join("")}</div>` : ""}
+      ${extraMeta.length ? `<div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;">
+        ${extraMeta.map((x) => `<span style="font-size:${fs(11)};color:rgba(255,255,255,0.55);font-family:'Times New Roman',Times,serif;">${x}</span>`).join("")}</div>` : ""}
 </div>
 
 <div style="margin-left:auto;position:relative;z-index:1;">
@@ -923,13 +961,15 @@ Software Development Consultant at Microsoft
 
     <!-- Summary -->
     <span class="sec-label">Professional Summary</span>
-<p style="font-size:12px;color:#333;line-height:1.9;margin-bottom:6px;font-family:'Times New Roman',Times,serif;">${c.summary || ""}</p>
-    ${
+<p style="font-size:${fs(12)};color:#333;line-height:1.9;margin-bottom:6px;font-family:'Times New Roman',Times,serif;">${c.summary || ""}</p>    ${
       (c.coreCompetencies || []).length
         ? `
     <span class="sec-label" style="margin-top:6px;">Core Competencies</span>
-    <div style="margin-bottom:4px;">${(c.coreCompetencies || []).map((s) => `<span style="display:inline-block;background:${accent}12;color:${accent};font-size:11px;padding:3px 10px;border-radius:3px;margin:2px;font-family:'Times New Roman',Times,serif;font-weight:600;">${s}</span>`).join("")}</div>
-    `
+<div style="margin-bottom:4px;">
+${(c.coreCompetencies || []).map((s) =>
+  `<span style="display:inline-block;background:${accent}12;color:${accent};font-size:${fs(11)};padding:3px 10px;border-radius:3px;margin:2px;font-family:'Times New Roman',Times,serif;font-weight:600;">${s}</span>`
+).join("")}
+</div>    `
         : ""
     }
 
@@ -941,11 +981,12 @@ Software Development Consultant at Microsoft
     ${(c.projects||[]).map(p=>`
     <div style="margin-bottom:16px;">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;">
-        <span style="font-size:13px;font-weight:700;color:${accent};font-family:'Times New Roman',Times,serif;">${p.name||""}</span>
-        <span style="font-size:11px;color:#888;font-style:italic;font-family:'Times New Roman',Times,serif;">${p.tech||""}</span>
+        <span style="font-size:${fs(13)};font-weight:700;color:${accent};font-family:'Times New Roman',Times,serif;">${p.name||""}</span>
+
+<span style="font-size:${fs(11)};color:#888;font-style:italic;font-family:'Times New Roman',Times,serif;">${p.tech||""}</span>
       </div>
      <ul style="margin:4px 0 0 0;padding-left:18px;">
-  ${(p.bullets || p.achievements || []).map((b) => `<li style="font-size:11.5px;color:#333;line-height:1.85;font-family:'Times New Roman',Times,serif;margin-bottom:3px;">${b}</li>`).join("")}
+  ${(p.bullets || p.achievements || []).map((b) => `<li style="font-size:${fs(11.5)};color:#333;line-height:1.85;font-family:'Times New Roman',Times,serif;margin-bottom:3px;">${b}</li>`).join("")}
 </ul>
     </div>`).join("")}`:""}
 
@@ -968,11 +1009,11 @@ Software Development Consultant at Microsoft
 ${(c.certifications || [])
   .map(
     (x) =>
-      `<span style="font-size:11.5px;color:#333;font-family:'Times New Roman',Times,serif;">• ${
-        typeof x === "string"
-          ? x
-          : x.name || x.title || x.certification || JSON.stringify(x)
-      }</span>`
+      `<span style="font-size:${fs(11.5)};color:#333;font-family:'Times New Roman',Times,serif;">• ${
+  typeof x === "string"
+    ? x
+    : x.name || x.title || x.certification || JSON.stringify(x)
+}</span>`
   )
   .join("")}    </div>`
         : ""
@@ -985,7 +1026,7 @@ ${(c.certifications || [])
 ${(c.awards || [])
   .map(
     (x) =>
-      `<span style="font-size:11.5px;color:#333;font-family:'Times New Roman',Times,serif;">• ${x}</span>`
+      `<span style="font-size:${fs(11.5)};color:#333;font-family:'Times New Roman',Times,serif;">• ${x}</span>`
   )
   .join("")}
 </div>`
@@ -997,7 +1038,9 @@ ${(c.awards || [])
         ? `
     <span class="sec-label">Languages</span>
     <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:4px;">
-      ${(c.languages || []).map((x) => `<span style="font-size:11.5px;color:#333;font-family:'Times New Roman',Times,serif;">• ${x}</span>`).join("")}
+     ${(c.languages || []).map((x) =>
+  `<span style="font-size:${fs(11.5)};color:#333;font-family:'Times New Roman',Times,serif;">• ${x}</span>`
+).join("")}
     </div>`
         : ""
     }
@@ -1006,7 +1049,9 @@ ${(c.awards || [])
       (c.hobbies || []).length
         ? `
     <span class="sec-label">Interests & Hobbies</span>
-    <p style="font-size:11.5px;color:#333;font-family:'Times New Roman',Times,serif;">${(c.hobbies || []).join(" · ")}</p>`
+    <p style="font-size:${fs(11.5)};color:#333;font-family:'Times New Roman',Times,serif;">
+${(c.hobbies || []).join(" · ")}
+</p>`
         : ""
     }
 
@@ -1015,12 +1060,16 @@ ${(c.awards || [])
         ? `
 <div style="page-break-inside:avoid;break-inside:avoid;break-before:avoid;">
 <span class="sec-label">Declaration</span>
-<p style="font-size:11px;color:#555;font-style:italic;font-family:'Times New Roman',Times,serif;">${c.declaration}</p>
+<p style="font-size:${fs(11)};color:#555;font-style:italic;font-family:'Times New Roman',Times,serif;">
+${c.declaration}
+</p>
 </div>`
         : ""
     }
 
-    ${c.gdprClause ? `<p style="font-size:9px;color:#999;font-style:italic;margin-top:18px;font-family:'Times New Roman',Times,serif;">${c.gdprClause}</p>` : ""}
+    ${c.gdprClause ? `<p style="font-size:${fs(9)};color:#999;font-style:italic;margin-top:18px;font-family:'Times New Roman',Times,serif;">
+${c.gdprClause}
+</p>` : ""}
 
   </div>
 </div>
@@ -1030,9 +1079,18 @@ ${(c.awards || [])
 };
 
 // ─── MODERN SPLIT (two-column sidebar) ────────────────────────────────────────
-const buildModernHtml = (c, accent, hasPhoto) => {
-  const photoSlot = hasPhoto
-    ? `<img src="__PHOTO__" draggable="false" ondragstart="return false;" style="${photoImgStyle(180, 210, "border-radius:6px;border:3px solid rgba(255,255,255,0.25);margin:0 auto 18px;")}">`
+const buildModernHtml = (
+  c,
+  accent,
+  hasPhoto,
+  typography = FONT_PRESETS.normal
+) => { 
+const scale = typography?.body || 1;
+
+const fs = (size) =>
+ `${(parseFloat(size) * scale).toFixed(2)}px`;
+
+const photoSlot = hasPhoto    ? `<img src="__PHOTO__" draggable="false" ondragstart="return false;" style="${photoImgStyle(180, 210, "border-radius:6px;border:3px solid rgba(255,255,255,0.25);margin:0 auto 18px;")}">`
     : "";
 
   const expRows = (c.experience || [])
@@ -1041,28 +1099,30 @@ const buildModernHtml = (c, accent, hasPhoto) => {
     <div style="margin-bottom:18px;">
       <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px;margin-bottom:4px;">
         <div>
-          <div style="font-size:13px;font-weight:700;color:${accent};font-family:'Times New Roman',Times,serif;">${e.role || ""}</div>
-          <div style="font-size:11.5px;color:#555;font-family:'Times New Roman',Times,serif;">${e.company || ""} ${e.location ? "· " + e.location : ""}</div>
+          <div style="font-size:${fs(13)};font-weight:700;color:${accent};font-family:'Times New Roman',Times,serif;">${e.role || ""}</div>
+          <div style="font-size:${fs(11.5)};color:#555;font-family:'Times New Roman',Times,serif;">${e.company || ""} ${e.location ? "· " + e.location : ""}</div>
         </div>
-        <span style="font-size:10px;background:${accent}18;color:${accent};padding:2px 9px;border-radius:4px;font-weight:700;white-space:nowrap;font-family:'Times New Roman',Times,serif;">${e.duration || ""}</span>
+        <span style="font-size:${fs(10)};background:${accent}18;color:${accent};padding:2px 9px;border-radius:4px;font-weight:700;white-space:nowrap;font-family:'Times New Roman',Times,serif;">${e.duration || ""}</span>
       </div>
       <div style="border-left:2.5px solid ${accent}33;padding-left:10px;margin-top:6px;">
-        ${(e.bullets || []).map((b) => `<div style="font-size:11.5px;color:#333;line-height:1.85;margin-bottom:3px;font-family:'Times New Roman',Times,serif;">• ${b}</div>`).join("")}
+        ${(e.bullets || []).map((b) => `<div style="font-size:${fs(11.5)};color:#333;line-height:1.85;margin-bottom:3px;font-family:'Times New Roman',Times,serif;">• ${b}</div>`).join("")}
       </div>
     </div>`,
     )
     .join("");
 
   const eduRows = (c.education || [])
-    .map(
-      (e) =>
-        `<div style="margin-bottom:10px;">
-      <div style="font-size:11.5px;font-weight:700;color:#fff;font-family:'Times New Roman',Times,serif;">${e.degree || ""}</div>
-      <div style="font-size:11px;color:rgba(255,255,255,0.7);font-family:'Times New Roman',Times,serif;">${e.institution || ""}</div>
-      <div style="font-size:10.5px;color:rgba(255,255,255,0.5);font-family:'Times New Roman',Times,serif;">${e.year || ""} ${e.grade ? "· " + e.grade : ""}</div>
+  .map(
+    (e) =>
+      `<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">
+      <div>
+        <span style="font-size:${fs(12)};font-weight:700;color:#1e293b;font-family:'Times New Roman',Times,serif;">${e.degree || ""}</span>
+        <span style="font-size:${fs(11.5)};color:#555;font-family:'Times New Roman',Times,serif;"> — ${e.institution || ""}</span>
+      </div>
+      <span style="font-size:${fs(11)};color:#888;font-family:'Times New Roman',Times,serif;">${e.year || ""} ${e.grade ? "· " + e.grade : ""}</span>
     </div>`,
-    )
-    .join("");
+  )
+  .join("");
 
   const sideLbl = (txt) =>
     `<div style="font-size:9px;text-transform:uppercase;letter-spacing:3px;color:rgba(255,255,255,0.45);margin:16px 0 8px;font-family:'Times New Roman',Times,serif;">${txt}</div>`;
@@ -1084,7 +1144,11 @@ const buildModernHtml = (c, accent, hasPhoto) => {
   html,body{background:#eef0f4;}
   .rw{background:#eef0f4;padding:24px 0;}
   .resume{background:#fff;width:794px;max-width:794px;margin:0 auto;box-shadow:0 4px 40px rgba(0,0,0,.18);min-height:auto;display:flex;}
-  .sec-label{font-size:10.5px;font-weight:700;color:${accent};letter-spacing:2.5px;text-transform:uppercase;border-bottom:2px solid ${accent};padding-bottom:5px;margin:20px 0 12px;display:block;}
+  .sec-label{
+  font-size:${fs(10.5)};
+  font-weight:700;
+  color:${accent};
+};letter-spacing:2.5px;text-transform:uppercase;border-bottom:2px solid ${accent};padding-bottom:5px;margin:20px 0 12px;display:block;}
   img{-webkit-user-drag:none;-khtml-user-drag:none;-moz-user-drag:none;-o-user-drag:none;user-drag:none;}
  @media print{*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;box-sizing:border-box}html,body{background:#fff;padding:0;margin:0;width:210mm;overflow:visible}.rw{padding:0;margin:0}.resume{box-shadow:none;margin:0 auto;width:100%;max-width:100%;transform:none!important;overflow:visible;page-break-inside:avoid;break-inside:avoid}.section,.experience,.project,.education{page-break-inside:avoid;break-inside:avoid}@page{size:A4;margin:8mm}}
 </style>
@@ -1612,19 +1676,55 @@ const buildClassicHtml = (c, accent, hasPhoto) => {
 };
 
 // ─── TEMPLATE DISPATCHER ──────────────────────────────────────────────────────
-const buildResumeHtml = (contentJson, country, tmplId, hasPhoto) => {
-  const accent = getAccentColor(country, tmplId);
+const buildResumeHtml = (
+  contentJson,
+  country,
+  tmplId,
+  hasPhoto,
+  fontPreset = "normal"
+) => {
+    const accent = getAccentColor(country, tmplId);
+    const typography = FONT_PRESETS[fontPreset] || FONT_PRESETS.normal;
   switch (tmplId) {
     case "modern":
-      return buildModernHtml(contentJson, accent, hasPhoto);
-    case "minimal":
-      return buildMinimalHtml(contentJson, accent, hasPhoto);
-    case "creative":
-      return buildCreativeHtml(contentJson, accent, hasPhoto);
-    case "classic":
-      return buildClassicHtml(contentJson, accent, hasPhoto);
-    default:
-      return buildExecutiveHtml(contentJson, accent, hasPhoto);
+  return buildModernHtml(
+    contentJson,
+    accent,
+    hasPhoto,
+    typography
+  );
+
+case "minimal":
+  return buildMinimalHtml(
+    contentJson,
+    accent,
+    hasPhoto,
+    typography
+  );
+
+case "creative":
+  return buildCreativeHtml(
+    contentJson,
+    accent,
+    hasPhoto,
+    typography
+  );
+
+case "classic":
+  return buildClassicHtml(
+    contentJson,
+    accent,
+    hasPhoto,
+    typography
+  );
+
+default:
+  return buildExecutiveHtml(
+    contentJson,
+    accent,
+    hasPhoto,
+    typography
+  );
   }
 };
 
@@ -1872,6 +1972,8 @@ function RealtimeEditor({
   onRegenerate,
   onBack,
   onJD,
+  fontPreset,
+  setFontPreset,
 }) {
   const iframeRef = useRef();
   const [mode, setMode] = useState("preview");
@@ -2190,6 +2292,48 @@ function RealtimeEditor({
           >
             📋 JD Match
           </button>
+          <div
+  style={{
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    color: "white",
+  }}
+>
+  <span
+    style={{
+      color: "#fff",
+      fontSize: 12,
+      fontWeight: 700,
+    }}
+  >
+    Font
+  </span>
+
+  <select
+  value={fontPreset}
+  onChange={(e) => {
+  const value = e.target.value;
+
+  console.log("FONT PRESET =", value);
+
+  setFontPreset(value);
+
+}}
+  style={{
+    width: 120,
+    height: 32,
+    background: "#ffffff",
+    color: "#000000",
+    border: "1px solid #ccc",
+    borderRadius: 4,
+  }}
+>
+  <option value="compact">Compact</option>
+  <option value="normal">Normal</option>
+  <option value="comfortable">Comfortable</option>
+</select>
+</div>
           <div style={{ display: "flex", gap: 4 }}>
             <button
               onClick={() => {
@@ -2497,8 +2641,11 @@ const [template, setTemplate] = useState("executive");
   const [photoB64, setPhotoB64] = useState(null);
   const [photoPreview, setPhotoPr] = useState(null);
 const [generatedHtml, setHtml] = useState(null);
+const [resumeFontSize, setResumeFontSize] = useState("12px");
 
-  const [generating, setGenerating] = useState(false);
+const [fontPreset, setFontPreset] = useState("normal");
+
+const [generating, setGenerating] = useState(false);
   const [loadMsg, setLoadMsg] = useState("");
   const [error, setError] = useState(null);
   const [jdText, setJdText] = useState("");
@@ -2671,6 +2818,7 @@ setStep(2);
 
   // ── GENERATE RESUME ──────────────────────────────────────────────────────────
   const generateResume = async (jd = "", reuseContent = false) => {
+    console.log("GENERATE FONT PRESET =", fontPreset);
     if (!country) {
       setError("Select a country first");
       return;
@@ -2683,8 +2831,13 @@ setStep(2);
     if (reuseContent && savedContentJson && !jd) {
       setLoadMsg("Rebuilding template layout…");
       try {
-       const rawHtml = buildResumeHtml(savedContentJson, country, template, !!photoB64);
-        const finalHtml = injectPhoto(rawHtml, photoB64);
+const rawHtml = buildResumeHtml(
+  savedContentJson,
+  country,
+  template,
+  !!photoB64,
+  fontPreset
+);        const finalHtml = injectPhoto(rawHtml, photoB64);
         setHtml(finalHtml);
       
         setStep(3);
@@ -2727,8 +2880,13 @@ setStep(2);
         throw new Error("AI returned invalid content. Please try again.");
       }
 
-      const rawHtml = buildResumeHtml(contentJson, country, template, !!photoB64);
-      const finalHtml = injectPhoto(rawHtml, photoB64);
+const rawHtml = buildResumeHtml(
+  contentJson,
+  country,
+  template,
+  !!photoB64,
+  fontPreset
+);      const finalHtml = injectPhoto(rawHtml, photoB64);
 
       setHtml(finalHtml);
     
@@ -3687,6 +3845,48 @@ match_label: "Excellent"|"Good"|"Fair"|"Low"`,
                   marginTop: 4,
                 }}
               >
+              {generatedHtml && (
+  <div
+    style={{
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      marginRight: 10,
+    }}
+  >
+    <span
+      style={{
+        fontSize: 13,
+        fontWeight: 600,
+      }}
+    >
+      Font Size
+    </span>
+
+    <select
+  value={fontPreset}
+  onChange={(e) => {
+    setFontPreset(e.target.value);
+
+    if (savedContentJson) {
+      generateResume("", true);
+    }
+  }}
+>
+      <option value="compact">
+        Compact
+      </option>
+
+      <option value="normal">
+        Normal
+      </option>
+
+      <option value="comfortable">
+        Comfortable
+      </option>
+    </select>
+  </div>
+)}
                 <button
                   onClick={() => generateResume()}
                   disabled={!template}
@@ -3791,6 +3991,8 @@ match_label: "Excellent"|"Good"|"Fair"|"Low"`,
              onRegenerate={() => generateResume("", true)}
               onBack={() => setStep(2)}
               onJD={() => setStep(4)}
+              fontPreset={fontPreset}
+      setFontPreset={setFontPreset}
             />
           </div>
         )}
