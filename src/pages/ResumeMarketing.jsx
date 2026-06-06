@@ -22,8 +22,8 @@ const FONT_PRESETS = {
   },
 
   comfortable: {
-  heading: 1.18,
-  body: 1.18,
+  heading: 1.25,
+  body: 1.25,
 },
 };
 // ─── COUNTRY DATA ─────────────────────────────────────────────────────────────
@@ -804,17 +804,17 @@ ${(e.bullets || e.achievements || []).map((b) => {
     .join("");
 
   const eduRows = (c.education || [])
-    .map(
-      (e) =>
-        `<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">
+  .map(
+    (e) =>
+      `<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">
       <div>
-        <span style="font-size:12px;font-weight:700;color:#1e293b;font-family:'Times New Roman',Times,serif;">${e.degree || ""}</span>
-        <span style="font-size:11.5px;color:#555;font-family:'Times New Roman',Times,serif;"> — ${e.institution || ""}</span>
+        <span style="font-size:${fs(13)};font-weight:700;color:#1e293b;font-family:'Times New Roman',Times,serif;">${e.degree || ""}</span>
+        <span style="font-size:${fs(12.5)};color:#555;font-family:'Times New Roman',Times,serif;"> — ${e.institution || ""}</span>
       </div>
-      <span style="font-size:11px;color:#888;font-family:'Times New Roman',Times,serif;">${e.year || ""} ${e.grade ? "· " + e.grade : ""}</span>
-    </div>`,
-    )
-    .join("");
+      <span style="font-size:${fs(12)};color:#888;font-family:'Times New Roman',Times,serif;">${e.year || ""} ${e.grade ? "· " + e.grade : ""}</span>
+    </div>`
+  )
+  .join("");
     const skillCategories = {
   "Programming Languages": [],
   "AI & Data Systems": [],
@@ -894,7 +894,16 @@ const skillsHtml = Object.entries(skillCategories)
 /* zoom:${scale}; */}
   .sec-label{font-size:10.5px;font-weight:700;color:${accent};letter-spacing:3px;text-transform:uppercase;padding:18px 0 7px;border-bottom:1.5px solid ${accent};margin-bottom:14px;display:block;}
   img{-webkit-user-drag:none;-khtml-user-drag:none;-moz-user-drag:none;-o-user-drag:none;user-drag:none;}
-@media print{*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;box-sizing:border-box}html,body{background:#fff;padding:0;margin:0;width:210mm;overflow:visible}.rw{padding:0;margin:0}.resume{box-shadow:none;margin:0 auto;width:100%;max-width:100%;transform:none!important;overflow:visible;page-break-inside:avoid;break-inside:avoid;}.section,.experience,.project,.education{page-break-inside:avoid;break-inside:avoid}span.sec-label{page-break-after:avoid;break-after:avoid;}span.sec-label+*{page-break-before:avoid;break-before:avoid;}@page{size:A4;margin:8mm}}</style>
+@media print{*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;box-sizing:border-box}html,body{background:#fff;padding:0;margin:0;width:210mm;overflow:visible}.rw{padding:0;margin:0}.resume{
+  box-shadow:none;
+  margin:0 auto;
+  width:794px !important;
+  max-width:794px !important;
+  transform:none!important;
+  overflow:visible;
+  page-break-inside:avoid;
+  break-inside:avoid;
+}@page{size:A4;margin:8mm}}</style>
 </head>
 <body>
 <div class="rw">
@@ -1055,17 +1064,17 @@ ${(c.hobbies || []).join(" · ")}
         : ""
     }
 
-    ${
-      c.declaration
-        ? `
+   ${
+  c.declaration
+    ? `
 <div style="page-break-inside:avoid;break-inside:avoid;break-before:avoid;">
 <span class="sec-label">Declaration</span>
-<p style="font-size:${fs(11)};color:#555;font-style:italic;font-family:'Times New Roman',Times,serif;">
+<p style="font-size:${fs(12.5)};color:#555;line-height:1.8;font-family:'Times New Roman',Times,serif;">
 ${c.declaration}
 </p>
 </div>`
-        : ""
-    }
+    : ""
+}
 
     ${c.gdprClause ? `<p style="font-size:${fs(9)};color:#999;font-style:italic;margin-top:18px;font-family:'Times New Roman',Times,serif;">
 ${c.gdprClause}
@@ -1116,14 +1125,13 @@ const photoSlot = hasPhoto    ? `<img src="__PHOTO__" draggable="false" ondragst
     (e) =>
       `<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">
       <div>
-        <span style="font-size:${fs(12)};font-weight:700;color:#1e293b;font-family:'Times New Roman',Times,serif;">${e.degree || ""}</span>
-        <span style="font-size:${fs(11.5)};color:#555;font-family:'Times New Roman',Times,serif;"> — ${e.institution || ""}</span>
+        <span style="font-size:${fs(14)};font-weight:700;color:#1e293b;font-family:'Times New Roman',Times,serif;">${e.degree || ""}</span>
+        <span style="font-size:${fs(13)};color:#555;font-family:'Times New Roman',Times,serif;"> — ${e.institution || ""}</span>
       </div>
-      <span style="font-size:${fs(11)};color:#888;font-family:'Times New Roman',Times,serif;">${e.year || ""} ${e.grade ? "· " + e.grade : ""}</span>
-    </div>`,
+      <span style="font-size:${fs(13)};color:#888;font-family:'Times New Roman',Times,serif;">${e.year || ""} ${e.grade ? "· " + e.grade : ""}</span>
+    </div>`
   )
   .join("");
-
   const sideLbl = (txt) =>
     `<div style="font-size:9px;text-transform:uppercase;letter-spacing:3px;color:rgba(255,255,255,0.45);margin:16px 0 8px;font-family:'Times New Roman',Times,serif;">${txt}</div>`;
   const contactItems = [c.phone, c.email, c.location, c.linkedin].filter(
@@ -1241,17 +1249,17 @@ const buildMinimalHtml = (c, accent, hasPhoto) => {
     .join("");
 
   const eduRows = (c.education || [])
-    .map(
-      (e) =>
-        `<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px;">
+  .map(
+    (e) =>
+      `<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">
       <div>
-        <span style="font-size:12px;font-weight:600;color:#111;font-family:'Times New Roman',Times,serif;">${e.degree || ""}</span>
-        <span style="font-size:11.5px;color:#666;font-family:'Times New Roman',Times,serif;"> — ${e.institution || ""}</span>
+        <span style="font-size:${fs(14)};font-weight:700;color:#1e293b;font-family:'Times New Roman',Times,serif;">${e.degree || ""}</span>
+        <span style="font-size:${fs(13)};color:#555;font-family:'Times New Roman',Times,serif;"> — ${e.institution || ""}</span>
       </div>
-      <span style="font-size:11px;color:#aaa;font-family:'Times New Roman',Times,serif;">${e.year || ""} ${e.grade ? "· " + e.grade : ""}</span>
-    </div>`,
-    )
-    .join("");
+      <span style="font-size:${fs(13)};color:#888;font-family:'Times New Roman',Times,serif;">${e.year || ""} ${e.grade ? "· " + e.grade : ""}</span>
+    </div>`
+  )
+  .join("");
 
   const contactItems = [c.phone, c.email, c.location, c.linkedin].filter(
     Boolean,
@@ -1550,18 +1558,18 @@ const buildClassicHtml = (c, accent, hasPhoto) => {
     )
     .join("");
 
-  const eduRows = (c.education || [])
-    .map(
-      (e) =>
-        `<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">
+ const eduRows = (c.education || [])
+  .map(
+    (e) =>
+      `<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">
       <div>
-        <span style="font-size:12px;font-weight:700;color:#111;font-family:'Times New Roman',Times,serif;">${e.degree || ""}</span>
-        <span style="font-size:11.5px;color:#555;font-family:'Times New Roman',Times,serif;"> — ${e.institution || ""}</span>
+        <span style="font-size:13px;font-weight:700;color:#111;font-family:'Times New Roman',Times,serif;">${e.degree || ""}</span>
+        <span style="font-size:12.5px;color:#555;font-family:'Times New Roman',Times,serif;"> — ${e.institution || ""}</span>
       </div>
-      <span style="font-size:11.5px;font-style:italic;color:#666;font-family:'Times New Roman',Times,serif;">${e.year || ""} ${e.grade ? "· " + e.grade : ""}</span>
+      <span style="font-size:12.5px;font-style:italic;color:#666;font-family:'Times New Roman',Times,serif;">${e.year || ""} ${e.grade ? "· " + e.grade : ""}</span>
     </div>`,
-    )
-    .join("");
+  )
+  .join("");
 
   const contactItems = [c.phone, c.email, c.location, c.linkedin].filter(
     Boolean,
@@ -2338,12 +2346,10 @@ function RealtimeEditor({
             <button
               onClick={() => {
                 const latest = captureFromIframe();
-               const scaled = latest.replace(
-  "@media print{",
-  "@media print{.resume{transform-origin:top left;transform:scale(0.75);width:133.3%!important;max-width:133.3%!important;}",
-);
-                const w = window.open("", "_blank");
-                w.document.write(scaled);
+
+const w = window.open("", "_blank");
+
+w.document.write(latest);
                 w.document.close();
                 setTimeout(() => w.print(), 800);
               }}
